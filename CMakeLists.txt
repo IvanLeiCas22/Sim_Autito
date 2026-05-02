@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.19)
+project(Sim_Autito LANGUAGES C CXX)
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+
+qt_standard_project_setup()
+
+qt_add_executable(Sim_Autito
+    WIN32 MACOSX_BUNDLE
+    app/main.cpp
+    app/mainwindow.cpp
+    app/mainwindow.h
+    sim/sim_world.cpp
+    sim/sim_world.h
+    sim/sim_robot.cpp
+    sim/sim_robot.h
+    nav/nav_core.c
+    nav/nav_core.h
+    nav/nav_types.h
+)
+
+target_include_directories(Sim_Autito
+    PRIVATE
+        app
+        sim
+        nav
+)
+
+target_link_libraries(Sim_Autito
+    PRIVATE
+        Qt::Core
+        Qt::Widgets
+)
+
+include(GNUInstallDirs)
+
+install(TARGETS Sim_Autito
+    BUNDLE  DESTINATION .
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+qt_generate_deploy_app_script(
+    TARGET Sim_Autito
+    OUTPUT_SCRIPT deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
+install(SCRIPT ${deploy_script})

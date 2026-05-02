@@ -1,0 +1,14 @@
+# ninja log v6
+3	24	7994672092341339	CMakeFiles/clean.additional	8cc1bff7d448985b
+49	72	7994672092802730	clean	fcaca897549347b8
+9	710	7994672100363021	Sim_Autito_autogen/timestamp	9a2a596b844cd45e
+9	710	7994672100363021	Sim_Autito_autogen/mocs_compilation.cpp	9a2a596b844cd45e
+9	710	7994672100363021	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/timestamp	9a2a596b844cd45e
+9	710	7994672100363021	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/mocs_compilation.cpp	9a2a596b844cd45e
+721	933	7994672101293627	CMakeFiles/Sim_Autito.dir/sim/sim_world.cpp.obj	e2d7737953a58c0d
+726	940	7994672101343621	CMakeFiles/Sim_Autito.dir/nav/nav_core.c.obj	13744740795561e1
+724	941	7994672101313615	CMakeFiles/Sim_Autito.dir/sim/sim_robot.cpp.obj	96516501f0bb200c
+714	3296	7994672101223586	CMakeFiles/Sim_Autito.dir/Sim_Autito_autogen/mocs_compilation.cpp.obj	3106242e2a710468
+717	3308	7994672101243586	CMakeFiles/Sim_Autito.dir/app/main.cpp.obj	da2a2b901a48c7a6
+719	3495	7994672101263628	CMakeFiles/Sim_Autito.dir/app/mainwindow.cpp.obj	3de9c532a0b8ba6c
+3495	4466	7994672129021950	Sim_Autito.exe	f2eb8908fc626517

@@ -1,0 +1,8 @@
+{
+  "name": "maze_01",
+  "cells": {
+    "width": 5,
+    "height": 5,
+    "cell_size_mm": 200
+  }
+}
