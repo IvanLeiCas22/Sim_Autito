@@ -1,5 +1,6 @@
 C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/VJIZ3MDCXP/moc_mainwindow.cpp: C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app/mainwindow.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/moc_predefs.h \
+  C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/q17memory.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/q20bit.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/q20functional.h \

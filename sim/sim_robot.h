@@ -6,14 +6,24 @@ class SimRobot
 public:
     SimRobot();
 
+    void setPose(double x_mm, double y_mm, double yaw_deg);
+    void moveForward(double distance_mm);
+    void rotate(double delta_yaw_deg);
+    void resetPose();
     double xMm() const;
     double yMm() const;
-    double headingRad() const;
+    double yawDeg() const;
+    double lengthMm() const;
+    double widthMm() const;
 
 private:
-    double xMm_ = 0.0;
-    double yMm_ = 0.0;
-    double headingRad_ = 0.0;
+    double xMm_ = 100.0;
+    double yMm_ = 100.0;
+    double yawDeg_ = 0.0;
+    double lengthMm_ = 90.0;
+    double widthMm_ = 80.0;
+
+    static double normalizeYawDeg(double yaw_deg);
 
     // TODO: Add robot dimensions, kinematics, sensors, and controller state later.
 };
