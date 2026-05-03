@@ -91,6 +91,8 @@ QString navStateText(NavState state)
         return "ADVANCING";
     case NAV_STATE_SMOOTH_TURNING:
         return "SMOOTH_TURNING";
+    case NAV_STATE_PIVOT_TURNING:
+        return "PIVOT_TURNING";
     case NAV_STATE_DONE:
         return "DONE";
     }
@@ -240,6 +242,33 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         resetNavigationYawReference();
         RobotSensors sensors = buildRobotSensorsSnapshot();
         nav_core_start_smooth_turn_right(&sensors);
+        updateNavCorePipeline();
+        updateTelemetryPanel();
+        robotPoseChanged = false;
+        break;
+    }
+    case Qt::Key_1: {
+        resetNavigationYawReference();
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        nav_core_start_pivot_turn_left(&sensors);
+        updateNavCorePipeline();
+        updateTelemetryPanel();
+        robotPoseChanged = false;
+        break;
+    }
+    case Qt::Key_2: {
+        resetNavigationYawReference();
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        nav_core_start_pivot_turn_right(&sensors);
+        updateNavCorePipeline();
+        updateTelemetryPanel();
+        robotPoseChanged = false;
+        break;
+    }
+    case Qt::Key_3: {
+        resetNavigationYawReference();
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        nav_core_start_pivot_turn_180(&sensors);
         updateNavCorePipeline();
         updateTelemetryPanel();
         robotPoseChanged = false;
@@ -630,6 +659,9 @@ void MainWindow::showControlsHelp()
         "- G: start ADVANCE_LINE until rear floor sensor detects black\n"
         "- Q: start SMOOTH_LEFT test, resets nav yaw reference\n"
         "- E: start SMOOTH_RIGHT test, resets nav yaw reference\n"
+        "- 1: start PIVOT_LEFT test, resets nav yaw reference\n"
+        "- 2: start PIVOT_RIGHT test, resets nav yaw reference\n"
+        "- 3: start PIVOT_180 test, resets nav yaw reference\n"
         "- X: stop navigation action\n"
         "- Z: reset navigation yaw reference\n"
         "\n"

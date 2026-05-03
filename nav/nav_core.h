@@ -11,6 +11,7 @@ typedef enum NavState {
     NAV_STATE_IDLE = 0,
     NAV_STATE_ADVANCING_UNTIL_REAR_BLACK,
     NAV_STATE_SMOOTH_TURNING,
+    NAV_STATE_PIVOT_TURNING,
     NAV_STATE_DONE
 } NavState;
 
@@ -28,6 +29,9 @@ void nav_core_init(void);
 void nav_core_start_advance_until_rear_black(void);
 void nav_core_start_smooth_turn_left(const RobotSensors *sensors);
 void nav_core_start_smooth_turn_right(const RobotSensors *sensors);
+void nav_core_start_pivot_turn_left(const RobotSensors *sensors);
+void nav_core_start_pivot_turn_right(const RobotSensors *sensors);
+void nav_core_start_pivot_turn_180(const RobotSensors *sensors);
 void nav_core_stop(void);
 NavState nav_core_state(void);
 NavAction nav_core_action(void);
