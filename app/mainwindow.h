@@ -44,6 +44,7 @@ private:
     void createRobotItem();
     void createIrSensorItems();
     void createFloorSensorItems();
+    void updateRobotVisualOnly();
     void updateRobotGraphics();
     void updateIrSensors();
     void updateFloorSensors();

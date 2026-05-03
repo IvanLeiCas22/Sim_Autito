@@ -644,7 +644,7 @@ void MainWindow::showControlsHelp()
         "\n"
         "Simulation:\n"
         "- Space: Play/Pause\n"
-        "- N: Step once when paused\n"
+        "- N: Step once when paused. If auto_mode=true, it advances one simulation tick.\n"
         "- M: Toggle auto mode\n"
         "\n"
         "Motor test:\n"
@@ -723,7 +723,7 @@ void MainWindow::createFloorSensorItems()
     }
 }
 
-void MainWindow::updateRobotGraphics()
+void MainWindow::updateRobotVisualOnly()
 {
     if (!robotItem) {
         return;
@@ -731,6 +731,11 @@ void MainWindow::updateRobotGraphics()
 
     robotItem->setPos(robot.xMm(), robot.yMm());
     robotItem->setRotation(robot.yawDeg());
+}
+
+void MainWindow::updateRobotGraphics()
+{
+    updateRobotVisualOnly();
     updateIrSensors();
     updateFloorSensors();
     updateNavCorePipeline();
@@ -798,8 +803,9 @@ void MainWindow::simulationStep()
         robot.applyDifferentialDrive(command.left_motor_pwm,
                                      command.right_motor_pwm,
                                      kSimulationDtS);
-        updateRobotGraphics();
-        return;
+        updateRobotVisualOnly();
+        updateIrSensors();
+        updateFloorSensors();
     }
 
     updateTelemetryPanel();

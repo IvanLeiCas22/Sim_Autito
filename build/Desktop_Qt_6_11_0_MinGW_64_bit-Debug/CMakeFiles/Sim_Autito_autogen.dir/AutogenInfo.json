@@ -398,6 +398,12 @@
 			null
 		],
 		[
+			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/pid_controller.h",
+			"MU",
+			"7UZHUCU65W/moc_pid_controller.cpp",
+			null
+		],
+		[
 			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.h",
 			"MU",
 			"ZPZSCMKBGY/moc_sim_robot.cpp",
@@ -495,6 +501,11 @@
 		],
 		[
 			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.c",
+			"MU",
+			null
+		],
+		[
+			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/pid_controller.c",
 			"MU",
 			null
 		],
