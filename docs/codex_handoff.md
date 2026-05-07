@@ -705,3 +705,18 @@ Cambios recientes importantes:
 - El yaw global sigue siendo el que usa la cinemática y el dibujo.
 - La detección de cinta boundary/target es debug, no debe alimentar navegación real.
 - El smooth turn real todavía no debería depender solo del yaw final; falta incorporar condición de sensor trasero/línea objetivo.
+
+Última corrección antes de la transición:
+- Se corrigió simulationStep() para evitar doble llamada a nav_core_update() por tick automático.
+- Se agregó updateRobotVisualOnly().
+- updateRobotVisualOnly() solo actualiza posición y rotación del robotItem.
+- updateRobotGraphics() queda para movimiento manual y actualiza visual + sensores + nav_core + telemetría.
+- En simulationStep():
+  - se actualizan sensores de la pose actual;
+  - se llama updateNavCorePipeline() una sola vez;
+  - si autoModeEnabled=true, se aplica motorTestCommand o lastNavCommand;
+  - se llama updateRobotVisualOnly();
+  - se actualizan sensores post-movimiento;
+  - se actualiza telemetría;
+  - no se vuelve a llamar nav_core_update() en ese mismo tick.
+- N sigue siendo step manual: si auto_mode=true y hay acción activa, puede mover el robot un tick aunque running=false.

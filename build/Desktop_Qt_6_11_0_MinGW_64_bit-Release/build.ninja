@@ -50,7 +50,7 @@ cmake_ninja_workdir = C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/b
 build cmake_object_order_depends_target_Sim_Autito: phony || Sim_Autito_autogen Sim_Autito_autogen/mocs_compilation.cpp Sim_Autito_autogen/timestamp Sim_Autito_autogen_timestamp_deps
 
 build CMakeFiles/Sim_Autito.dir/Sim_Autito_autogen/mocs_compilation.cpp.obj: CXX_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/mocs_compilation.cpp || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\Sim_Autito_autogen\mocs_compilation.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -58,7 +58,7 @@ build CMakeFiles/Sim_Autito.dir/Sim_Autito_autogen/mocs_compilation.cpp.obj: CXX
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\Sim_Autito_autogen
 
 build CMakeFiles/Sim_Autito.dir/app/main.cpp.obj: CXX_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app/main.cpp || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\app\main.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -66,7 +66,7 @@ build CMakeFiles/Sim_Autito.dir/app/main.cpp.obj: CXX_COMPILER__Sim_Autito_unsca
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\app
 
 build CMakeFiles/Sim_Autito.dir/app/mainwindow.cpp.obj: CXX_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app/mainwindow.cpp || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\app\mainwindow.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -74,7 +74,7 @@ build CMakeFiles/Sim_Autito.dir/app/mainwindow.cpp.obj: CXX_COMPILER__Sim_Autito
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\app
 
 build CMakeFiles/Sim_Autito.dir/sim/sim_world.cpp.obj: CXX_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_world.cpp || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\sim\sim_world.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -82,7 +82,7 @@ build CMakeFiles/Sim_Autito.dir/sim/sim_world.cpp.obj: CXX_COMPILER__Sim_Autito_
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\sim
 
 build CMakeFiles/Sim_Autito.dir/sim/sim_robot.cpp.obj: CXX_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.cpp || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\sim\sim_robot.cpp.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -90,7 +90,7 @@ build CMakeFiles/Sim_Autito.dir/sim/sim_robot.cpp.obj: CXX_COMPILER__Sim_Autito_
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\sim
 
 build CMakeFiles/Sim_Autito.dir/nav/nav_core.c.obj: C_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.c || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\nav\nav_core.c.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -98,7 +98,7 @@ build CMakeFiles/Sim_Autito.dir/nav/nav_core.c.obj: C_COMPILER__Sim_Autito_unsca
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\nav
 
 build CMakeFiles/Sim_Autito.dir/nav/pid_controller.c.obj: C_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/pid_controller.c || cmake_object_order_depends_target_Sim_Autito
-  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\nav\pid_controller.c.obj.d
   FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
   INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
@@ -118,7 +118,7 @@ build Sim_Autito.exe: CXX_EXECUTABLE_LINKER__Sim_Autito_Release CMakeFiles/Sim_A
   LINK_FLAGS = -mwindows
   LINK_LIBRARIES = D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Widgets.a  D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Gui.a  D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Core.a  -lmpr  -luserenv  -lmingw32  D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6EntryPoint.a  -lshell32  -ld3d11  -ldxgi  -ldxguid  -ld3d12  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\Sim_Autito.dir
-  POST_BUILD = cd .
+  POST_BUILD = C:\Windows\system32\cmd.exe /C "cd /D C:\Users\GAMING\Desktop\Proyectos\Sim_Autito\Sim_Autito\build\Desktop_Qt_6_11_0_MinGW_64_bit-Release && D:\PROGRAMACOMPU\Tools\CMake_64\bin\cmake.exe -E copy_directory C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/data C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/data"
   PRE_LINK = cd .
   TARGET_FILE = Sim_Autito.exe
   TARGET_IMPLIB = libSim_Autito.dll.a

@@ -24,6 +24,7 @@
 			"find_package",
 			"find_dependency",
 			"_qt_internal_find_qt_dependencies",
+			"target_compile_definitions",
 			"target_include_directories"
 		],
 		"files" : 
@@ -76,13 +77,13 @@
 			{
 				"command" : 4,
 				"file" : 1,
-				"line" : 39,
+				"line" : 50,
 				"parent" : 0
 			},
 			{
 				"command" : 5,
 				"file" : 1,
-				"line" : 31,
+				"line" : 36,
 				"parent" : 0
 			},
 			{
@@ -266,6 +267,12 @@
 			{
 				"command" : 11,
 				"file" : 1,
+				"line" : 31,
+				"parent" : 0
+			},
+			{
+				"command" : 12,
+				"file" : 1,
 				"line" : 24,
 				"parent" : 0
 			}
@@ -307,6 +314,10 @@
 					"define" : "QT_WIDGETS_LIB"
 				},
 				{
+					"backtrace" : 40,
+					"define" : "SIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\""
+				},
+				{
 					"backtrace" : 13,
 					"define" : "UNICODE"
 				},
@@ -338,15 +349,15 @@
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav"
 				},
 				{
@@ -419,6 +430,10 @@
 					"define" : "QT_WIDGETS_LIB"
 				},
 				{
+					"backtrace" : 40,
+					"define" : "SIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\""
+				},
+				{
 					"backtrace" : 13,
 					"define" : "UNICODE"
 				},
@@ -450,15 +465,15 @@
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav"
 				},
 				{
@@ -498,11 +513,11 @@
 	"dependencies" : 
 	[
 		{
-			"backtrace" : 0,
-			"id" : "Sim_Autito_autogen::@6890427a1f51a3e7e1df"
+			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		},
 		{
-			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
+			"backtrace" : 0,
+			"id" : "Sim_Autito_autogen::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "Sim_Autito::@6890427a1f51a3e7e1df",

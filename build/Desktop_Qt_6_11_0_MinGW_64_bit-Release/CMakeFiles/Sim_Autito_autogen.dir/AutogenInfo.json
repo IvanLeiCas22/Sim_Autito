@@ -428,6 +428,7 @@
 		"QT_NEEDS_QMAIN",
 		"QT_NO_DEBUG",
 		"QT_WIDGETS_LIB",
+		"SIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\"",
 		"UNICODE",
 		"WIN32",
 		"WIN64",

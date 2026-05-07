@@ -76,13 +76,13 @@
 			{
 				"command" : 4,
 				"file" : 1,
-				"line" : 37,
+				"line" : 45,
 				"parent" : 0
 			},
 			{
 				"command" : 5,
 				"file" : 1,
-				"line" : 29,
+				"line" : 31,
 				"parent" : 0
 			},
 			{
@@ -266,7 +266,7 @@
 			{
 				"command" : 11,
 				"file" : 1,
-				"line" : 22,
+				"line" : 24,
 				"parent" : 0
 			}
 		]
@@ -490,18 +490,19 @@
 			"language" : "C",
 			"sourceIndexes" : 
 			[
-				8
+				8,
+				10
 			]
 		}
 	],
 	"dependencies" : 
 	[
 		{
-			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
-		},
-		{
 			"backtrace" : 0,
 			"id" : "Sim_Autito_autogen::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "Sim_Autito::@6890427a1f51a3e7e1df",
@@ -612,7 +613,7 @@
 			"sourceIndexes" : 
 			[
 				0,
-				11
+				13
 			]
 		},
 		{
@@ -623,7 +624,8 @@
 				2,
 				4,
 				6,
-				8
+				8,
+				10
 			]
 		},
 		{
@@ -634,14 +636,15 @@
 				5,
 				7,
 				9,
-				10
+				11,
+				12
 			]
 		},
 		{
 			"name" : "CMake Rules",
 			"sourceIndexes" : 
 			[
-				12
+				14
 			]
 		}
 	],
@@ -702,6 +705,17 @@
 		{
 			"backtrace" : 4,
 			"path" : "nav/nav_core.h",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 1,
+			"path" : "nav/pid_controller.c",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 4,
+			"path" : "nav/pid_controller.h",
 			"sourceGroupIndex" : 2
 		},
 		{

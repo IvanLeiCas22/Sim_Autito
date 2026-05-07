@@ -345,6 +345,7 @@
 #define __cpp_decltype 200707L
 #define __INT_FAST64_MAX__ 0x7fffffffffffffffLL
 #define __GCC_ATOMIC_TEST_AND_SET_TRUEVAL 1
+#define SIM_AUTITO_SOURCE_DIR "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito"
 #define __FLT_NORM_MAX__ 3.40282346638528859811704183484516925e+38F
 #define __FLT32_HAS_INFINITY__ 1
 #define __FLT64X_MAX_EXP__ 16384

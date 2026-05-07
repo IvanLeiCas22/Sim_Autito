@@ -28,10 +28,21 @@ target_include_directories(Sim_Autito
         nav
 )
 
+target_compile_definitions(Sim_Autito
+    PRIVATE
+        SIM_AUTITO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 target_link_libraries(Sim_Autito
     PRIVATE
         Qt::Core
         Qt::Widgets
+)
+
+add_custom_command(TARGET Sim_Autito POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/data"
+        "$<TARGET_FILE_DIR:Sim_Autito>/data"
 )
 
 include(GNUInstallDirs)
