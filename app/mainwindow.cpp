@@ -127,6 +127,8 @@ QString navStateText(NavState state)
         return "ADVANCING";
     case NAV_STATE_APPROACHING_FRONT_WALL_FOR_PIVOT:
         return "APPROACH_FRONT";
+    case NAV_STATE_CENTERING_IN_CELL_FOR_PIVOT:
+        return "CENTER_IN_CELL_FOR_PIVOT";
     case NAV_STATE_SMOOTH_TURNING:
         return "SMOOTH_TURNING";
     case NAV_STATE_PIVOT_TURNING:
@@ -147,6 +149,8 @@ QString navActionText(NavAction action)
         return "ADVANCE_LINE";
     case NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
         return "APPROACH_FRONT_WALL_FOR_PIVOT";
+    case NAV_ACTION_CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE:
+        return "CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE";
     case NAV_ACTION_SMOOTH_TURN_LEFT:
         return "SMOOTH_LEFT";
     case NAV_ACTION_SMOOTH_TURN_RIGHT:
@@ -247,6 +251,44 @@ QString approachFrontDoneReasonText(NavApproachFrontDoneReason reason)
         return "TARGET_DISTANCE";
     case NAV_APPROACH_FRONT_DONE_TIMEOUT:
         return "TIMEOUT";
+    }
+
+    return "UNKNOWN";
+}
+
+QString centerPivotPhaseText(NavCenterPivotPhase phase)
+{
+    switch (phase) {
+    case NAV_CENTER_PIVOT_PHASE_NONE:
+        return "NONE";
+    case NAV_CENTER_PIVOT_PHASE_INIT:
+        return "INIT";
+    case NAV_CENTER_PIVOT_PHASE_WAIT_LEAVE_START_LINE:
+        return "WAIT_LEAVE_START_LINE";
+    case NAV_CENTER_PIVOT_PHASE_WAIT_FRONT_WHITE:
+        return "WAIT_FRONT_WHITE";
+    case NAV_CENTER_PIVOT_PHASE_SEEK_FRONT_LINE:
+        return "SEEK_FRONT_LINE";
+    case NAV_CENTER_PIVOT_PHASE_BRAKE_SETTLE:
+        return "BRAKE_SETTLE";
+    case NAV_CENTER_PIVOT_PHASE_DONE:
+        return "DONE";
+    }
+
+    return "UNKNOWN";
+}
+
+QString centerPivotDoneReasonText(NavCenterPivotDoneReason reason)
+{
+    switch (reason) {
+    case NAV_CENTER_PIVOT_DONE_NONE:
+        return "NONE";
+    case NAV_CENTER_PIVOT_DONE_FRONT_LINE:
+        return "FRONT_LINE";
+    case NAV_CENTER_PIVOT_DONE_TIMEOUT:
+        return "TIMEOUT";
+    case NAV_CENTER_PIVOT_DONE_START_NOT_ON_REAR_LINE:
+        return "START_NOT_ON_REAR_LINE";
     }
 
     return "UNKNOWN";
@@ -390,6 +432,72 @@ QString sequenceStepText(TestSequenceStep step)
     return "UNKNOWN";
 }
 
+QString planActionText(NavPlanAction action)
+{
+    switch (action) {
+    case NAV_PLAN_ACTION_NONE:
+        return "NONE";
+    case NAV_PLAN_ACTION_ADVANCE_LINE:
+        return "ADVANCE_LINE";
+    case NAV_PLAN_ACTION_SMOOTH_LEFT:
+        return "SMOOTH_LEFT";
+    case NAV_PLAN_ACTION_SMOOTH_RIGHT:
+        return "SMOOTH_RIGHT";
+    case NAV_PLAN_ACTION_PIVOT_180:
+        return "PIVOT_180";
+    case NAV_PLAN_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+        return "APPROACH_FRONT_WALL_FOR_PIVOT";
+    case NAV_PLAN_ACTION_CENTER_AND_PIVOT_180:
+        return "CENTER_AND_PIVOT_180";
+    }
+
+    return "UNKNOWN";
+}
+
+QString routeStatusText(NavRouteStatus status)
+{
+    switch (status) {
+    case NAV_ROUTE_STATUS_IDLE:
+        return "IDLE";
+    case NAV_ROUTE_STATUS_FOUND:
+        return "FOUND";
+    case NAV_ROUTE_STATUS_NO_PATH:
+        return "NO_PATH";
+    case NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS:
+        return "TARGET_OUT_OF_BOUNDS";
+    case NAV_ROUTE_STATUS_ROUTE_TOO_LONG:
+        return "ROUTE_TOO_LONG";
+    case NAV_ROUTE_STATUS_QUEUE_OVERFLOW:
+        return "QUEUE_OVERFLOW";
+    }
+
+    return "UNKNOWN";
+}
+
+QString routeExecuteStatusText(MainWindow::RouteExecuteStatus status)
+{
+    switch (status) {
+    case MainWindow::RouteExecuteStatus::Idle:
+        return "IDLE";
+    case MainWindow::RouteExecuteStatus::NoRouteLoaded:
+        return "NO_ROUTE_LOADED";
+    case MainWindow::RouteExecuteStatus::NavBusy:
+        return "NAV_BUSY";
+    case MainWindow::RouteExecuteStatus::StartNotOnRearLine:
+        return "START_NOT_ON_REAR_LINE";
+    case MainWindow::RouteExecuteStatus::Started:
+        return "STARTED";
+    case MainWindow::RouteExecuteStatus::Running:
+        return "RUNNING";
+    case MainWindow::RouteExecuteStatus::Completed:
+        return "COMPLETED";
+    case MainWindow::RouteExecuteStatus::Cancelled:
+        return "CANCELLED";
+    }
+
+    return "UNKNOWN";
+}
+
 QString recommendedActionText(NavRecommendedAction action)
 {
     switch (action) {
@@ -442,6 +550,24 @@ QString deadEndRecoveryPhaseText(MainWindow::DeadEndRecoveryPhase phase)
         return "APPROACH_FRONT";
     case MainWindow::DeadEndRecoveryPhase::Pivot180:
         return "PIVOT_180";
+    }
+
+    return "UNKNOWN";
+}
+
+QString centerPivotSequencePhaseText(MainWindow::CenterPivotSequencePhase phase)
+{
+    switch (phase) {
+    case MainWindow::CenterPivotSequencePhase::None:
+        return "NONE";
+    case MainWindow::CenterPivotSequencePhase::Centering:
+        return "CENTERING";
+    case MainWindow::CenterPivotSequencePhase::Pivot180:
+        return "PIVOT_180";
+    case MainWindow::CenterPivotSequencePhase::Done:
+        return "DONE";
+    case MainWindow::CenterPivotSequencePhase::Failed:
+        return "FAILED";
     }
 
     return "UNKNOWN";
@@ -534,22 +660,21 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_K:
-        motorTestCommand = {-3000, -3000};
-        updateTelemetryPanel();
+        promptRoutePlanToCell();
         robotPoseChanged = false;
         break;
     case Qt::Key_J:
-        motorTestCommand = {-1500, 1500};
+        executeLoadedRouteIfSafe();
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
     case Qt::Key_L:
-        motorTestCommand = {1500, -1500};
+        startCenterPivotSequence();
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
     case Qt::Key_U:
-        motorTestCommand = {0, 0};
+        loadAndStartTestPlan();
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
@@ -615,8 +740,17 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
+    case Qt::Key_H:
+        resetNavigationYawReference();
+        nav_core_start_center_in_cell_for_pivot_by_front_line();
+        updateNavCorePipeline();
+        updateTelemetryPanel();
+        robotPoseChanged = false;
+        break;
     case Qt::Key_X:
         cancelTestSequence();
+        cancelCenterPivotSequence();
+        cancelPlanExecution();
         cancelDeadEndRecovery();
         setBasicNavAutonomyEnabled(false);
         nav_core_stop();
@@ -675,7 +809,6 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
-    case Qt::Key_H:
     case Qt::Key_F1:
         showControlsHelp();
         robotPoseChanged = false;
@@ -1062,6 +1195,7 @@ void MainWindow::createTelemetryPanel()
     auto *navCommandTitle = new QLabel("<b>Nav command</b>", panel);
     auto *simulationTitle = new QLabel("<b>Simulation</b>", panel);
     auto *sequenceTitle = new QLabel("<b>Test sequence</b>", panel);
+    auto *planTitle = new QLabel("<b>Planned action queue</b>", panel);
     auto *navAutonomyTitle = new QLabel("<b>Basic nav autonomy</b>", panel);
     auto *mapTitle = new QLabel("<b>Shadow logical map</b>", panel);
     auto *motorTestTitle = new QLabel("<b>Motor test command</b>", panel);
@@ -1164,6 +1298,16 @@ void MainWindow::createTelemetryPanel()
     turnDebugApproachFrontBaseLeftValueLabel = new QLabel(panel);
     turnDebugApproachFrontBaseRightValueLabel = new QLabel(panel);
     turnDebugApproachFrontCorrectionValueLabel = new QLabel(panel);
+    turnDebugCenterPivotPhaseValueLabel = new QLabel(panel);
+    turnDebugCenterPivotDoneReasonValueLabel = new QLabel(panel);
+    turnDebugCenterPivotElapsedValueLabel = new QLabel(panel);
+    turnDebugCenterPivotBrakeElapsedValueLabel = new QLabel(panel);
+    turnDebugCenterPivotBaseLeftValueLabel = new QLabel(panel);
+    turnDebugCenterPivotBaseRightValueLabel = new QLabel(panel);
+    turnDebugCenterPivotCorrectionValueLabel = new QLabel(panel);
+    turnDebugCenterPivotFrontBlackValueLabel = new QLabel(panel);
+    turnDebugCenterPivotRearBlackValueLabel = new QLabel(panel);
+    turnDebugCenterPivotFrontSeenWhiteValueLabel = new QLabel(panel);
     turnDebugAdvanceYawSetpointValueLabel = new QLabel(panel);
     turnDebugAdvanceYawMeasuredValueLabel = new QLabel(panel);
     turnDebugAdvanceYawErrorValueLabel = new QLabel(panel);
@@ -1210,6 +1354,7 @@ void MainWindow::createTelemetryPanel()
     turnDebugLastAdvanceFinalYawValueLabel = new QLabel(panel);
     turnDebugLastAdvanceFinalRearValueLabel = new QLabel(panel);
     turnDebugLastApproachFrontDoneReasonValueLabel = new QLabel(panel);
+    turnDebugLastCenterPivotDoneReasonValueLabel = new QLabel(panel);
     navLeftMotorValueLabel = new QLabel(panel);
     navRightMotorValueLabel = new QLabel(panel);
     simulationRunningValueLabel = new QLabel(panel);
@@ -1223,6 +1368,32 @@ void MainWindow::createTelemetryPanel()
     sequenceLengthValueLabel = new QLabel(panel);
     sequenceCurrentActionValueLabel = new QLabel(panel);
     sequenceWaitingNextTickValueLabel = new QLabel(panel);
+    centerPivotSequenceActiveValueLabel = new QLabel(panel);
+    centerPivotSequencePhaseValueLabel = new QLabel(panel);
+    centerPivotSequenceLastCenterReasonValueLabel = new QLabel(panel);
+    planExecutionEnabledValueLabel = new QLabel(panel);
+    planQueueCountValueLabel = new QLabel(panel);
+    planCurrentActionValueLabel = new QLabel(panel);
+    planNextActionValueLabel = new QLabel(panel);
+    planLastExecutedActionValueLabel = new QLabel(panel);
+    planActionsExecutedCountValueLabel = new QLabel(panel);
+    planQueueOverflowValueLabel = new QLabel(panel);
+    planCompositeActionActiveValueLabel = new QLabel(panel);
+    planCompositeActionPhaseValueLabel = new QLabel(panel);
+    planCompositeLastCenterReasonValueLabel = new QLabel(panel);
+    routeStatusValueLabel = new QLabel(panel);
+    routeTargetCellValueLabel = new QLabel(panel);
+    routeStartCellValueLabel = new QLabel(panel);
+    routeStartDirValueLabel = new QLabel(panel);
+    routeLengthValueLabel = new QLabel(panel);
+    routeExpandedStatesValueLabel = new QLabel(panel);
+    routeFirstActionValueLabel = new QLabel(panel);
+    routeLastActionValueLabel = new QLabel(panel);
+    routeLoadedIntoPlanQueueValueLabel = new QLabel(panel);
+    routeExecuteStatusValueLabel = new QLabel(panel);
+    routeStartPhysicalValidValueLabel = new QLabel(panel);
+    routeStartFloorRearBlackValueLabel = new QLabel(panel);
+    routePlanReadyToExecuteValueLabel = new QLabel(panel);
     navAutonomyEnabledValueLabel = new QLabel(panel);
     navPolicyValueLabel = new QLabel(panel);
     navRecommendedActionValueLabel = new QLabel(panel);
@@ -1325,6 +1496,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugApproachFrontBaseLeftValueLabel);
     configureTelemetryValueLabel(turnDebugApproachFrontBaseRightValueLabel);
     configureTelemetryValueLabel(turnDebugApproachFrontCorrectionValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotPhaseValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotDoneReasonValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotElapsedValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotBrakeElapsedValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotBaseLeftValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotBaseRightValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotCorrectionValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotFrontBlackValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotRearBlackValueLabel);
+    configureTelemetryValueLabel(turnDebugCenterPivotFrontSeenWhiteValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawSetpointValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawMeasuredValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawErrorValueLabel);
@@ -1371,6 +1552,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugLastAdvanceFinalYawValueLabel);
     configureTelemetryValueLabel(turnDebugLastAdvanceFinalRearValueLabel);
     configureTelemetryValueLabel(turnDebugLastApproachFrontDoneReasonValueLabel);
+    configureTelemetryValueLabel(turnDebugLastCenterPivotDoneReasonValueLabel);
     configureTelemetryValueLabel(navLeftMotorValueLabel);
     configureTelemetryValueLabel(navRightMotorValueLabel);
     configureTelemetryValueLabel(simulationRunningValueLabel);
@@ -1384,6 +1566,32 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(sequenceLengthValueLabel);
     configureTelemetryValueLabel(sequenceCurrentActionValueLabel);
     configureTelemetryValueLabel(sequenceWaitingNextTickValueLabel);
+    configureTelemetryValueLabel(centerPivotSequenceActiveValueLabel);
+    configureTelemetryValueLabel(centerPivotSequencePhaseValueLabel);
+    configureTelemetryValueLabel(centerPivotSequenceLastCenterReasonValueLabel);
+    configureTelemetryValueLabel(planExecutionEnabledValueLabel);
+    configureTelemetryValueLabel(planQueueCountValueLabel);
+    configureTelemetryValueLabel(planCurrentActionValueLabel);
+    configureTelemetryValueLabel(planNextActionValueLabel);
+    configureTelemetryValueLabel(planLastExecutedActionValueLabel);
+    configureTelemetryValueLabel(planActionsExecutedCountValueLabel);
+    configureTelemetryValueLabel(planQueueOverflowValueLabel);
+    configureTelemetryValueLabel(planCompositeActionActiveValueLabel);
+    configureTelemetryValueLabel(planCompositeActionPhaseValueLabel);
+    configureTelemetryValueLabel(planCompositeLastCenterReasonValueLabel);
+    configureTelemetryValueLabel(routeStatusValueLabel);
+    configureTelemetryValueLabel(routeTargetCellValueLabel);
+    configureTelemetryValueLabel(routeStartCellValueLabel);
+    configureTelemetryValueLabel(routeStartDirValueLabel);
+    configureTelemetryValueLabel(routeLengthValueLabel);
+    configureTelemetryValueLabel(routeExpandedStatesValueLabel);
+    configureTelemetryValueLabel(routeFirstActionValueLabel);
+    configureTelemetryValueLabel(routeLastActionValueLabel);
+    configureTelemetryValueLabel(routeLoadedIntoPlanQueueValueLabel);
+    configureTelemetryValueLabel(routeExecuteStatusValueLabel);
+    configureTelemetryValueLabel(routeStartPhysicalValidValueLabel);
+    configureTelemetryValueLabel(routeStartFloorRearBlackValueLabel);
+    configureTelemetryValueLabel(routePlanReadyToExecuteValueLabel);
     configureTelemetryValueLabel(navAutonomyEnabledValueLabel);
     configureTelemetryValueLabel(navPolicyValueLabel);
     configureTelemetryValueLabel(navRecommendedActionValueLabel);
@@ -1493,6 +1701,16 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("approach_front_base_left_pwm:", turnDebugApproachFrontBaseLeftValueLabel);
     layout->addRow("approach_front_base_right_pwm:", turnDebugApproachFrontBaseRightValueLabel);
     layout->addRow("approach_front_correction_pwm:", turnDebugApproachFrontCorrectionValueLabel);
+    layout->addRow("center_pivot_phase:", turnDebugCenterPivotPhaseValueLabel);
+    layout->addRow("center_pivot_done_reason:", turnDebugCenterPivotDoneReasonValueLabel);
+    layout->addRow("center_pivot_elapsed_ms:", turnDebugCenterPivotElapsedValueLabel);
+    layout->addRow("center_pivot_brake_elapsed_ms:", turnDebugCenterPivotBrakeElapsedValueLabel);
+    layout->addRow("center_pivot_base_left_pwm:", turnDebugCenterPivotBaseLeftValueLabel);
+    layout->addRow("center_pivot_base_right_pwm:", turnDebugCenterPivotBaseRightValueLabel);
+    layout->addRow("center_pivot_correction_pwm:", turnDebugCenterPivotCorrectionValueLabel);
+    layout->addRow("center_pivot_front_black:", turnDebugCenterPivotFrontBlackValueLabel);
+    layout->addRow("center_pivot_rear_black:", turnDebugCenterPivotRearBlackValueLabel);
+    layout->addRow("center_pivot_front_seen_white:", turnDebugCenterPivotFrontSeenWhiteValueLabel);
     layout->addRow("advance_yaw_setpoint:", turnDebugAdvanceYawSetpointValueLabel);
     layout->addRow("advance_yaw_measured:", turnDebugAdvanceYawMeasuredValueLabel);
     layout->addRow("advance_yaw_error:", turnDebugAdvanceYawErrorValueLabel);
@@ -1539,6 +1757,8 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("last_advance_final_yaw:", turnDebugLastAdvanceFinalYawValueLabel);
     layout->addRow("last_advance_final_rear:", turnDebugLastAdvanceFinalRearValueLabel);
     layout->addRow("last_approach_front_done_reason:", turnDebugLastApproachFrontDoneReasonValueLabel);
+    layout->addRow("last_center_pivot_done_reason:",
+                   turnDebugLastCenterPivotDoneReasonValueLabel);
 
     layout->addRow(navCommandTitle);
     layout->addRow("left_motor_pwm:", navLeftMotorValueLabel);
@@ -1566,6 +1786,36 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("sequence_length:", sequenceLengthValueLabel);
     layout->addRow("sequence_current_action:", sequenceCurrentActionValueLabel);
     layout->addRow("sequence_waiting_next_tick:", sequenceWaitingNextTickValueLabel);
+    layout->addRow("center_pivot_sequence_active:", centerPivotSequenceActiveValueLabel);
+    layout->addRow("center_pivot_sequence_phase:", centerPivotSequencePhaseValueLabel);
+    layout->addRow("center_pivot_sequence_last_center_reason:",
+                   centerPivotSequenceLastCenterReasonValueLabel);
+
+    layout->addRow(planTitle);
+    layout->addRow("plan_execution_enabled:", planExecutionEnabledValueLabel);
+    layout->addRow("plan_queue_count:", planQueueCountValueLabel);
+    layout->addRow("plan_current_action:", planCurrentActionValueLabel);
+    layout->addRow("plan_next_action:", planNextActionValueLabel);
+    layout->addRow("plan_last_executed_action:", planLastExecutedActionValueLabel);
+    layout->addRow("plan_actions_executed_count:", planActionsExecutedCountValueLabel);
+    layout->addRow("plan_queue_overflow:", planQueueOverflowValueLabel);
+    layout->addRow("plan_composite_action_active:", planCompositeActionActiveValueLabel);
+    layout->addRow("plan_composite_action_phase:", planCompositeActionPhaseValueLabel);
+    layout->addRow("plan_composite_last_center_reason:",
+                   planCompositeLastCenterReasonValueLabel);
+    layout->addRow("route_status:", routeStatusValueLabel);
+    layout->addRow("route_target_cell:", routeTargetCellValueLabel);
+    layout->addRow("route_start_cell:", routeStartCellValueLabel);
+    layout->addRow("route_start_dir:", routeStartDirValueLabel);
+    layout->addRow("route_length:", routeLengthValueLabel);
+    layout->addRow("route_expanded_states:", routeExpandedStatesValueLabel);
+    layout->addRow("route_first_action:", routeFirstActionValueLabel);
+    layout->addRow("route_last_action:", routeLastActionValueLabel);
+    layout->addRow("route_loaded_into_plan_queue:", routeLoadedIntoPlanQueueValueLabel);
+    layout->addRow("route_execute_status:", routeExecuteStatusValueLabel);
+    layout->addRow("route_start_physical_valid:", routeStartPhysicalValidValueLabel);
+    layout->addRow("route_start_floor_rear_black:", routeStartFloorRearBlackValueLabel);
+    layout->addRow("route_plan_ready_to_execute:", routePlanReadyToExecuteValueLabel);
 
     layout->addRow(navAutonomyTitle);
     layout->addRow("nav_autonomy_enabled:", navAutonomyEnabledValueLabel);
@@ -1872,6 +2122,46 @@ void MainWindow::updateTelemetryPanel()
         turnDebugApproachFrontCorrectionValueLabel->setText(
             QString::number(turnDebug.approach_front_correction_pwm));
     }
+    if (turnDebugCenterPivotPhaseValueLabel) {
+        turnDebugCenterPivotPhaseValueLabel->setText(
+            centerPivotPhaseText(turnDebug.center_pivot_phase));
+    }
+    if (turnDebugCenterPivotDoneReasonValueLabel) {
+        turnDebugCenterPivotDoneReasonValueLabel->setText(
+            centerPivotDoneReasonText(turnDebug.center_pivot_done_reason));
+    }
+    if (turnDebugCenterPivotElapsedValueLabel) {
+        turnDebugCenterPivotElapsedValueLabel->setText(
+            QString::number(turnDebug.center_pivot_elapsed_ms));
+    }
+    if (turnDebugCenterPivotBrakeElapsedValueLabel) {
+        turnDebugCenterPivotBrakeElapsedValueLabel->setText(
+            QString::number(turnDebug.center_pivot_brake_elapsed_ms));
+    }
+    if (turnDebugCenterPivotBaseLeftValueLabel) {
+        turnDebugCenterPivotBaseLeftValueLabel->setText(
+            QString::number(turnDebug.center_pivot_base_left_pwm));
+    }
+    if (turnDebugCenterPivotBaseRightValueLabel) {
+        turnDebugCenterPivotBaseRightValueLabel->setText(
+            QString::number(turnDebug.center_pivot_base_right_pwm));
+    }
+    if (turnDebugCenterPivotCorrectionValueLabel) {
+        turnDebugCenterPivotCorrectionValueLabel->setText(
+            QString::number(turnDebug.center_pivot_correction_pwm));
+    }
+    if (turnDebugCenterPivotFrontBlackValueLabel) {
+        turnDebugCenterPivotFrontBlackValueLabel->setText(
+            turnDebug.center_pivot_front_black ? "true" : "false");
+    }
+    if (turnDebugCenterPivotRearBlackValueLabel) {
+        turnDebugCenterPivotRearBlackValueLabel->setText(
+            turnDebug.center_pivot_rear_black ? "true" : "false");
+    }
+    if (turnDebugCenterPivotFrontSeenWhiteValueLabel) {
+        turnDebugCenterPivotFrontSeenWhiteValueLabel->setText(
+            turnDebug.center_pivot_front_seen_white ? "true" : "false");
+    }
     if (turnDebugAdvanceYawSetpointValueLabel) {
         turnDebugAdvanceYawSetpointValueLabel->setText(
             QString("%1 deg").arg(fromQ16(turnDebug.advance_yaw_setpoint_deg_q16), 0, 'f', 1));
@@ -2055,6 +2345,10 @@ void MainWindow::updateTelemetryPanel()
         turnDebugLastApproachFrontDoneReasonValueLabel->setText(
             approachFrontDoneReasonText(turnDebug.last_approach_front_done_reason));
     }
+    if (turnDebugLastCenterPivotDoneReasonValueLabel) {
+        turnDebugLastCenterPivotDoneReasonValueLabel->setText(
+            centerPivotDoneReasonText(turnDebug.last_center_pivot_done_reason));
+    }
 
     if (navLeftMotorValueLabel) {
         navLeftMotorValueLabel->setText(QString::number(lastNavCommand.left_motor_pwm));
@@ -2099,6 +2393,104 @@ void MainWindow::updateTelemetryPanel()
     if (sequenceWaitingNextTickValueLabel) {
         sequenceWaitingNextTickValueLabel->setText(
             testSequenceWaitingNextTick ? "true" : "false");
+    }
+    if (centerPivotSequenceActiveValueLabel) {
+        const bool active = centerPivotSequencePhase == CenterPivotSequencePhase::Centering
+            || centerPivotSequencePhase == CenterPivotSequencePhase::Pivot180;
+        centerPivotSequenceActiveValueLabel->setText(active ? "true" : "false");
+    }
+    if (centerPivotSequencePhaseValueLabel) {
+        centerPivotSequencePhaseValueLabel->setText(
+            centerPivotSequencePhaseText(centerPivotSequencePhase));
+    }
+    if (centerPivotSequenceLastCenterReasonValueLabel) {
+        centerPivotSequenceLastCenterReasonValueLabel->setText(
+            centerPivotDoneReasonText(centerPivotSequenceLastCenterReason));
+    }
+    NavPlanDebugSnapshot planDebug = {};
+    nav_core_plan_debug_snapshot(&planDebug);
+    if (planExecutionEnabledValueLabel) {
+        planExecutionEnabledValueLabel->setText(planExecutionEnabled ? "true" : "false");
+    }
+    if (planQueueCountValueLabel) {
+        planQueueCountValueLabel->setText(
+            QString("%1 / %2").arg(planDebug.count).arg(planDebug.capacity));
+    }
+    if (planCurrentActionValueLabel) {
+        planCurrentActionValueLabel->setText(planActionText(planCurrentAction));
+    }
+    if (planNextActionValueLabel) {
+        planNextActionValueLabel->setText(planActionText(planDebug.next_action));
+    }
+    if (planLastExecutedActionValueLabel) {
+        planLastExecutedActionValueLabel->setText(planActionText(planLastExecutedAction));
+    }
+    if (planActionsExecutedCountValueLabel) {
+        planActionsExecutedCountValueLabel->setText(QString::number(planActionsExecutedCount));
+    }
+    if (planQueueOverflowValueLabel) {
+        planQueueOverflowValueLabel->setText(planDebug.overflow ? "true" : "false");
+    }
+    if (planCompositeActionActiveValueLabel) {
+        const bool active = planCompositeActionPhase == CenterPivotSequencePhase::Centering
+            || planCompositeActionPhase == CenterPivotSequencePhase::Pivot180;
+        planCompositeActionActiveValueLabel->setText(active ? "true" : "false");
+    }
+    if (planCompositeActionPhaseValueLabel) {
+        planCompositeActionPhaseValueLabel->setText(
+            centerPivotSequencePhaseText(planCompositeActionPhase));
+    }
+    if (planCompositeLastCenterReasonValueLabel) {
+        planCompositeLastCenterReasonValueLabel->setText(
+            centerPivotDoneReasonText(planCompositeLastCenterReason));
+    }
+    NavRouteDebugSnapshot routeDebug = {};
+    nav_core_get_route_debug(&routeDebug);
+    if (routeStatusValueLabel) {
+        routeStatusValueLabel->setText(routeStatusText(routeDebug.status));
+    }
+    if (routeTargetCellValueLabel) {
+        routeTargetCellValueLabel->setText(
+            QString("(%1,%2)").arg(routeDebug.target_cell_x).arg(routeDebug.target_cell_y));
+    }
+    if (routeStartCellValueLabel) {
+        routeStartCellValueLabel->setText(
+            QString("(%1,%2)").arg(routeDebug.start_cell_x).arg(routeDebug.start_cell_y));
+    }
+    if (routeStartDirValueLabel) {
+        routeStartDirValueLabel->setText(mapDirectionText(routeDebug.start_dir));
+    }
+    if (routeLengthValueLabel) {
+        routeLengthValueLabel->setText(QString::number(routeDebug.route_length));
+    }
+    if (routeExpandedStatesValueLabel) {
+        routeExpandedStatesValueLabel->setText(QString::number(routeDebug.expanded_states));
+    }
+    if (routeFirstActionValueLabel) {
+        routeFirstActionValueLabel->setText(planActionText(routeDebug.first_action));
+    }
+    if (routeLastActionValueLabel) {
+        routeLastActionValueLabel->setText(planActionText(routeDebug.last_action));
+    }
+    if (routeLoadedIntoPlanQueueValueLabel) {
+        routeLoadedIntoPlanQueueValueLabel->setText(
+            routeDebug.loaded_into_plan_queue ? "true" : "false");
+    }
+    routePlanReadyToExecute =
+        routeDebug.status == NAV_ROUTE_STATUS_FOUND
+        && routeDebug.loaded_into_plan_queue
+        && planDebug.count > 0;
+    if (routeExecuteStatusValueLabel) {
+        routeExecuteStatusValueLabel->setText(routeExecuteStatusText(routeExecuteStatus));
+    }
+    if (routeStartPhysicalValidValueLabel) {
+        routeStartPhysicalValidValueLabel->setText(routeStartPhysicalValid ? "true" : "false");
+    }
+    if (routeStartFloorRearBlackValueLabel) {
+        routeStartFloorRearBlackValueLabel->setText(routeStartFloorRearBlack ? "true" : "false");
+    }
+    if (routePlanReadyToExecuteValueLabel) {
+        routePlanReadyToExecuteValueLabel->setText(routePlanReadyToExecute ? "true" : "false");
     }
     if (navAutonomyEnabledValueLabel) {
         navAutonomyEnabledValueLabel->setText(basicNavAutonomyEnabled ? "true" : "false");
@@ -2312,6 +2704,7 @@ void MainWindow::toggleTestSequence()
     testSequenceEnabled = true;
     testSequenceWaitingNextTick = false;
     testSequenceIndex = 0;
+    cancelCenterPivotSequence();
     startCurrentTestSequenceStep();
     updateNavCorePipeline();
     updateTelemetryPanel();
@@ -2371,6 +2764,292 @@ void MainWindow::advanceTestSequenceIfNeeded()
     }
 }
 
+void MainWindow::startCenterPivotSequence()
+{
+    setBasicNavAutonomyEnabled(false);
+    cancelTestSequence();
+    cancelPlanExecution();
+    cancelPlanCompositeAction();
+    cancelDeadEndRecovery();
+    centerPivotSequencePhase = CenterPivotSequencePhase::Centering;
+    centerPivotSequenceLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    resetNavigationYawReference();
+    nav_core_start_center_in_cell_for_pivot_by_front_line();
+    updateNavCorePipeline();
+}
+
+void MainWindow::cancelCenterPivotSequence()
+{
+    centerPivotSequencePhase = CenterPivotSequencePhase::None;
+    centerPivotSequenceLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+}
+
+void MainWindow::advanceCenterPivotSequenceIfNeeded()
+{
+    if (centerPivotSequencePhase == CenterPivotSequencePhase::None
+        || centerPivotSequencePhase == CenterPivotSequencePhase::Done
+        || centerPivotSequencePhase == CenterPivotSequencePhase::Failed) {
+        return;
+    }
+
+    const bool navReady =
+        (nav_core_action() == NAV_ACTION_NONE)
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    if (!navReady) {
+        return;
+    }
+
+    if (centerPivotSequencePhase == CenterPivotSequencePhase::Centering) {
+        NavTurnDebug turnDebug = {};
+        nav_core_get_turn_debug(&turnDebug);
+        centerPivotSequenceLastCenterReason = turnDebug.last_center_pivot_done_reason;
+        if (centerPivotSequenceLastCenterReason != NAV_CENTER_PIVOT_DONE_FRONT_LINE) {
+            centerPivotSequencePhase = CenterPivotSequencePhase::Failed;
+            return;
+        }
+
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        resetNavigationYawReference();
+        nav_core_start_pivot_turn_180(&sensors);
+        centerPivotSequencePhase = CenterPivotSequencePhase::Pivot180;
+        return;
+    }
+
+    if (centerPivotSequencePhase == CenterPivotSequencePhase::Pivot180) {
+        centerPivotSequencePhase = CenterPivotSequencePhase::Done;
+    }
+}
+
+void MainWindow::loadAndStartTestPlan()
+{
+    setBasicNavAutonomyEnabled(false);
+    cancelTestSequence();
+    cancelCenterPivotSequence();
+    cancelPlanCompositeAction();
+    cancelDeadEndRecovery();
+    nav_core_plan_clear();
+
+    const NavPlanAction testPlan[] = {
+        NAV_PLAN_ACTION_ADVANCE_LINE,
+        NAV_PLAN_ACTION_SMOOTH_RIGHT,
+        NAV_PLAN_ACTION_ADVANCE_LINE,
+        NAV_PLAN_ACTION_SMOOTH_LEFT,
+        NAV_PLAN_ACTION_ADVANCE_LINE
+    };
+
+    bool loaded = true;
+    for (NavPlanAction action : testPlan) {
+        loaded = nav_core_plan_push(action) && loaded;
+    }
+
+    planExecutionEnabled = loaded && !nav_core_plan_is_empty();
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    planLastExecutedAction = NAV_PLAN_ACTION_NONE;
+    planActionsExecutedCount = 0;
+    routeExecuteStatus = RouteExecuteStatus::Idle;
+    routeStartPhysicalValid = false;
+    routeStartFloorRearBlack = false;
+    lastNavCommand = {0, 0};
+
+    if (planExecutionEnabled) {
+        advancePlanExecutionIfNeeded();
+        updateNavCorePipeline();
+    }
+}
+
+void MainWindow::cancelPlanExecution()
+{
+    planExecutionEnabled = false;
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    cancelPlanCompositeAction();
+    nav_core_plan_clear();
+    lastNavCommand = {0, 0};
+    routeExecuteStatus = RouteExecuteStatus::Cancelled;
+    routeStartPhysicalValid = false;
+    routeStartFloorRearBlack = false;
+    routePlanReadyToExecute = false;
+}
+
+void MainWindow::cancelPlanCompositeAction()
+{
+    planCompositeActionPhase = CenterPivotSequencePhase::None;
+    planCompositeLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+}
+
+void MainWindow::startPlanCompositeCenterAndPivot180()
+{
+    planCompositeActionPhase = CenterPivotSequencePhase::Centering;
+    planCompositeLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    planCurrentAction = NAV_PLAN_ACTION_CENTER_AND_PIVOT_180;
+    planLastExecutedAction = NAV_PLAN_ACTION_CENTER_AND_PIVOT_180;
+    ++planActionsExecutedCount;
+    resetNavigationYawReference();
+    nav_core_start_center_in_cell_for_pivot_by_front_line();
+}
+
+bool MainWindow::advancePlanCompositeActionIfNeeded()
+{
+    if (planCompositeActionPhase == CenterPivotSequencePhase::None) {
+        return false;
+    }
+
+    const bool navReady =
+        (nav_core_action() == NAV_ACTION_NONE)
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    if (!navReady) {
+        return true;
+    }
+
+    if (planCompositeActionPhase == CenterPivotSequencePhase::Centering) {
+        NavTurnDebug turnDebug = {};
+        nav_core_get_turn_debug(&turnDebug);
+        planCompositeLastCenterReason = turnDebug.last_center_pivot_done_reason;
+        if (planCompositeLastCenterReason != NAV_CENTER_PIVOT_DONE_FRONT_LINE) {
+            planCompositeActionPhase = CenterPivotSequencePhase::Failed;
+            planExecutionEnabled = false;
+            nav_core_stop();
+            lastNavCommand = {0, 0};
+            return true;
+        }
+
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        resetNavigationYawReference();
+        nav_core_start_pivot_turn_180(&sensors);
+        planCompositeActionPhase = CenterPivotSequencePhase::Pivot180;
+        return true;
+    }
+
+    if (planCompositeActionPhase == CenterPivotSequencePhase::Pivot180) {
+        planCompositeActionPhase = CenterPivotSequencePhase::Done;
+        planCurrentAction = NAV_PLAN_ACTION_NONE;
+        return false;
+    }
+
+    return false;
+}
+
+void MainWindow::executeLoadedRouteIfSafe()
+{
+    updateIrSensors();
+    updateFloorSensors();
+
+    NavPlanDebugSnapshot planDebug = {};
+    nav_core_plan_debug_snapshot(&planDebug);
+    NavRouteDebugSnapshot routeDebug = {};
+    nav_core_get_route_debug(&routeDebug);
+
+    routePlanReadyToExecute =
+        routeDebug.status == NAV_ROUTE_STATUS_FOUND
+        && routeDebug.loaded_into_plan_queue
+        && planDebug.count > 0;
+    routeStartFloorRearBlack = buildRobotSensorsSnapshot().floor_rear_black;
+    routeStartPhysicalValid = routePlanReadyToExecute && routeStartFloorRearBlack;
+
+    if (!routePlanReadyToExecute) {
+        routeExecuteStatus = RouteExecuteStatus::NoRouteLoaded;
+        return;
+    }
+
+    const bool navReady =
+        (nav_core_action() == NAV_ACTION_NONE)
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    if (!navReady) {
+        routeExecuteStatus = RouteExecuteStatus::NavBusy;
+        return;
+    }
+
+    if (!routeStartFloorRearBlack) {
+        routeExecuteStatus = RouteExecuteStatus::StartNotOnRearLine;
+        return;
+    }
+
+    setBasicNavAutonomyEnabled(false);
+    cancelTestSequence();
+    cancelCenterPivotSequence();
+    cancelDeadEndRecovery();
+    planExecutionEnabled = true;
+    routeExecuteStatus = RouteExecuteStatus::Started;
+    advancePlanExecutionIfNeeded();
+    if (planExecutionEnabled) {
+        routeExecuteStatus = RouteExecuteStatus::Running;
+    }
+    updateNavCorePipeline();
+}
+
+bool MainWindow::startPlanAction(NavPlanAction action)
+{
+    if (action == NAV_PLAN_ACTION_NONE) {
+        return false;
+    }
+
+    resetNavigationYawReference();
+    RobotSensors sensors = buildRobotSensorsSnapshot();
+    switch (action) {
+    case NAV_PLAN_ACTION_ADVANCE_LINE:
+        nav_core_start_advance_until_rear_black();
+        break;
+    case NAV_PLAN_ACTION_SMOOTH_LEFT:
+        nav_core_start_smooth_turn_left(&sensors);
+        break;
+    case NAV_PLAN_ACTION_SMOOTH_RIGHT:
+        nav_core_start_smooth_turn_right(&sensors);
+        break;
+    case NAV_PLAN_ACTION_PIVOT_180:
+        nav_core_start_pivot_turn_180(&sensors);
+        break;
+    case NAV_PLAN_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+        nav_core_start_approach_front_wall_for_pivot();
+        break;
+    case NAV_PLAN_ACTION_CENTER_AND_PIVOT_180:
+        startPlanCompositeCenterAndPivot180();
+        return true;
+    case NAV_PLAN_ACTION_NONE:
+        return false;
+    }
+
+    planCurrentAction = action;
+    planLastExecutedAction = action;
+    ++planActionsExecutedCount;
+    return true;
+}
+
+void MainWindow::advancePlanExecutionIfNeeded()
+{
+    if (!planExecutionEnabled) {
+        return;
+    }
+
+    if (advancePlanCompositeActionIfNeeded()) {
+        return;
+    }
+
+    const bool navReady =
+        (nav_core_action() == NAV_ACTION_NONE)
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    if (!navReady) {
+        return;
+    }
+
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    const NavPlanAction nextAction = nav_core_plan_pop_next();
+    if (nextAction == NAV_PLAN_ACTION_NONE) {
+        planExecutionEnabled = false;
+        cancelPlanCompositeAction();
+        lastNavCommand = {0, 0};
+        if (routeExecuteStatus == RouteExecuteStatus::Running
+            || routeExecuteStatus == RouteExecuteStatus::Started) {
+            routeExecuteStatus = RouteExecuteStatus::Completed;
+        }
+        return;
+    }
+
+    if (!startPlanAction(nextAction)) {
+        planExecutionEnabled = false;
+        cancelPlanCompositeAction();
+        lastNavCommand = {0, 0};
+    }
+}
+
 void MainWindow::loadMazeFromDialog()
 {
     const QString startDir = world.mazeFilePath().isEmpty()
@@ -2404,6 +3083,8 @@ bool MainWindow::loadMazeFile(const QString &path)
     }
 
     cancelTestSequence();
+    cancelCenterPivotSequence();
+    cancelPlanExecution();
     setBasicNavAutonomyEnabled(false);
     nav_core_stop();
     lastNavCommand = {0, 0};
@@ -2425,6 +3106,8 @@ void MainWindow::toggleBasicNavAutonomy()
     }
     if (basicNavAutonomyEnabled) {
         cancelTestSequence();
+        cancelCenterPivotSequence();
+        cancelPlanExecution();
         updateIrSensors();
         updateFloorSensors();
         updateNavCorePipeline();
@@ -2501,6 +3184,11 @@ bool MainWindow::advanceDeadEndRecoveryIfNeeded()
 void MainWindow::advanceBasicNavAutonomyIfNeeded()
 {
     if (!basicNavAutonomyEnabled) {
+        return;
+    }
+
+    if (planCompositeActionPhase == CenterPivotSequencePhase::Centering
+        || planCompositeActionPhase == CenterPivotSequencePhase::Pivot180) {
         return;
     }
 
@@ -2617,6 +3305,46 @@ void MainWindow::promptSmoothTargetYawRate()
     }
 
     nav_core_set_smooth_target_yaw_rate_deg_s(target);
+    updateTelemetryPanel();
+}
+
+void MainWindow::promptRoutePlanToCell()
+{
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
+
+    bool accepted = false;
+    const int targetX = QInputDialog::getInt(this,
+                                             "Dry-run route plan",
+                                             "Target cell X:",
+                                             mapDebug.cell_x,
+                                             0,
+                                             std::max(0, static_cast<int>(mapDebug.width) - 1),
+                                             1,
+                                             &accepted);
+    if (!accepted) {
+        return;
+    }
+
+    const int targetY = QInputDialog::getInt(this,
+                                             "Dry-run route plan",
+                                             "Target cell Y:",
+                                             mapDebug.cell_y,
+                                             0,
+                                             std::max(0, static_cast<int>(mapDebug.height) - 1),
+                                             1,
+                                             &accepted);
+    if (!accepted) {
+        return;
+    }
+
+    planExecutionEnabled = false;
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    nav_core_route_plan_to_cell(static_cast<int16_t>(targetX),
+                                static_cast<int16_t>(targetY));
+    routeExecuteStatus = RouteExecuteStatus::Idle;
+    routeStartPhysicalValid = false;
+    routeStartFloorRearBlack = false;
     updateTelemetryPanel();
 }
 
@@ -2787,6 +3515,10 @@ void MainWindow::showControlsHelp()
         "- M: Toggle auto mode\n"
         "- O: Load maze JSON\n"
         "- V: Toggle fixed test sequence\n"
+        "- U: Load and execute planned test action queue\n"
+        "- J: Execute route currently loaded by K, only when rear sensor is on line\n"
+        "- K: Dry-run route plan to target cell\n"
+        "- L: Test CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE -> PIVOT_180 sequence\n"
         "- B: Toggle basic autonomous navigation; dead-ends use approach-front then PIVOT_180\n"
         "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
@@ -2795,10 +3527,6 @@ void MainWindow::showControlsHelp()
         "Motor test:\n"
         "- T: Toggle motor test mode\n"
         "- I: test PWM {3000, 3000} avanzar\n"
-        "- K: test PWM {-3000, -3000} retroceder\n"
-        "- J: test PWM {-1500, 1500} girar izquierda\n"
-        "- L: test PWM {1500, -1500} girar derecha\n"
-        "- U: stop test motors {0, 0}\n"
         "\n"
         "Smooth tuning:\n"
         "- +: increase smooth target yaw rate by 5 deg/s\n"
@@ -2809,12 +3537,13 @@ void MainWindow::showControlsHelp()
         "Navigation test:\n"
         "- G: start ADVANCE_LINE until rear floor sensor detects black\n"
         "- F: start APPROACH_FRONT_WALL_FOR_PIVOT test\n"
+        "- H: start CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE test\n"
         "- Q: start SMOOTH_LEFT test, resets nav yaw reference\n"
         "- E: start SMOOTH_RIGHT test, resets nav yaw reference\n"
         "- 1: start PIVOT_LEFT test, resets nav yaw reference\n"
         "- 2: start PIVOT_RIGHT test, resets nav yaw reference\n"
         "- 3: start PIVOT_180 test, resets nav yaw reference\n"
-        "- X: stop navigation action\n"
+        "- X: stop navigation action and cancel autonomy/plan\n"
         "- Z: reset navigation yaw reference\n"
         "\n"
         "Notas:\n"
@@ -2948,10 +3677,14 @@ void MainWindow::simulationStep()
     simulationTimeS += kSimulationDtS;
 
     advanceTestSequenceIfNeeded();
+    advanceCenterPivotSequenceIfNeeded();
+    advancePlanExecutionIfNeeded();
     updateIrSensors();
     updateFloorSensors();
     updateNavCorePipeline();
     advanceTestSequenceIfNeeded();
+    advanceCenterPivotSequenceIfNeeded();
+    advancePlanExecutionIfNeeded();
     advanceBasicNavAutonomyIfNeeded();
 
     if (autoModeEnabled) {

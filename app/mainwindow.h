@@ -33,6 +33,25 @@ public:
         Pivot180
     };
 
+    enum class RouteExecuteStatus {
+        Idle,
+        NoRouteLoaded,
+        NavBusy,
+        StartNotOnRearLine,
+        Started,
+        Running,
+        Completed,
+        Cancelled
+    };
+
+    enum class CenterPivotSequencePhase {
+        None,
+        Centering,
+        Pivot180,
+        Done,
+        Failed
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -58,10 +77,22 @@ private:
     bool loadMazeFile(const QString &path);
     void adjustSmoothTargetYawRate(int delta_deg_s);
     void promptSmoothTargetYawRate();
+    void promptRoutePlanToCell();
     void toggleTestSequence();
     void cancelTestSequence();
     void startCurrentTestSequenceStep();
     void advanceTestSequenceIfNeeded();
+    void startCenterPivotSequence();
+    void cancelCenterPivotSequence();
+    void advanceCenterPivotSequenceIfNeeded();
+    void loadAndStartTestPlan();
+    void cancelPlanExecution();
+    void executeLoadedRouteIfSafe();
+    void cancelPlanCompositeAction();
+    bool advancePlanCompositeActionIfNeeded();
+    void startPlanCompositeCenterAndPivot180();
+    bool startPlanAction(NavPlanAction action);
+    void advancePlanExecutionIfNeeded();
     void toggleBasicNavAutonomy();
     void setBasicNavAutonomyEnabled(bool enabled);
     void toggleNavPolicy();
@@ -179,6 +210,16 @@ private:
     QLabel *turnDebugApproachFrontBaseLeftValueLabel = nullptr;
     QLabel *turnDebugApproachFrontBaseRightValueLabel = nullptr;
     QLabel *turnDebugApproachFrontCorrectionValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotPhaseValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotDoneReasonValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotElapsedValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotBrakeElapsedValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotBaseLeftValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotBaseRightValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotCorrectionValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotFrontBlackValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotRearBlackValueLabel = nullptr;
+    QLabel *turnDebugCenterPivotFrontSeenWhiteValueLabel = nullptr;
     QLabel *turnDebugAdvanceYawSetpointValueLabel = nullptr;
     QLabel *turnDebugAdvanceYawMeasuredValueLabel = nullptr;
     QLabel *turnDebugAdvanceYawErrorValueLabel = nullptr;
@@ -225,6 +266,7 @@ private:
     QLabel *turnDebugLastAdvanceFinalYawValueLabel = nullptr;
     QLabel *turnDebugLastAdvanceFinalRearValueLabel = nullptr;
     QLabel *turnDebugLastApproachFrontDoneReasonValueLabel = nullptr;
+    QLabel *turnDebugLastCenterPivotDoneReasonValueLabel = nullptr;
     QLabel *navLeftMotorValueLabel = nullptr;
     QLabel *navRightMotorValueLabel = nullptr;
     QLabel *simulationRunningValueLabel = nullptr;
@@ -238,6 +280,32 @@ private:
     QLabel *sequenceLengthValueLabel = nullptr;
     QLabel *sequenceCurrentActionValueLabel = nullptr;
     QLabel *sequenceWaitingNextTickValueLabel = nullptr;
+    QLabel *centerPivotSequenceActiveValueLabel = nullptr;
+    QLabel *centerPivotSequencePhaseValueLabel = nullptr;
+    QLabel *centerPivotSequenceLastCenterReasonValueLabel = nullptr;
+    QLabel *planExecutionEnabledValueLabel = nullptr;
+    QLabel *planQueueCountValueLabel = nullptr;
+    QLabel *planCurrentActionValueLabel = nullptr;
+    QLabel *planNextActionValueLabel = nullptr;
+    QLabel *planLastExecutedActionValueLabel = nullptr;
+    QLabel *planActionsExecutedCountValueLabel = nullptr;
+    QLabel *planQueueOverflowValueLabel = nullptr;
+    QLabel *planCompositeActionActiveValueLabel = nullptr;
+    QLabel *planCompositeActionPhaseValueLabel = nullptr;
+    QLabel *planCompositeLastCenterReasonValueLabel = nullptr;
+    QLabel *routeStatusValueLabel = nullptr;
+    QLabel *routeTargetCellValueLabel = nullptr;
+    QLabel *routeStartCellValueLabel = nullptr;
+    QLabel *routeStartDirValueLabel = nullptr;
+    QLabel *routeLengthValueLabel = nullptr;
+    QLabel *routeExpandedStatesValueLabel = nullptr;
+    QLabel *routeFirstActionValueLabel = nullptr;
+    QLabel *routeLastActionValueLabel = nullptr;
+    QLabel *routeLoadedIntoPlanQueueValueLabel = nullptr;
+    QLabel *routeExecuteStatusValueLabel = nullptr;
+    QLabel *routeStartPhysicalValidValueLabel = nullptr;
+    QLabel *routeStartFloorRearBlackValueLabel = nullptr;
+    QLabel *routePlanReadyToExecuteValueLabel = nullptr;
     QLabel *navAutonomyEnabledValueLabel = nullptr;
     QLabel *navPolicyValueLabel = nullptr;
     QLabel *navRecommendedActionValueLabel = nullptr;
@@ -292,6 +360,18 @@ private:
     bool testSequenceEnabled = false;
     bool testSequenceWaitingNextTick = false;
     int testSequenceIndex = 0;
+    CenterPivotSequencePhase centerPivotSequencePhase = CenterPivotSequencePhase::None;
+    NavCenterPivotDoneReason centerPivotSequenceLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    bool planExecutionEnabled = false;
+    NavPlanAction planCurrentAction = NAV_PLAN_ACTION_NONE;
+    NavPlanAction planLastExecutedAction = NAV_PLAN_ACTION_NONE;
+    uint16_t planActionsExecutedCount = 0;
+    CenterPivotSequencePhase planCompositeActionPhase = CenterPivotSequencePhase::None;
+    NavCenterPivotDoneReason planCompositeLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    RouteExecuteStatus routeExecuteStatus = RouteExecuteStatus::Idle;
+    bool routeStartPhysicalValid = false;
+    bool routeStartFloorRearBlack = false;
+    bool routePlanReadyToExecute = false;
     bool basicNavAutonomyEnabled = false;
     NavRecommendedAction basicNavRecommendedAction = NAV_RECOMMENDED_NONE;
     NavRecommendedAction basicNavLastDecision = NAV_RECOMMENDED_NONE;

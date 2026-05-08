@@ -12,6 +12,7 @@ typedef enum NavState {
     NAV_STATE_IDLE = 0,
     NAV_STATE_ADVANCING_UNTIL_REAR_BLACK,
     NAV_STATE_APPROACHING_FRONT_WALL_FOR_PIVOT,
+    NAV_STATE_CENTERING_IN_CELL_FOR_PIVOT,
     NAV_STATE_SMOOTH_TURNING,
     NAV_STATE_PIVOT_TURNING,
     NAV_STATE_DONE
@@ -21,6 +22,7 @@ typedef enum NavAction {
     NAV_ACTION_NONE = 0,
     NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK,
     NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT,
+    NAV_ACTION_CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE,
     NAV_ACTION_SMOOTH_TURN_LEFT,
     NAV_ACTION_SMOOTH_TURN_RIGHT,
     NAV_ACTION_PIVOT_TURN_LEFT,
@@ -67,6 +69,23 @@ typedef enum NavApproachFrontDoneReason {
     NAV_APPROACH_FRONT_DONE_TIMEOUT
 } NavApproachFrontDoneReason;
 
+typedef enum NavCenterPivotPhase {
+    NAV_CENTER_PIVOT_PHASE_NONE = 0,
+    NAV_CENTER_PIVOT_PHASE_INIT,
+    NAV_CENTER_PIVOT_PHASE_WAIT_LEAVE_START_LINE,
+    NAV_CENTER_PIVOT_PHASE_WAIT_FRONT_WHITE,
+    NAV_CENTER_PIVOT_PHASE_SEEK_FRONT_LINE,
+    NAV_CENTER_PIVOT_PHASE_BRAKE_SETTLE,
+    NAV_CENTER_PIVOT_PHASE_DONE
+} NavCenterPivotPhase;
+
+typedef enum NavCenterPivotDoneReason {
+    NAV_CENTER_PIVOT_DONE_NONE = 0,
+    NAV_CENTER_PIVOT_DONE_FRONT_LINE,
+    NAV_CENTER_PIVOT_DONE_TIMEOUT,
+    NAV_CENTER_PIVOT_DONE_START_NOT_ON_REAR_LINE
+} NavCenterPivotDoneReason;
+
 typedef enum NavAdvanceGuidanceMode {
     NAV_ADVANCE_GUIDANCE_YAW_ONLY = 0,
     NAV_ADVANCE_GUIDANCE_WALL_ASSIST
@@ -93,6 +112,52 @@ typedef enum NavPolicy {
     NAV_POLICY_RIGHT_HAND_RULE = 0,
     NAV_POLICY_MAP_PREFER_UNVISITED
 } NavPolicy;
+
+enum {
+    NAV_PLAN_MAX_ACTIONS = 64
+};
+
+typedef enum NavPlanAction {
+    NAV_PLAN_ACTION_NONE = 0,
+    NAV_PLAN_ACTION_ADVANCE_LINE,
+    NAV_PLAN_ACTION_SMOOTH_LEFT,
+    NAV_PLAN_ACTION_SMOOTH_RIGHT,
+    NAV_PLAN_ACTION_PIVOT_180,
+    NAV_PLAN_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT,
+    NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
+} NavPlanAction;
+
+typedef struct NavPlanDebugSnapshot {
+    uint8_t capacity;
+    uint8_t count;
+    uint8_t head;
+    uint8_t tail;
+    NavPlanAction next_action;
+    bool overflow;
+} NavPlanDebugSnapshot;
+
+typedef enum NavRouteStatus {
+    NAV_ROUTE_STATUS_IDLE = 0,
+    NAV_ROUTE_STATUS_FOUND,
+    NAV_ROUTE_STATUS_NO_PATH,
+    NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS,
+    NAV_ROUTE_STATUS_ROUTE_TOO_LONG,
+    NAV_ROUTE_STATUS_QUEUE_OVERFLOW
+} NavRouteStatus;
+
+typedef struct NavRouteDebugSnapshot {
+    NavRouteStatus status;
+    int8_t target_cell_x;
+    int8_t target_cell_y;
+    int8_t start_cell_x;
+    int8_t start_cell_y;
+    NavMapDirection start_dir;
+    uint8_t route_length;
+    uint16_t expanded_states;
+    NavPlanAction first_action;
+    NavPlanAction last_action;
+    bool loaded_into_plan_queue;
+} NavRouteDebugSnapshot;
 
 typedef struct NavMapCandidateDebug {
     int8_t right_cell_x;
@@ -192,6 +257,16 @@ typedef struct NavTurnDebug {
     int16_t approach_front_base_left_pwm;
     int16_t approach_front_base_right_pwm;
     int16_t approach_front_correction_pwm;
+    NavCenterPivotPhase center_pivot_phase;
+    NavCenterPivotDoneReason center_pivot_done_reason;
+    uint16_t center_pivot_elapsed_ms;
+    uint16_t center_pivot_brake_elapsed_ms;
+    int16_t center_pivot_base_left_pwm;
+    int16_t center_pivot_base_right_pwm;
+    int16_t center_pivot_correction_pwm;
+    bool center_pivot_front_black;
+    bool center_pivot_rear_black;
+    bool center_pivot_front_seen_white;
     q16_16_t advance_yaw_setpoint_deg_q16;
     q16_16_t advance_yaw_measured_deg_q16;
     q16_16_t advance_yaw_error_deg_q16;
@@ -238,11 +313,13 @@ typedef struct NavTurnDebug {
     q16_16_t last_advance_final_yaw_deg_q16;
     bool last_advance_final_floor_rear_black;
     NavApproachFrontDoneReason last_approach_front_done_reason;
+    NavCenterPivotDoneReason last_center_pivot_done_reason;
 } NavTurnDebug;
 
 void nav_core_init(void);
 void nav_core_start_advance_until_rear_black(void);
 void nav_core_start_approach_front_wall_for_pivot(void);
+void nav_core_start_center_in_cell_for_pivot_by_front_line(void);
 void nav_core_start_smooth_turn_left(const RobotSensors *sensors);
 void nav_core_start_smooth_turn_right(const RobotSensors *sensors);
 void nav_core_start_pivot_turn_left(const RobotSensors *sensors);
@@ -275,6 +352,16 @@ void nav_core_set_policy(NavPolicy policy);
 NavPolicy nav_core_get_policy(void);
 void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug);
 NavRecommendedAction nav_core_recommend_basic_action(const RobotSensors *sensors);
+void nav_core_plan_clear(void);
+bool nav_core_plan_push(NavPlanAction action);
+uint8_t nav_core_plan_count(void);
+bool nav_core_plan_is_empty(void);
+NavPlanAction nav_core_plan_peek_next(void);
+NavPlanAction nav_core_plan_pop_next(void);
+void nav_core_plan_debug_snapshot(NavPlanDebugSnapshot *snapshot);
+NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target_cell_y);
+void nav_core_get_route_debug(NavRouteDebugSnapshot *snapshot);
+void nav_core_route_clear_debug(void);
 NavState nav_core_state(void);
 NavAction nav_core_action(void);
 q16_16_t nav_core_action_start_yaw_q16(void);
