@@ -16,6 +16,8 @@ qt_add_executable(Sim_Autito
     sim/sim_robot.h
     nav/nav_core.c
     nav/nav_core.h
+    nav/nav_map.c
+    nav/nav_map.h
     nav/pid_controller.c
     nav/pid_controller.h
     nav/nav_types.h

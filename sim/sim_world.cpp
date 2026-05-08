@@ -18,18 +18,6 @@ constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
 constexpr double kEpsilon = 1.0e-9;
 constexpr double kTapeWidthMm = 20.0;
 constexpr double kTapeHalfWidthMm = kTapeWidthMm / 2.0;
-constexpr double kTargetTapeSizeMm = 90.0;
-
-struct TargetCell {
-    int row;
-    int col;
-};
-
-constexpr TargetCell kTargetCells[] = {
-    {2, 2},
-    {4, 5},
-    {6, 1}
-};
 }
 
 SimWorld::SimWorld()
@@ -244,26 +232,8 @@ bool SimWorld::isBoundaryTapeAt(double x_mm, double y_mm) const
 
 bool SimWorld::isTargetTapeAt(double x_mm, double y_mm) const
 {
-    const double mazeWidthMm = widthMm();
-    const double mazeHeightMm = heightMm();
-    if (x_mm < 0.0 || x_mm > mazeWidthMm || y_mm < 0.0 || y_mm > mazeHeightMm) {
-        return false;
-    }
-
-    for (const TargetCell &target : kTargetCells) {
-        if (!isInside(target.row, target.col)) {
-            continue;
-        }
-        const double centerX = (target.col + 0.5) * cellSizeMm_;
-        const double centerY = (target.row + 0.5) * cellSizeMm_;
-        const double halfSize = kTargetTapeSizeMm / 2.0;
-
-        if (x_mm >= centerX - halfSize && x_mm <= centerX + halfSize
-            && y_mm >= centerY - halfSize && y_mm <= centerY + halfSize) {
-            return true;
-        }
-    }
-
+    (void)x_mm;
+    (void)y_mm;
     return false;
 }
 
@@ -288,31 +258,12 @@ std::vector<SimRect> SimWorld::boundaryTapeRects() const
 
 std::vector<SimRect> SimWorld::targetTapeRects() const
 {
-    std::vector<SimRect> rects;
-
-    for (const TargetCell &target : kTargetCells) {
-        if (!isInside(target.row, target.col)) {
-            continue;
-        }
-        const double centerX = (target.col + 0.5) * cellSizeMm_;
-        const double centerY = (target.row + 0.5) * cellSizeMm_;
-        rects.push_back({
-            centerX - kTargetTapeSizeMm / 2.0,
-            centerY - kTargetTapeSizeMm / 2.0,
-            kTargetTapeSizeMm,
-            kTargetTapeSizeMm
-        });
-    }
-
-    return rects;
+    return {};
 }
 
 std::vector<SimRect> SimWorld::blackTapeRects() const
 {
-    std::vector<SimRect> rects = boundaryTapeRects();
-    const std::vector<SimRect> targets = targetTapeRects();
-    rects.insert(rects.end(), targets.begin(), targets.end());
-    return rects;
+    return boundaryTapeRects();
 }
 
 void SimWorld::initializeDefaultMaze()

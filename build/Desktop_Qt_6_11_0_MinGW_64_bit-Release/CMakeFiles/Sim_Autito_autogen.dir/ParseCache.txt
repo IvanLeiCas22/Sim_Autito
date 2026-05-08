@@ -6,6 +6,7 @@ C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app/mainwindow.h
  mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app/mainwindow.h
  mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/moc_predefs.h
  mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.h
+ mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h
  mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_types.h
  mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.h
  mdp:C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_world.h
@@ -404,3 +405,5 @@ C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_world.h
 C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.c
 C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/pid_controller.c
 C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.cpp
+C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h
+C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.c

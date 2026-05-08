@@ -2,6 +2,7 @@
 #define NAV_CORE_H
 
 #include "nav_types.h"
+#include "nav_map.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,6 +11,7 @@ extern "C" {
 typedef enum NavState {
     NAV_STATE_IDLE = 0,
     NAV_STATE_ADVANCING_UNTIL_REAR_BLACK,
+    NAV_STATE_APPROACHING_FRONT_WALL_FOR_PIVOT,
     NAV_STATE_SMOOTH_TURNING,
     NAV_STATE_PIVOT_TURNING,
     NAV_STATE_DONE
@@ -18,6 +20,7 @@ typedef enum NavState {
 typedef enum NavAction {
     NAV_ACTION_NONE = 0,
     NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK,
+    NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT,
     NAV_ACTION_SMOOTH_TURN_LEFT,
     NAV_ACTION_SMOOTH_TURN_RIGHT,
     NAV_ACTION_PIVOT_TURN_LEFT,
@@ -51,6 +54,19 @@ typedef enum NavAdvanceDoneReason {
     NAV_ADVANCE_DONE_REAR_SENSOR_TARGET_LINE
 } NavAdvanceDoneReason;
 
+typedef enum NavApproachFrontPhase {
+    NAV_APPROACH_FRONT_PHASE_NONE = 0,
+    NAV_APPROACH_FRONT_PHASE_DRIVE,
+    NAV_APPROACH_FRONT_PHASE_BRAKE_SETTLE,
+    NAV_APPROACH_FRONT_PHASE_DONE
+} NavApproachFrontPhase;
+
+typedef enum NavApproachFrontDoneReason {
+    NAV_APPROACH_FRONT_DONE_NONE = 0,
+    NAV_APPROACH_FRONT_DONE_TARGET_DISTANCE,
+    NAV_APPROACH_FRONT_DONE_TIMEOUT
+} NavApproachFrontDoneReason;
+
 typedef enum NavAdvanceGuidanceMode {
     NAV_ADVANCE_GUIDANCE_YAW_ONLY = 0,
     NAV_ADVANCE_GUIDANCE_WALL_ASSIST
@@ -62,6 +78,37 @@ typedef enum NavAdvanceCorrectionSource {
     NAV_ADVANCE_CORRECTION_WALL_RIGHT,
     NAV_ADVANCE_CORRECTION_WALL_CENTER
 } NavAdvanceCorrectionSource;
+
+typedef enum NavRecommendedAction {
+    NAV_RECOMMENDED_NONE = 0,
+    NAV_RECOMMENDED_ACQUIRE_REAR_LINE,
+    NAV_RECOMMENDED_ADVANCE_LINE,
+    NAV_RECOMMENDED_SMOOTH_LEFT,
+    NAV_RECOMMENDED_SMOOTH_RIGHT,
+    NAV_RECOMMENDED_PIVOT_180,
+    NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED
+} NavRecommendedAction;
+
+typedef enum NavPolicy {
+    NAV_POLICY_RIGHT_HAND_RULE = 0,
+    NAV_POLICY_MAP_PREFER_UNVISITED
+} NavPolicy;
+
+typedef struct NavMapCandidateDebug {
+    int8_t right_cell_x;
+    int8_t right_cell_y;
+    int8_t front_cell_x;
+    int8_t front_cell_y;
+    int8_t left_cell_x;
+    int8_t left_cell_y;
+    bool right_cell_valid;
+    bool front_cell_valid;
+    bool left_cell_valid;
+    bool right_cell_visited;
+    bool front_cell_visited;
+    bool left_cell_visited;
+    bool used_unvisited_preference;
+} NavMapCandidateDebug;
 
 typedef struct NavAdvanceWallConfig {
     int16_t kp_pwm_per_mm;
@@ -129,6 +176,16 @@ typedef struct NavTurnDebug {
     uint16_t smooth_post_yaw_elapsed_ms;
     NavAdvancePhase advance_phase;
     NavAdvanceDoneReason advance_done_reason;
+    NavApproachFrontPhase approach_front_phase;
+    NavApproachFrontDoneReason approach_front_done_reason;
+    q16_16_t approach_front_target_mm_q16;
+    q16_16_t approach_front_left_mm_q16;
+    q16_16_t approach_front_right_mm_q16;
+    uint16_t approach_front_elapsed_ms;
+    uint16_t approach_front_brake_elapsed_ms;
+    int16_t approach_front_base_left_pwm;
+    int16_t approach_front_base_right_pwm;
+    int16_t approach_front_correction_pwm;
     q16_16_t advance_yaw_setpoint_deg_q16;
     q16_16_t advance_yaw_measured_deg_q16;
     q16_16_t advance_yaw_error_deg_q16;
@@ -150,6 +207,7 @@ typedef struct NavTurnDebug {
     bool advance_follow_right_valid;
     q16_16_t advance_wall_left_mm_q16;
     q16_16_t advance_wall_right_mm_q16;
+    q16_16_t advance_wall_raw_error_mm_q16;
     q16_16_t advance_wall_error_mm_q16;
     q16_16_t advance_wall_error_after_deadband_mm_q16;
     q16_16_t advance_wall_prev_error_mm_q16;
@@ -165,6 +223,7 @@ typedef struct NavTurnDebug {
     q16_16_t wall_follow_target_left_mm_q16;
     q16_16_t wall_follow_target_right_mm_q16;
     int16_t wall_correction_limit_pwm;
+    int16_t wall_single_side_error_scale;
     NavAction last_completed_action;
     NavSmoothDoneReason last_smooth_done_reason;
     q16_16_t last_smooth_final_yaw_deg_q16;
@@ -172,10 +231,12 @@ typedef struct NavTurnDebug {
     NavAdvanceDoneReason last_advance_done_reason;
     q16_16_t last_advance_final_yaw_deg_q16;
     bool last_advance_final_floor_rear_black;
+    NavApproachFrontDoneReason last_approach_front_done_reason;
 } NavTurnDebug;
 
 void nav_core_init(void);
 void nav_core_start_advance_until_rear_black(void);
+void nav_core_start_approach_front_wall_for_pivot(void);
 void nav_core_start_smooth_turn_left(const RobotSensors *sensors);
 void nav_core_start_smooth_turn_right(const RobotSensors *sensors);
 void nav_core_start_pivot_turn_left(const RobotSensors *sensors);
@@ -197,6 +258,17 @@ void nav_core_reset_turn_pid_defaults(void);
 void nav_core_get_advance_yaw_pid_config(NavAdvanceYawPidConfig *config);
 void nav_core_set_advance_yaw_pid_config(const NavAdvanceYawPidConfig *config);
 void nav_core_reset_advance_yaw_pid_defaults(void);
+void nav_core_map_init(uint8_t width,
+                       uint8_t height,
+                       int8_t start_cell_x,
+                       int8_t start_cell_y,
+                       NavMapDirection start_dir);
+bool nav_core_get_map_cell(int8_t cell_x, int8_t cell_y, NavMapCell *cell);
+void nav_core_get_map_debug(NavMapDebugSnapshot *snapshot);
+void nav_core_set_policy(NavPolicy policy);
+NavPolicy nav_core_get_policy(void);
+void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug);
+NavRecommendedAction nav_core_recommend_basic_action(const RobotSensors *sensors);
 NavState nav_core_state(void);
 NavAction nav_core_action(void);
 q16_16_t nav_core_action_start_yaw_q16(void);

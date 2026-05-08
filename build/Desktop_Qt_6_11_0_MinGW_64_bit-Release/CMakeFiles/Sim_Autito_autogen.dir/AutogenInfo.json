@@ -393,6 +393,12 @@
 			null
 		],
 		[
+			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h",
+			"MU",
+			"7UZHUCU65W/moc_nav_map.cpp",
+			null
+		],
+		[
 			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_types.h",
 			"MU",
 			"7UZHUCU65W/moc_nav_types.cpp",
@@ -504,6 +510,11 @@
 		],
 		[
 			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.c",
+			"MU",
+			null
+		],
+		[
+			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.c",
 			"MU",
 			null
 		],

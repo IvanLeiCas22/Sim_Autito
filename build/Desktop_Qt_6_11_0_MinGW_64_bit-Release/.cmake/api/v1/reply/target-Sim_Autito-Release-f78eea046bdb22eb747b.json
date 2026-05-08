@@ -24,6 +24,7 @@
 			"find_package",
 			"find_dependency",
 			"_qt_internal_find_qt_dependencies",
+			"target_compile_definitions",
 			"target_include_directories"
 		],
 		"files" : 
@@ -76,13 +77,13 @@
 			{
 				"command" : 4,
 				"file" : 1,
-				"line" : 45,
+				"line" : 52,
 				"parent" : 0
 			},
 			{
 				"command" : 5,
 				"file" : 1,
-				"line" : 31,
+				"line" : 38,
 				"parent" : 0
 			},
 			{
@@ -266,7 +267,13 @@
 			{
 				"command" : 11,
 				"file" : 1,
-				"line" : 24,
+				"line" : 33,
+				"parent" : 0
+			},
+			{
+				"command" : 12,
+				"file" : 1,
+				"line" : 26,
 				"parent" : 0
 			}
 		]
@@ -307,6 +314,10 @@
 					"define" : "QT_WIDGETS_LIB"
 				},
 				{
+					"backtrace" : 40,
+					"define" : "SIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\""
+				},
+				{
 					"backtrace" : 13,
 					"define" : "UNICODE"
 				},
@@ -338,15 +349,15 @@
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav"
 				},
 				{
@@ -419,6 +430,10 @@
 					"define" : "QT_WIDGETS_LIB"
 				},
 				{
+					"backtrace" : 40,
+					"define" : "SIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\""
+				},
+				{
 					"backtrace" : 13,
 					"define" : "UNICODE"
 				},
@@ -450,15 +465,15 @@
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim"
 				},
 				{
-					"backtrace" : 40,
+					"backtrace" : 41,
 					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav"
 				},
 				{
@@ -491,7 +506,8 @@
 			"sourceIndexes" : 
 			[
 				8,
-				10
+				10,
+				12
 			]
 		}
 	],
@@ -613,7 +629,7 @@
 			"sourceIndexes" : 
 			[
 				0,
-				13
+				15
 			]
 		},
 		{
@@ -625,7 +641,8 @@
 				4,
 				6,
 				8,
-				10
+				10,
+				12
 			]
 		},
 		{
@@ -637,14 +654,15 @@
 				7,
 				9,
 				11,
-				12
+				13,
+				14
 			]
 		},
 		{
 			"name" : "CMake Rules",
 			"sourceIndexes" : 
 			[
-				14
+				16
 			]
 		}
 	],
@@ -705,6 +723,17 @@
 		{
 			"backtrace" : 4,
 			"path" : "nav/nav_core.h",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 1,
+			"path" : "nav/nav_map.c",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 4,
+			"path" : "nav/nav_map.h",
 			"sourceGroupIndex" : 2
 		},
 		{

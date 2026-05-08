@@ -4,6 +4,7 @@
 
 #include <QAction>
 #include <QBrush>
+#include <QChar>
 #include <QColor>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -15,6 +16,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsItem>
 #include <QGraphicsLineItem>
 #include <QGraphicsPolygonItem>
 #include <QGraphicsRectItem>
@@ -32,10 +34,12 @@
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QSpinBox>
+#include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -63,16 +67,6 @@ constexpr TestSequenceStep kTestSequence[kTestSequenceLength] = {
     TestSequenceStep::AdvanceUntilRearBlack,
     TestSequenceStep::SmoothTurnLeft,
     TestSequenceStep::AdvanceUntilRearBlack
-};
-
-enum BasicNavDecision {
-    BasicNavDecisionNone = 0,
-    BasicNavDecisionAcquireRearLine,
-    BasicNavDecisionRecoveryPivot180FrontBlocked,
-    BasicNavDecisionSmoothRight,
-    BasicNavDecisionAdvance,
-    BasicNavDecisionSmoothLeft,
-    BasicNavDecisionPivot180
 };
 
 double normalizeAngleSignedDeg(double angleDeg)
@@ -130,6 +124,8 @@ QString navStateText(NavState state)
         return "IDLE";
     case NAV_STATE_ADVANCING_UNTIL_REAR_BLACK:
         return "ADVANCING";
+    case NAV_STATE_APPROACHING_FRONT_WALL_FOR_PIVOT:
+        return "APPROACH_FRONT";
     case NAV_STATE_SMOOTH_TURNING:
         return "SMOOTH_TURNING";
     case NAV_STATE_PIVOT_TURNING:
@@ -148,6 +144,8 @@ QString navActionText(NavAction action)
         return "NONE";
     case NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK:
         return "ADVANCE_LINE";
+    case NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+        return "APPROACH_FRONT_WALL_FOR_PIVOT";
     case NAV_ACTION_SMOOTH_TURN_LEFT:
         return "SMOOTH_LEFT";
     case NAV_ACTION_SMOOTH_TURN_RIGHT:
@@ -223,6 +221,36 @@ QString advanceDoneReasonText(NavAdvanceDoneReason reason)
     return "UNKNOWN";
 }
 
+QString approachFrontPhaseText(NavApproachFrontPhase phase)
+{
+    switch (phase) {
+    case NAV_APPROACH_FRONT_PHASE_NONE:
+        return "NONE";
+    case NAV_APPROACH_FRONT_PHASE_DRIVE:
+        return "DRIVE";
+    case NAV_APPROACH_FRONT_PHASE_BRAKE_SETTLE:
+        return "BRAKE_SETTLE";
+    case NAV_APPROACH_FRONT_PHASE_DONE:
+        return "DONE";
+    }
+
+    return "UNKNOWN";
+}
+
+QString approachFrontDoneReasonText(NavApproachFrontDoneReason reason)
+{
+    switch (reason) {
+    case NAV_APPROACH_FRONT_DONE_NONE:
+        return "NONE";
+    case NAV_APPROACH_FRONT_DONE_TARGET_DISTANCE:
+        return "TARGET_DISTANCE";
+    case NAV_APPROACH_FRONT_DONE_TIMEOUT:
+        return "TIMEOUT";
+    }
+
+    return "UNKNOWN";
+}
+
 QString advanceGuidanceModeText(NavAdvanceGuidanceMode mode)
 {
     switch (mode) {
@@ -249,6 +277,88 @@ QString advanceCorrectionSourceText(NavAdvanceCorrectionSource source)
     }
 
     return "UNKNOWN";
+}
+
+QString mapDirectionText(NavMapDirection dir)
+{
+    switch (dir) {
+    case NAV_DIR_NORTH:
+        return "NORTH";
+    case NAV_DIR_EAST:
+        return "EAST";
+    case NAV_DIR_SOUTH:
+        return "SOUTH";
+    case NAV_DIR_WEST:
+        return "WEST";
+    }
+
+    return "UNKNOWN";
+}
+
+QString mapActionText(NavMapAction action)
+{
+    switch (action) {
+    case NAV_MAP_ACTION_NONE:
+        return "NONE";
+    case NAV_MAP_ACTION_INITIAL_SNAPSHOT:
+        return "INITIAL_SNAPSHOT";
+    case NAV_MAP_ACTION_ADVANCE_LINE:
+        return "ADVANCE_LINE";
+    case NAV_MAP_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+        return "APPROACH_FRONT_WALL_FOR_PIVOT";
+    case NAV_MAP_ACTION_SMOOTH_TURN_LEFT:
+        return "SMOOTH_LEFT";
+    case NAV_MAP_ACTION_SMOOTH_TURN_RIGHT:
+        return "SMOOTH_RIGHT";
+    case NAV_MAP_ACTION_PIVOT_TURN_LEFT:
+        return "PIVOT_LEFT";
+    case NAV_MAP_ACTION_PIVOT_TURN_RIGHT:
+        return "PIVOT_RIGHT";
+    case NAV_MAP_ACTION_PIVOT_TURN_180:
+        return "PIVOT_180";
+    }
+
+    return "UNKNOWN";
+}
+
+QString wallMaskText(uint8_t mask)
+{
+    QStringList parts;
+    if ((mask & NAV_MAP_WALL_NORTH) != 0) {
+        parts << "N";
+    }
+    if ((mask & NAV_MAP_WALL_EAST) != 0) {
+        parts << "E";
+    }
+    if ((mask & NAV_MAP_WALL_SOUTH) != 0) {
+        parts << "S";
+    }
+    if ((mask & NAV_MAP_WALL_WEST) != 0) {
+        parts << "W";
+    }
+
+    return parts.isEmpty() ? "-" : parts.join("");
+}
+
+NavMapDirection directionFromYawDeg(double yawDeg)
+{
+    double normalized = std::fmod(yawDeg, 360.0);
+    if (normalized < 0.0) {
+        normalized += 360.0;
+    }
+
+    const int quadrant = static_cast<int>(std::floor((normalized + 45.0) / 90.0)) & 3;
+    switch (quadrant) {
+    case 0:
+        return NAV_DIR_EAST;
+    case 1:
+        return NAV_DIR_SOUTH;
+    case 2:
+        return NAV_DIR_WEST;
+    case 3:
+    default:
+        return NAV_DIR_NORTH;
+    }
 }
 
 void configureTelemetryValueLabel(QLabel *label)
@@ -279,23 +389,58 @@ QString sequenceStepText(TestSequenceStep step)
     return "UNKNOWN";
 }
 
-QString basicNavDecisionText(int decision)
+QString recommendedActionText(NavRecommendedAction action)
 {
-    switch (decision) {
-    case BasicNavDecisionNone:
+    switch (action) {
+    case NAV_RECOMMENDED_NONE:
         return "NONE";
-    case BasicNavDecisionAcquireRearLine:
+    case NAV_RECOMMENDED_ACQUIRE_REAR_LINE:
         return "ACQUIRE_REAR_LINE";
-    case BasicNavDecisionRecoveryPivot180FrontBlocked:
+    case NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED:
         return "RECOVERY_PIVOT_180_FRONT_BLOCKED";
-    case BasicNavDecisionSmoothRight:
-        return "SMOOTH_TURN_RIGHT";
-    case BasicNavDecisionAdvance:
-        return "ADVANCE_UNTIL_REAR_BLACK";
-    case BasicNavDecisionSmoothLeft:
-        return "SMOOTH_TURN_LEFT";
-    case BasicNavDecisionPivot180:
-        return "PIVOT_TURN_180";
+    case NAV_RECOMMENDED_ADVANCE_LINE:
+        return "ADVANCE_LINE";
+    case NAV_RECOMMENDED_SMOOTH_LEFT:
+        return "SMOOTH_LEFT";
+    case NAV_RECOMMENDED_SMOOTH_RIGHT:
+        return "SMOOTH_RIGHT";
+    case NAV_RECOMMENDED_PIVOT_180:
+        return "PIVOT_180";
+    }
+
+    return "UNKNOWN";
+}
+
+QString navPolicyText(NavPolicy policy)
+{
+    switch (policy) {
+    case NAV_POLICY_RIGHT_HAND_RULE:
+        return "RIGHT_HAND_RULE";
+    case NAV_POLICY_MAP_PREFER_UNVISITED:
+        return "MAP_PREFER_UNVISITED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString mapCandidateCellText(int8_t cellX, int8_t cellY, bool valid)
+{
+    if (!valid) {
+        return "invalid";
+    }
+
+    return QString("(%1,%2)").arg(cellX).arg(cellY);
+}
+
+QString deadEndRecoveryPhaseText(MainWindow::DeadEndRecoveryPhase phase)
+{
+    switch (phase) {
+    case MainWindow::DeadEndRecoveryPhase::None:
+        return "NONE";
+    case MainWindow::DeadEndRecoveryPhase::ApproachFront:
+        return "APPROACH_FRONT";
+    case MainWindow::DeadEndRecoveryPhase::Pivot180:
+        return "PIVOT_180";
     }
 
     return "UNKNOWN";
@@ -433,6 +578,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     }
+    case Qt::Key_Y:
+        shadowMapOverlayEnabled = !shadowMapOverlayEnabled;
+        updateShadowMapOverlay();
+        updateTelemetryPanel();
+        robotPoseChanged = false;
+        break;
     case Qt::Key_O:
         loadMazeFromDialog();
         robotPoseChanged = false;
@@ -445,6 +596,10 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         toggleBasicNavAutonomy();
         robotPoseChanged = false;
         break;
+    case Qt::Key_P:
+        toggleNavPolicy();
+        robotPoseChanged = false;
+        break;
     case Qt::Key_G:
         resetNavigationYawReference();
         nav_core_start_advance_until_rear_black();
@@ -452,8 +607,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
+    case Qt::Key_F:
+        resetNavigationYawReference();
+        nav_core_start_approach_front_wall_for_pivot();
+        updateNavCorePipeline();
+        updateTelemetryPanel();
+        robotPoseChanged = false;
+        break;
     case Qt::Key_X:
         cancelTestSequence();
+        cancelDeadEndRecovery();
         setBasicNavAutonomyEnabled(false);
         nav_core_stop();
         updateNavCorePipeline();
@@ -553,6 +716,7 @@ void MainWindow::setupScene()
     drawReferenceGrid();
     drawBlackTape();
     drawWorldWalls();
+    updateShadowMapOverlay();
     createRobotItem();
     createIrSensorItems();
     createFloorSensorItems();
@@ -566,6 +730,7 @@ void MainWindow::rebuildSceneItems()
     }
 
     scene->clear();
+    shadowMapOverlayItems.clear();
     robotItem = nullptr;
     for (IrSensor &sensor : irSensors) {
         sensor.ray_item = nullptr;
@@ -578,6 +743,7 @@ void MainWindow::rebuildSceneItems()
     drawReferenceGrid();
     drawBlackTape();
     drawWorldWalls();
+    updateShadowMapOverlay();
     createRobotItem();
     createIrSensorItems();
     createFloorSensorItems();
@@ -665,6 +831,169 @@ void MainWindow::drawWorldWalls()
     }
 }
 
+void MainWindow::clearShadowMapOverlay()
+{
+    if (!scene) {
+        shadowMapOverlayItems.clear();
+        return;
+    }
+
+    for (QGraphicsItem *item : shadowMapOverlayItems) {
+        if (item && item->scene() == scene) {
+            scene->removeItem(item);
+            delete item;
+        }
+    }
+    shadowMapOverlayItems.clear();
+}
+
+void MainWindow::updateShadowMapOverlay()
+{
+    clearShadowMapOverlay();
+    if (shadowMapOverlayEnabled) {
+        drawShadowMapOverlay();
+    }
+}
+
+void MainWindow::drawShadowMapOverlay()
+{
+    if (!scene) {
+        return;
+    }
+
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
+    if (!mapDebug.enabled) {
+        return;
+    }
+
+    const double cellSizeMm = world.cellSizeMm();
+    if (cellSizeMm <= 0.0) {
+        return;
+    }
+
+    const int cols = std::min<int>(world.cols(), mapDebug.width);
+    const int rows = std::min<int>(world.rows(), mapDebug.height);
+    const QPen noPen(Qt::NoPen);
+    const QBrush visitedBrush(QColor(40, 145, 255, 34));
+    QPen currentCellPen(QColor(0, 150, 220, 210), 3.0);
+    currentCellPen.setJoinStyle(Qt::MiterJoin);
+    QPen presentWallPen(QColor(220, 40, 40, 220), 5.0);
+    presentWallPen.setCapStyle(Qt::SquareCap);
+    QPen absentWallPen(QColor(40, 160, 90, 95), 1.0, Qt::DashLine);
+    absentWallPen.setCapStyle(Qt::SquareCap);
+    QPen arrowPen(QColor(0, 70, 180, 230), 4.0);
+    arrowPen.setCapStyle(Qt::RoundCap);
+    const QBrush arrowBrush(QColor(0, 70, 180, 230));
+
+    const auto remember = [this](QGraphicsItem *item, double zValue) {
+        if (!item) {
+            return;
+        }
+        item->setZValue(zValue);
+        shadowMapOverlayItems.push_back(item);
+    };
+
+    const auto drawKnownWall = [&](double x0, double y0, double x1, double y1, bool present) {
+        remember(scene->addLine(x0, y0, x1, y1, present ? presentWallPen : absentWallPen),
+                 present ? 3.4 : 2.8);
+    };
+
+    for (int y = 0; y < rows; ++y) {
+        for (int x = 0; x < cols; ++x) {
+            NavMapCell cell = {};
+            if (!nav_core_get_map_cell(static_cast<int8_t>(x),
+                                       static_cast<int8_t>(y),
+                                       &cell)) {
+                continue;
+            }
+
+            if (!cell.visited && cell.walls_known == 0) {
+                continue;
+            }
+
+            const double x0 = x * cellSizeMm;
+            const double y0 = y * cellSizeMm;
+            const double x1 = x0 + cellSizeMm;
+            const double y1 = y0 + cellSizeMm;
+
+            if (cell.visited) {
+                const double inset = std::max(3.0, cellSizeMm * 0.04);
+                remember(scene->addRect(x0 + inset,
+                                        y0 + inset,
+                                        cellSizeMm - inset * 2.0,
+                                        cellSizeMm - inset * 2.0,
+                                        noPen,
+                                        visitedBrush),
+                         2.0);
+            }
+
+            if ((cell.walls_known & NAV_MAP_WALL_NORTH) != 0) {
+                drawKnownWall(x0, y0, x1, y0, (cell.walls_present & NAV_MAP_WALL_NORTH) != 0);
+            }
+            if ((cell.walls_known & NAV_MAP_WALL_EAST) != 0) {
+                drawKnownWall(x1, y0, x1, y1, (cell.walls_present & NAV_MAP_WALL_EAST) != 0);
+            }
+            if ((cell.walls_known & NAV_MAP_WALL_SOUTH) != 0) {
+                drawKnownWall(x0, y1, x1, y1, (cell.walls_present & NAV_MAP_WALL_SOUTH) != 0);
+            }
+            if ((cell.walls_known & NAV_MAP_WALL_WEST) != 0) {
+                drawKnownWall(x0, y0, x0, y1, (cell.walls_present & NAV_MAP_WALL_WEST) != 0);
+            }
+        }
+    }
+
+    if (mapDebug.cell_x < 0 || mapDebug.cell_y < 0
+        || mapDebug.cell_x >= cols || mapDebug.cell_y >= rows) {
+        return;
+    }
+
+    const double currentX = mapDebug.cell_x * cellSizeMm;
+    const double currentY = mapDebug.cell_y * cellSizeMm;
+    remember(scene->addRect(currentX + 2.0,
+                            currentY + 2.0,
+                            cellSizeMm - 4.0,
+                            cellSizeMm - 4.0,
+                            currentCellPen,
+                            Qt::NoBrush),
+             3.1);
+
+    const double centerX = currentX + cellSizeMm * 0.5;
+    const double centerY = currentY + cellSizeMm * 0.5;
+    double dx = 0.0;
+    double dy = 0.0;
+    switch (mapDebug.dir) {
+    case NAV_DIR_NORTH:
+        dy = -1.0;
+        break;
+    case NAV_DIR_EAST:
+        dx = 1.0;
+        break;
+    case NAV_DIR_SOUTH:
+        dy = 1.0;
+        break;
+    case NAV_DIR_WEST:
+        dx = -1.0;
+        break;
+    }
+
+    const double arrowLength = cellSizeMm * 0.28;
+    const double tipX = centerX + dx * arrowLength;
+    const double tipY = centerY + dy * arrowLength;
+    remember(scene->addLine(centerX, centerY, tipX, tipY, arrowPen), 3.2);
+
+    const double headLength = cellSizeMm * 0.08;
+    const double normalX = -dy;
+    const double normalY = dx;
+    QPolygonF head;
+    head << QPointF(tipX, tipY)
+         << QPointF(tipX - dx * headLength + normalX * headLength * 0.7,
+                    tipY - dy * headLength + normalY * headLength * 0.7)
+         << QPointF(tipX - dx * headLength - normalX * headLength * 0.7,
+                    tipY - dy * headLength - normalY * headLength * 0.7);
+    remember(scene->addPolygon(head, noPen, arrowBrush), 3.2);
+}
+
 void MainWindow::initializeIrSensors()
 {
     irSensors = {
@@ -709,6 +1038,7 @@ void MainWindow::createTelemetryPanel()
     auto *simulationTitle = new QLabel("<b>Simulation</b>", panel);
     auto *sequenceTitle = new QLabel("<b>Test sequence</b>", panel);
     auto *navAutonomyTitle = new QLabel("<b>Basic nav autonomy</b>", panel);
+    auto *mapTitle = new QLabel("<b>Shadow logical map</b>", panel);
     auto *motorTestTitle = new QLabel("<b>Motor test command</b>", panel);
 
     xValueLabel = new QLabel(panel);
@@ -793,6 +1123,16 @@ void MainWindow::createTelemetryPanel()
     turnDebugSmoothPostYawElapsedValueLabel = new QLabel(panel);
     turnDebugAdvancePhaseValueLabel = new QLabel(panel);
     turnDebugAdvanceDoneReasonValueLabel = new QLabel(panel);
+    turnDebugApproachFrontPhaseValueLabel = new QLabel(panel);
+    turnDebugApproachFrontDoneReasonValueLabel = new QLabel(panel);
+    turnDebugApproachFrontTargetValueLabel = new QLabel(panel);
+    turnDebugApproachFrontLeftValueLabel = new QLabel(panel);
+    turnDebugApproachFrontRightValueLabel = new QLabel(panel);
+    turnDebugApproachFrontElapsedValueLabel = new QLabel(panel);
+    turnDebugApproachFrontBrakeElapsedValueLabel = new QLabel(panel);
+    turnDebugApproachFrontBaseLeftValueLabel = new QLabel(panel);
+    turnDebugApproachFrontBaseRightValueLabel = new QLabel(panel);
+    turnDebugApproachFrontCorrectionValueLabel = new QLabel(panel);
     turnDebugAdvanceYawSetpointValueLabel = new QLabel(panel);
     turnDebugAdvanceYawMeasuredValueLabel = new QLabel(panel);
     turnDebugAdvanceYawErrorValueLabel = new QLabel(panel);
@@ -814,6 +1154,7 @@ void MainWindow::createTelemetryPanel()
     turnDebugAdvanceFollowRightValidValueLabel = new QLabel(panel);
     turnDebugAdvanceWallLeftValueLabel = new QLabel(panel);
     turnDebugAdvanceWallRightValueLabel = new QLabel(panel);
+    turnDebugAdvanceWallRawErrorValueLabel = new QLabel(panel);
     turnDebugAdvanceWallErrorValueLabel = new QLabel(panel);
     turnDebugAdvanceWallErrorAfterDeadbandValueLabel = new QLabel(panel);
     turnDebugAdvanceWallPrevErrorValueLabel = new QLabel(panel);
@@ -829,6 +1170,7 @@ void MainWindow::createTelemetryPanel()
     turnDebugWallTargetLeftValueLabel = new QLabel(panel);
     turnDebugWallTargetRightValueLabel = new QLabel(panel);
     turnDebugWallCorrectionLimitValueLabel = new QLabel(panel);
+    turnDebugWallSingleSideErrorScaleValueLabel = new QLabel(panel);
     turnDebugLastCompletedActionValueLabel = new QLabel(panel);
     turnDebugLastSmoothDoneReasonValueLabel = new QLabel(panel);
     turnDebugLastSmoothFinalYawValueLabel = new QLabel(panel);
@@ -836,6 +1178,7 @@ void MainWindow::createTelemetryPanel()
     turnDebugLastAdvanceDoneReasonValueLabel = new QLabel(panel);
     turnDebugLastAdvanceFinalYawValueLabel = new QLabel(panel);
     turnDebugLastAdvanceFinalRearValueLabel = new QLabel(panel);
+    turnDebugLastApproachFrontDoneReasonValueLabel = new QLabel(panel);
     navLeftMotorValueLabel = new QLabel(panel);
     navRightMotorValueLabel = new QLabel(panel);
     simulationRunningValueLabel = new QLabel(panel);
@@ -851,11 +1194,38 @@ void MainWindow::createTelemetryPanel()
     sequenceWaitingNextTickValueLabel = new QLabel(panel);
     navAutonomyEnabledValueLabel = new QLabel(panel);
     navPolicyValueLabel = new QLabel(panel);
+    navRecommendedActionValueLabel = new QLabel(panel);
     navLastDecisionValueLabel = new QLabel(panel);
     navDecisionWallFrontValueLabel = new QLabel(panel);
     navDecisionWallLeftValueLabel = new QLabel(panel);
     navDecisionWallRightValueLabel = new QLabel(panel);
     navDecisionPointValidValueLabel = new QLabel(panel);
+    deadEndRecoveryActiveValueLabel = new QLabel(panel);
+    deadEndRecoveryPhaseValueLabel = new QLabel(panel);
+    deadEndRecoveryLastApproachReasonValueLabel = new QLabel(panel);
+    deadEndRecoveryPendingPivotValueLabel = new QLabel(panel);
+    navMapCandidateRightCellValueLabel = new QLabel(panel);
+    navMapCandidateFrontCellValueLabel = new QLabel(panel);
+    navMapCandidateLeftCellValueLabel = new QLabel(panel);
+    navMapCandidateRightVisitedValueLabel = new QLabel(panel);
+    navMapCandidateFrontVisitedValueLabel = new QLabel(panel);
+    navMapCandidateLeftVisitedValueLabel = new QLabel(panel);
+    navMapUsedUnvisitedPreferenceValueLabel = new QLabel(panel);
+    mapEnabledValueLabel = new QLabel(panel);
+    mapWidthValueLabel = new QLabel(panel);
+    mapHeightValueLabel = new QLabel(panel);
+    mapCellXValueLabel = new QLabel(panel);
+    mapCellYValueLabel = new QLabel(panel);
+    mapDirValueLabel = new QLabel(panel);
+    mapCurrentCellVisitedValueLabel = new QLabel(panel);
+    mapCurrentCellWallsKnownValueLabel = new QLabel(panel);
+    mapCurrentCellWallsPresentValueLabel = new QLabel(panel);
+    mapLastPoseUpdateActionValueLabel = new QLabel(panel);
+    mapLastWallUpdateActionValueLabel = new QLabel(panel);
+    mapInitialWallSnapshotPendingValueLabel = new QLabel(panel);
+    mapUpdateCountValueLabel = new QLabel(panel);
+    mapWallUpdateCountValueLabel = new QLabel(panel);
+    mapOverlayEnabledValueLabel = new QLabel(panel);
     simLeftMotorGainValueLabel = new QLabel(panel);
     simRightMotorGainValueLabel = new QLabel(panel);
     simPivotCenterCorrectionEnabledValueLabel = new QLabel(panel);
@@ -905,6 +1275,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugSmoothPostYawElapsedValueLabel);
     configureTelemetryValueLabel(turnDebugAdvancePhaseValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceDoneReasonValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontPhaseValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontDoneReasonValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontTargetValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontLeftValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontRightValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontElapsedValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontBrakeElapsedValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontBaseLeftValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontBaseRightValueLabel);
+    configureTelemetryValueLabel(turnDebugApproachFrontCorrectionValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawSetpointValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawMeasuredValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawErrorValueLabel);
@@ -926,6 +1306,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugAdvanceFollowRightValidValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallLeftValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallRightValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceWallRawErrorValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallErrorValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallErrorAfterDeadbandValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallPrevErrorValueLabel);
@@ -941,6 +1322,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugWallTargetLeftValueLabel);
     configureTelemetryValueLabel(turnDebugWallTargetRightValueLabel);
     configureTelemetryValueLabel(turnDebugWallCorrectionLimitValueLabel);
+    configureTelemetryValueLabel(turnDebugWallSingleSideErrorScaleValueLabel);
     configureTelemetryValueLabel(turnDebugLastCompletedActionValueLabel);
     configureTelemetryValueLabel(turnDebugLastSmoothDoneReasonValueLabel);
     configureTelemetryValueLabel(turnDebugLastSmoothFinalYawValueLabel);
@@ -948,6 +1330,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugLastAdvanceDoneReasonValueLabel);
     configureTelemetryValueLabel(turnDebugLastAdvanceFinalYawValueLabel);
     configureTelemetryValueLabel(turnDebugLastAdvanceFinalRearValueLabel);
+    configureTelemetryValueLabel(turnDebugLastApproachFrontDoneReasonValueLabel);
     configureTelemetryValueLabel(navLeftMotorValueLabel);
     configureTelemetryValueLabel(navRightMotorValueLabel);
     configureTelemetryValueLabel(simulationRunningValueLabel);
@@ -963,11 +1346,38 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(sequenceWaitingNextTickValueLabel);
     configureTelemetryValueLabel(navAutonomyEnabledValueLabel);
     configureTelemetryValueLabel(navPolicyValueLabel);
+    configureTelemetryValueLabel(navRecommendedActionValueLabel);
     configureTelemetryValueLabel(navLastDecisionValueLabel);
     configureTelemetryValueLabel(navDecisionWallFrontValueLabel);
     configureTelemetryValueLabel(navDecisionWallLeftValueLabel);
     configureTelemetryValueLabel(navDecisionWallRightValueLabel);
     configureTelemetryValueLabel(navDecisionPointValidValueLabel);
+    configureTelemetryValueLabel(deadEndRecoveryActiveValueLabel);
+    configureTelemetryValueLabel(deadEndRecoveryPhaseValueLabel);
+    configureTelemetryValueLabel(deadEndRecoveryLastApproachReasonValueLabel);
+    configureTelemetryValueLabel(deadEndRecoveryPendingPivotValueLabel);
+    configureTelemetryValueLabel(navMapCandidateRightCellValueLabel);
+    configureTelemetryValueLabel(navMapCandidateFrontCellValueLabel);
+    configureTelemetryValueLabel(navMapCandidateLeftCellValueLabel);
+    configureTelemetryValueLabel(navMapCandidateRightVisitedValueLabel);
+    configureTelemetryValueLabel(navMapCandidateFrontVisitedValueLabel);
+    configureTelemetryValueLabel(navMapCandidateLeftVisitedValueLabel);
+    configureTelemetryValueLabel(navMapUsedUnvisitedPreferenceValueLabel);
+    configureTelemetryValueLabel(mapEnabledValueLabel);
+    configureTelemetryValueLabel(mapWidthValueLabel);
+    configureTelemetryValueLabel(mapHeightValueLabel);
+    configureTelemetryValueLabel(mapCellXValueLabel);
+    configureTelemetryValueLabel(mapCellYValueLabel);
+    configureTelemetryValueLabel(mapDirValueLabel);
+    configureTelemetryValueLabel(mapCurrentCellVisitedValueLabel);
+    configureTelemetryValueLabel(mapCurrentCellWallsKnownValueLabel);
+    configureTelemetryValueLabel(mapCurrentCellWallsPresentValueLabel);
+    configureTelemetryValueLabel(mapLastPoseUpdateActionValueLabel);
+    configureTelemetryValueLabel(mapLastWallUpdateActionValueLabel);
+    configureTelemetryValueLabel(mapInitialWallSnapshotPendingValueLabel);
+    configureTelemetryValueLabel(mapUpdateCountValueLabel);
+    configureTelemetryValueLabel(mapWallUpdateCountValueLabel);
+    configureTelemetryValueLabel(mapOverlayEnabledValueLabel);
     configureTelemetryValueLabel(simLeftMotorGainValueLabel);
     configureTelemetryValueLabel(simRightMotorGainValueLabel);
     configureTelemetryValueLabel(simPivotCenterCorrectionEnabledValueLabel);
@@ -1023,6 +1433,16 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("smooth_post_yaw_elapsed_ms:", turnDebugSmoothPostYawElapsedValueLabel);
     layout->addRow("advance_phase:", turnDebugAdvancePhaseValueLabel);
     layout->addRow("advance_done_reason:", turnDebugAdvanceDoneReasonValueLabel);
+    layout->addRow("approach_front_phase:", turnDebugApproachFrontPhaseValueLabel);
+    layout->addRow("approach_front_done_reason:", turnDebugApproachFrontDoneReasonValueLabel);
+    layout->addRow("approach_front_target_mm:", turnDebugApproachFrontTargetValueLabel);
+    layout->addRow("approach_front_left_mm:", turnDebugApproachFrontLeftValueLabel);
+    layout->addRow("approach_front_right_mm:", turnDebugApproachFrontRightValueLabel);
+    layout->addRow("approach_front_elapsed_ms:", turnDebugApproachFrontElapsedValueLabel);
+    layout->addRow("approach_front_brake_elapsed_ms:", turnDebugApproachFrontBrakeElapsedValueLabel);
+    layout->addRow("approach_front_base_left_pwm:", turnDebugApproachFrontBaseLeftValueLabel);
+    layout->addRow("approach_front_base_right_pwm:", turnDebugApproachFrontBaseRightValueLabel);
+    layout->addRow("approach_front_correction_pwm:", turnDebugApproachFrontCorrectionValueLabel);
     layout->addRow("advance_yaw_setpoint:", turnDebugAdvanceYawSetpointValueLabel);
     layout->addRow("advance_yaw_measured:", turnDebugAdvanceYawMeasuredValueLabel);
     layout->addRow("advance_yaw_error:", turnDebugAdvanceYawErrorValueLabel);
@@ -1044,6 +1464,7 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("advance_follow_right_valid:", turnDebugAdvanceFollowRightValidValueLabel);
     layout->addRow("advance_wall_left_mm:", turnDebugAdvanceWallLeftValueLabel);
     layout->addRow("advance_wall_right_mm:", turnDebugAdvanceWallRightValueLabel);
+    layout->addRow("advance_wall_raw_error_mm:", turnDebugAdvanceWallRawErrorValueLabel);
     layout->addRow("advance_wall_error_mm:", turnDebugAdvanceWallErrorValueLabel);
     layout->addRow("advance_wall_error_after_deadband_mm:", turnDebugAdvanceWallErrorAfterDeadbandValueLabel);
     layout->addRow("advance_wall_prev_error_mm:", turnDebugAdvanceWallPrevErrorValueLabel);
@@ -1059,6 +1480,7 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("wall_follow_target_left_mm:", turnDebugWallTargetLeftValueLabel);
     layout->addRow("wall_follow_target_right_mm:", turnDebugWallTargetRightValueLabel);
     layout->addRow("wall_correction_limit_pwm:", turnDebugWallCorrectionLimitValueLabel);
+    layout->addRow("wall_single_side_error_scale:", turnDebugWallSingleSideErrorScaleValueLabel);
     layout->addRow("last_completed_action:", turnDebugLastCompletedActionValueLabel);
     layout->addRow("last_smooth_done_reason:", turnDebugLastSmoothDoneReasonValueLabel);
     layout->addRow("last_smooth_final_yaw:", turnDebugLastSmoothFinalYawValueLabel);
@@ -1066,6 +1488,7 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("last_advance_done_reason:", turnDebugLastAdvanceDoneReasonValueLabel);
     layout->addRow("last_advance_final_yaw:", turnDebugLastAdvanceFinalYawValueLabel);
     layout->addRow("last_advance_final_rear:", turnDebugLastAdvanceFinalRearValueLabel);
+    layout->addRow("last_approach_front_done_reason:", turnDebugLastApproachFrontDoneReasonValueLabel);
 
     layout->addRow(navCommandTitle);
     layout->addRow("left_motor_pwm:", navLeftMotorValueLabel);
@@ -1097,11 +1520,42 @@ void MainWindow::createTelemetryPanel()
     layout->addRow(navAutonomyTitle);
     layout->addRow("nav_autonomy_enabled:", navAutonomyEnabledValueLabel);
     layout->addRow("nav_policy:", navPolicyValueLabel);
+    layout->addRow("nav_recommended_action:", navRecommendedActionValueLabel);
     layout->addRow("nav_last_decision:", navLastDecisionValueLabel);
     layout->addRow("nav_decision_wall_front:", navDecisionWallFrontValueLabel);
     layout->addRow("nav_decision_wall_left:", navDecisionWallLeftValueLabel);
     layout->addRow("nav_decision_wall_right:", navDecisionWallRightValueLabel);
     layout->addRow("nav_decision_point_valid:", navDecisionPointValidValueLabel);
+    layout->addRow("dead_end_recovery_active:", deadEndRecoveryActiveValueLabel);
+    layout->addRow("dead_end_recovery_phase:", deadEndRecoveryPhaseValueLabel);
+    layout->addRow("dead_end_recovery_last_approach_reason:",
+                   deadEndRecoveryLastApproachReasonValueLabel);
+    layout->addRow("dead_end_recovery_pending_pivot:", deadEndRecoveryPendingPivotValueLabel);
+    layout->addRow("nav_map_candidate_right_cell:", navMapCandidateRightCellValueLabel);
+    layout->addRow("nav_map_candidate_front_cell:", navMapCandidateFrontCellValueLabel);
+    layout->addRow("nav_map_candidate_left_cell:", navMapCandidateLeftCellValueLabel);
+    layout->addRow("nav_map_candidate_right_visited:", navMapCandidateRightVisitedValueLabel);
+    layout->addRow("nav_map_candidate_front_visited:", navMapCandidateFrontVisitedValueLabel);
+    layout->addRow("nav_map_candidate_left_visited:", navMapCandidateLeftVisitedValueLabel);
+    layout->addRow("nav_map_used_unvisited_preference:",
+                   navMapUsedUnvisitedPreferenceValueLabel);
+
+    layout->addRow(mapTitle);
+    layout->addRow("map_enabled:", mapEnabledValueLabel);
+    layout->addRow("map_width:", mapWidthValueLabel);
+    layout->addRow("map_height:", mapHeightValueLabel);
+    layout->addRow("logical_cell_x:", mapCellXValueLabel);
+    layout->addRow("logical_cell_y:", mapCellYValueLabel);
+    layout->addRow("logical_dir:", mapDirValueLabel);
+    layout->addRow("current_cell_visited:", mapCurrentCellVisitedValueLabel);
+    layout->addRow("current_cell_walls_known:", mapCurrentCellWallsKnownValueLabel);
+    layout->addRow("current_cell_walls_present:", mapCurrentCellWallsPresentValueLabel);
+    layout->addRow("map_last_pose_update_action:", mapLastPoseUpdateActionValueLabel);
+    layout->addRow("map_last_wall_update_action:", mapLastWallUpdateActionValueLabel);
+    layout->addRow("map_initial_wall_snapshot_pending:", mapInitialWallSnapshotPendingValueLabel);
+    layout->addRow("map_update_count:", mapUpdateCountValueLabel);
+    layout->addRow("map_wall_update_count:", mapWallUpdateCountValueLabel);
+    layout->addRow("map_overlay_enabled:", mapOverlayEnabledValueLabel);
 
     layout->addRow(motorTestTitle);
     layout->addRow("test_left_pwm:", motorTestLeftValueLabel);
@@ -1305,6 +1759,46 @@ void MainWindow::updateTelemetryPanel()
         turnDebugAdvanceDoneReasonValueLabel->setText(
             advanceDoneReasonText(turnDebug.advance_done_reason));
     }
+    if (turnDebugApproachFrontPhaseValueLabel) {
+        turnDebugApproachFrontPhaseValueLabel->setText(
+            approachFrontPhaseText(turnDebug.approach_front_phase));
+    }
+    if (turnDebugApproachFrontDoneReasonValueLabel) {
+        turnDebugApproachFrontDoneReasonValueLabel->setText(
+            approachFrontDoneReasonText(turnDebug.approach_front_done_reason));
+    }
+    if (turnDebugApproachFrontTargetValueLabel) {
+        turnDebugApproachFrontTargetValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.approach_front_target_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugApproachFrontLeftValueLabel) {
+        turnDebugApproachFrontLeftValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.approach_front_left_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugApproachFrontRightValueLabel) {
+        turnDebugApproachFrontRightValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.approach_front_right_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugApproachFrontElapsedValueLabel) {
+        turnDebugApproachFrontElapsedValueLabel->setText(
+            QString::number(turnDebug.approach_front_elapsed_ms));
+    }
+    if (turnDebugApproachFrontBrakeElapsedValueLabel) {
+        turnDebugApproachFrontBrakeElapsedValueLabel->setText(
+            QString::number(turnDebug.approach_front_brake_elapsed_ms));
+    }
+    if (turnDebugApproachFrontBaseLeftValueLabel) {
+        turnDebugApproachFrontBaseLeftValueLabel->setText(
+            QString::number(turnDebug.approach_front_base_left_pwm));
+    }
+    if (turnDebugApproachFrontBaseRightValueLabel) {
+        turnDebugApproachFrontBaseRightValueLabel->setText(
+            QString::number(turnDebug.approach_front_base_right_pwm));
+    }
+    if (turnDebugApproachFrontCorrectionValueLabel) {
+        turnDebugApproachFrontCorrectionValueLabel->setText(
+            QString::number(turnDebug.approach_front_correction_pwm));
+    }
     if (turnDebugAdvanceYawSetpointValueLabel) {
         turnDebugAdvanceYawSetpointValueLabel->setText(
             QString("%1 deg").arg(fromQ16(turnDebug.advance_yaw_setpoint_deg_q16), 0, 'f', 1));
@@ -1389,6 +1883,10 @@ void MainWindow::updateTelemetryPanel()
         turnDebugAdvanceWallRightValueLabel->setText(
             QString("%1 mm").arg(fromQ16(turnDebug.advance_wall_right_mm_q16), 0, 'f', 1));
     }
+    if (turnDebugAdvanceWallRawErrorValueLabel) {
+        turnDebugAdvanceWallRawErrorValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.advance_wall_raw_error_mm_q16), 0, 'f', 1));
+    }
     if (turnDebugAdvanceWallErrorValueLabel) {
         turnDebugAdvanceWallErrorValueLabel->setText(
             QString("%1 mm").arg(fromQ16(turnDebug.advance_wall_error_mm_q16), 0, 'f', 1));
@@ -1448,6 +1946,10 @@ void MainWindow::updateTelemetryPanel()
         turnDebugWallCorrectionLimitValueLabel->setText(
             QString::number(turnDebug.wall_correction_limit_pwm));
     }
+    if (turnDebugWallSingleSideErrorScaleValueLabel) {
+        turnDebugWallSingleSideErrorScaleValueLabel->setText(
+            QString::number(turnDebug.wall_single_side_error_scale));
+    }
     if (turnDebugLastCompletedActionValueLabel) {
         turnDebugLastCompletedActionValueLabel->setText(
             navActionText(turnDebug.last_completed_action));
@@ -1475,6 +1977,10 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugLastAdvanceFinalRearValueLabel) {
         turnDebugLastAdvanceFinalRearValueLabel->setText(
             turnDebug.last_advance_final_floor_rear_black ? "true" : "false");
+    }
+    if (turnDebugLastApproachFrontDoneReasonValueLabel) {
+        turnDebugLastApproachFrontDoneReasonValueLabel->setText(
+            approachFrontDoneReasonText(turnDebug.last_approach_front_done_reason));
     }
 
     if (navLeftMotorValueLabel) {
@@ -1525,10 +2031,14 @@ void MainWindow::updateTelemetryPanel()
         navAutonomyEnabledValueLabel->setText(basicNavAutonomyEnabled ? "true" : "false");
     }
     if (navPolicyValueLabel) {
-        navPolicyValueLabel->setText("RIGHT_HAND_RULE");
+        navPolicyValueLabel->setText(navPolicyText(nav_core_get_policy()));
+    }
+    if (navRecommendedActionValueLabel) {
+        navRecommendedActionValueLabel->setText(
+            recommendedActionText(basicNavRecommendedAction));
     }
     if (navLastDecisionValueLabel) {
-        navLastDecisionValueLabel->setText(basicNavDecisionText(basicNavLastDecision));
+        navLastDecisionValueLabel->setText(basicNavLastDecisionText);
     }
     if (navDecisionWallFrontValueLabel) {
         navDecisionWallFrontValueLabel->setText(basicNavDecisionWallFront ? "true" : "false");
@@ -1542,6 +2052,114 @@ void MainWindow::updateTelemetryPanel()
     if (navDecisionPointValidValueLabel) {
         navDecisionPointValidValueLabel->setText(
             basicNavDecisionPointValid ? "true" : "false");
+    }
+    if (deadEndRecoveryActiveValueLabel) {
+        deadEndRecoveryActiveValueLabel->setText(
+            deadEndRecoveryPhase != DeadEndRecoveryPhase::None ? "true" : "false");
+    }
+    if (deadEndRecoveryPhaseValueLabel) {
+        deadEndRecoveryPhaseValueLabel->setText(deadEndRecoveryPhaseText(deadEndRecoveryPhase));
+    }
+    if (deadEndRecoveryLastApproachReasonValueLabel) {
+        deadEndRecoveryLastApproachReasonValueLabel->setText(
+            approachFrontDoneReasonText(deadEndRecoveryLastApproachReason));
+    }
+    if (deadEndRecoveryPendingPivotValueLabel) {
+        deadEndRecoveryPendingPivotValueLabel->setText(
+            deadEndRecoveryPendingPivot ? "true" : "false");
+    }
+    NavMapCandidateDebug candidateDebug = {};
+    nav_core_get_map_candidate_debug(&candidateDebug);
+    if (navMapCandidateRightCellValueLabel) {
+        navMapCandidateRightCellValueLabel->setText(
+            mapCandidateCellText(candidateDebug.right_cell_x,
+                                 candidateDebug.right_cell_y,
+                                 candidateDebug.right_cell_valid));
+    }
+    if (navMapCandidateFrontCellValueLabel) {
+        navMapCandidateFrontCellValueLabel->setText(
+            mapCandidateCellText(candidateDebug.front_cell_x,
+                                 candidateDebug.front_cell_y,
+                                 candidateDebug.front_cell_valid));
+    }
+    if (navMapCandidateLeftCellValueLabel) {
+        navMapCandidateLeftCellValueLabel->setText(
+            mapCandidateCellText(candidateDebug.left_cell_x,
+                                 candidateDebug.left_cell_y,
+                                 candidateDebug.left_cell_valid));
+    }
+    if (navMapCandidateRightVisitedValueLabel) {
+        navMapCandidateRightVisitedValueLabel->setText(
+            candidateDebug.right_cell_visited ? "true" : "false");
+    }
+    if (navMapCandidateFrontVisitedValueLabel) {
+        navMapCandidateFrontVisitedValueLabel->setText(
+            candidateDebug.front_cell_visited ? "true" : "false");
+    }
+    if (navMapCandidateLeftVisitedValueLabel) {
+        navMapCandidateLeftVisitedValueLabel->setText(
+            candidateDebug.left_cell_visited ? "true" : "false");
+    }
+    if (navMapUsedUnvisitedPreferenceValueLabel) {
+        navMapUsedUnvisitedPreferenceValueLabel->setText(
+            candidateDebug.used_unvisited_preference ? "true" : "false");
+    }
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
+    if (mapEnabledValueLabel) {
+        mapEnabledValueLabel->setText(mapDebug.enabled ? "true" : "false");
+    }
+    if (mapWidthValueLabel) {
+        mapWidthValueLabel->setText(QString::number(mapDebug.width));
+    }
+    if (mapHeightValueLabel) {
+        mapHeightValueLabel->setText(QString::number(mapDebug.height));
+    }
+    if (mapCellXValueLabel) {
+        mapCellXValueLabel->setText(QString::number(mapDebug.cell_x));
+    }
+    if (mapCellYValueLabel) {
+        mapCellYValueLabel->setText(QString::number(mapDebug.cell_y));
+    }
+    if (mapDirValueLabel) {
+        mapDirValueLabel->setText(mapDirectionText(mapDebug.dir));
+    }
+    if (mapCurrentCellVisitedValueLabel) {
+        mapCurrentCellVisitedValueLabel->setText(
+            mapDebug.current_cell_visited ? "true" : "false");
+    }
+    if (mapCurrentCellWallsKnownValueLabel) {
+        mapCurrentCellWallsKnownValueLabel->setText(
+            QString("0x%1 (%2)")
+                .arg(mapDebug.current_cell_walls_known, 2, 16, QChar('0'))
+                .arg(wallMaskText(mapDebug.current_cell_walls_known)));
+    }
+    if (mapCurrentCellWallsPresentValueLabel) {
+        mapCurrentCellWallsPresentValueLabel->setText(
+            QString("0x%1 (%2)")
+                .arg(mapDebug.current_cell_walls_present, 2, 16, QChar('0'))
+                .arg(wallMaskText(mapDebug.current_cell_walls_present)));
+    }
+    if (mapLastPoseUpdateActionValueLabel) {
+        mapLastPoseUpdateActionValueLabel->setText(
+            mapActionText(mapDebug.last_pose_update_action));
+    }
+    if (mapLastWallUpdateActionValueLabel) {
+        mapLastWallUpdateActionValueLabel->setText(
+            mapActionText(mapDebug.last_wall_update_action));
+    }
+    if (mapInitialWallSnapshotPendingValueLabel) {
+        mapInitialWallSnapshotPendingValueLabel->setText(
+            mapDebug.initial_wall_snapshot_pending ? "true" : "false");
+    }
+    if (mapUpdateCountValueLabel) {
+        mapUpdateCountValueLabel->setText(QString::number(mapDebug.update_count));
+    }
+    if (mapWallUpdateCountValueLabel) {
+        mapWallUpdateCountValueLabel->setText(QString::number(mapDebug.wall_update_count));
+    }
+    if (mapOverlayEnabledValueLabel) {
+        mapOverlayEnabledValueLabel->setText(shadowMapOverlayEnabled ? "true" : "false");
     }
     if (simLeftMotorGainValueLabel) {
         simLeftMotorGainValueLabel->setText(QString("%1").arg(robot.leftMotorGain(), 0, 'f', 3));
@@ -1710,7 +2328,12 @@ bool MainWindow::loadMazeFile(const QString &path)
 
 void MainWindow::toggleBasicNavAutonomy()
 {
-    setBasicNavAutonomyEnabled(!basicNavAutonomyEnabled);
+    const bool enable = !basicNavAutonomyEnabled;
+    setBasicNavAutonomyEnabled(enable);
+    if (!enable) {
+        nav_core_stop();
+        updateNavCorePipeline();
+    }
     if (basicNavAutonomyEnabled) {
         cancelTestSequence();
         updateIrSensors();
@@ -1725,17 +2348,74 @@ void MainWindow::setBasicNavAutonomyEnabled(bool enabled)
 {
     basicNavAutonomyEnabled = enabled;
     if (!basicNavAutonomyEnabled) {
-        basicNavLastDecision = BasicNavDecisionNone;
+        basicNavRecommendedAction = NAV_RECOMMENDED_NONE;
+        basicNavLastDecision = NAV_RECOMMENDED_NONE;
+        basicNavLastDecisionText = "NONE";
         basicNavDecisionWallFront = false;
         basicNavDecisionWallLeft = false;
         basicNavDecisionWallRight = false;
         basicNavDecisionPointValid = false;
+        cancelDeadEndRecovery();
     }
+}
+
+void MainWindow::toggleNavPolicy()
+{
+    const NavPolicy currentPolicy = nav_core_get_policy();
+    const NavPolicy nextPolicy = currentPolicy == NAV_POLICY_RIGHT_HAND_RULE
+        ? NAV_POLICY_MAP_PREFER_UNVISITED
+        : NAV_POLICY_RIGHT_HAND_RULE;
+    nav_core_set_policy(nextPolicy);
+    updateTelemetryPanel();
+}
+
+void MainWindow::cancelDeadEndRecovery()
+{
+    deadEndRecoveryPhase = DeadEndRecoveryPhase::None;
+    deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
+    deadEndRecoveryPendingPivot = false;
+}
+
+bool MainWindow::advanceDeadEndRecoveryIfNeeded()
+{
+    if (deadEndRecoveryPhase == DeadEndRecoveryPhase::None) {
+        return false;
+    }
+
+    const bool navReady =
+        (nav_core_action() == NAV_ACTION_NONE)
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    if (!navReady) {
+        return true;
+    }
+
+    if (deadEndRecoveryPhase == DeadEndRecoveryPhase::ApproachFront) {
+        NavTurnDebug turnDebug = {};
+        nav_core_get_turn_debug(&turnDebug);
+        deadEndRecoveryLastApproachReason = turnDebug.last_approach_front_done_reason;
+        deadEndRecoveryPendingPivot = false;
+
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        resetNavigationYawReference();
+        nav_core_start_pivot_turn_180(&sensors);
+        deadEndRecoveryPhase = DeadEndRecoveryPhase::Pivot180;
+        basicNavLastDecision = NAV_RECOMMENDED_PIVOT_180;
+        basicNavLastDecisionText = "DEAD_END_PIVOT_180";
+        return true;
+    }
+
+    deadEndRecoveryPhase = DeadEndRecoveryPhase::None;
+    deadEndRecoveryPendingPivot = false;
+    return false;
 }
 
 void MainWindow::advanceBasicNavAutonomyIfNeeded()
 {
     if (!basicNavAutonomyEnabled) {
+        return;
+    }
+
+    if (advanceDeadEndRecoveryIfNeeded()) {
         return;
     }
 
@@ -1748,56 +2428,81 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
 
     NavWallPerception perception = {};
     nav_core_get_wall_perception(&perception);
-    startBasicNavActionFromPerception(perception);
-}
-
-void MainWindow::startBasicNavActionFromPerception(const NavWallPerception &perception)
-{
     basicNavDecisionWallFront = perception.wall_front;
     basicNavDecisionWallLeft = perception.wall_left;
     basicNavDecisionWallRight = perception.wall_right;
 
-    resetNavigationYawReference();
     RobotSensors sensors = buildRobotSensorsSnapshot();
     basicNavDecisionPointValid = sensors.floor_rear_black;
-    if (!basicNavDecisionPointValid) {
-        if (perception.wall_front) {
-            nav_core_start_pivot_turn_180(&sensors);
-            basicNavLastDecision = BasicNavDecisionRecoveryPivot180FrontBlocked;
-            return;
-        }
+    basicNavRecommendedAction = nav_core_recommend_basic_action(&sensors);
+    startBasicNavRecommendedAction(basicNavRecommendedAction, sensors);
+}
 
+void MainWindow::startBasicNavRecommendedAction(NavRecommendedAction action,
+                                                const RobotSensors &sensors)
+{
+    if (action == NAV_RECOMMENDED_NONE) {
+        return;
+    }
+
+    resetNavigationYawReference();
+    switch (action) {
+    case NAV_RECOMMENDED_ACQUIRE_REAR_LINE:
         nav_core_start_advance_until_rear_black();
-        basicNavLastDecision = BasicNavDecisionAcquireRearLine;
-        return;
-    }
-
-    if (!perception.wall_right) {
-        nav_core_start_smooth_turn_right(&sensors);
-        basicNavLastDecision = BasicNavDecisionSmoothRight;
-        return;
-    }
-
-    if (!perception.wall_front) {
+        break;
+    case NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED:
+        nav_core_start_pivot_turn_180(&sensors);
+        break;
+    case NAV_RECOMMENDED_ADVANCE_LINE:
         nav_core_start_advance_until_rear_black();
-        basicNavLastDecision = BasicNavDecisionAdvance;
-        return;
-    }
-
-    if (!perception.wall_left) {
+        break;
+    case NAV_RECOMMENDED_SMOOTH_LEFT:
         nav_core_start_smooth_turn_left(&sensors);
-        basicNavLastDecision = BasicNavDecisionSmoothLeft;
+        break;
+    case NAV_RECOMMENDED_SMOOTH_RIGHT:
+        nav_core_start_smooth_turn_right(&sensors);
+        break;
+    case NAV_RECOMMENDED_PIVOT_180:
+        nav_core_start_approach_front_wall_for_pivot();
+        deadEndRecoveryPhase = DeadEndRecoveryPhase::ApproachFront;
+        deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
+        deadEndRecoveryPendingPivot = true;
+        basicNavLastDecision = action;
+        basicNavLastDecisionText = "DEAD_END_APPROACH_FRONT";
         return;
+    case NAV_RECOMMENDED_NONE:
+        break;
     }
 
-    nav_core_start_pivot_turn_180(&sensors);
-    basicNavLastDecision = BasicNavDecisionPivot180;
+    basicNavLastDecision = action;
+    basicNavLastDecisionText = recommendedActionText(action);
 }
 
 void MainWindow::resetRobotPoseToWorldStart()
 {
     robot.setPose(world.startXMm(), world.startYMm(), world.startYawDeg());
     resetNavigationYawReference();
+    initializeNavMapFromWorldStart();
+}
+
+void MainWindow::initializeNavMapFromWorldStart()
+{
+    const double cellSizeMm = world.cellSizeMm();
+    int cellX = 0;
+    int cellY = 0;
+    if (cellSizeMm > 0.0) {
+        cellX = static_cast<int>(std::floor(world.startXMm() / cellSizeMm));
+        cellY = static_cast<int>(std::floor(world.startYMm() / cellSizeMm));
+    }
+
+    cellX = std::clamp(cellX, 0, std::max(0, world.cols() - 1));
+    cellY = std::clamp(cellY, 0, std::max(0, world.rows() - 1));
+    nav_core_map_init(static_cast<uint8_t>(std::clamp(world.cols(), 1, NAV_MAP_MAX_WIDTH)),
+                      static_cast<uint8_t>(std::clamp(world.rows(), 1, NAV_MAP_MAX_HEIGHT)),
+                      static_cast<int8_t>(cellX),
+                      static_cast<int8_t>(cellY),
+                      directionFromYawDeg(world.startYawDeg()));
+    updateShadowMapOverlay();
 }
 
 void MainWindow::adjustSmoothTargetYawRate(int delta_deg_s)
@@ -1993,8 +2698,10 @@ void MainWindow::showControlsHelp()
         "- M: Toggle auto mode\n"
         "- O: Load maze JSON\n"
         "- V: Toggle fixed test sequence\n"
-        "- B: Toggle basic right-hand autonomous navigation; if not on rear line, acquire line first\n"
+        "- B: Toggle basic autonomous navigation; dead-ends use approach-front then PIVOT_180\n"
+        "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
+        "- Y: Toggle shadow logical map overlay\n"
         "\n"
         "Motor test:\n"
         "- T: Toggle motor test mode\n"
@@ -2012,6 +2719,7 @@ void MainWindow::showControlsHelp()
         "\n"
         "Navigation test:\n"
         "- G: start ADVANCE_LINE until rear floor sensor detects black\n"
+        "- F: start APPROACH_FRONT_WALL_FOR_PIVOT test\n"
         "- Q: start SMOOTH_LEFT test, resets nav yaw reference\n"
         "- E: start SMOOTH_RIGHT test, resets nav yaw reference\n"
         "- 1: start PIVOT_LEFT test, resets nav yaw reference\n"
@@ -2142,6 +2850,7 @@ void MainWindow::updateNavCorePipeline()
 {
     RobotSensors sensors = buildRobotSensorsSnapshot();
     lastNavCommand = nav_core_update(&sensors);
+    updateShadowMapOverlay();
 }
 
 void MainWindow::simulationStep()

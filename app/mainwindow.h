@@ -4,6 +4,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QMainWindow>
+#include <QString>
 
 #include <cstdint>
 #include <vector>
@@ -14,6 +15,7 @@
 
 class QLabel;
 class QGraphicsEllipseItem;
+class QGraphicsItem;
 class QGraphicsLineItem;
 class QGraphicsPolygonItem;
 class QKeyEvent;
@@ -25,6 +27,12 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    enum class DeadEndRecoveryPhase {
+        None,
+        ApproachFront,
+        Pivot180
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -36,6 +44,9 @@ private:
     void drawReferenceGrid();
     void drawBlackTape();
     void drawWorldWalls();
+    void clearShadowMapOverlay();
+    void updateShadowMapOverlay();
+    void drawShadowMapOverlay();
     void rebuildSceneItems();
     void initializeIrSensors();
     void initializeFloorSensors();
@@ -53,9 +64,14 @@ private:
     void advanceTestSequenceIfNeeded();
     void toggleBasicNavAutonomy();
     void setBasicNavAutonomyEnabled(bool enabled);
+    void toggleNavPolicy();
     void advanceBasicNavAutonomyIfNeeded();
-    void startBasicNavActionFromPerception(const NavWallPerception &perception);
+    void startBasicNavRecommendedAction(NavRecommendedAction action,
+                                        const RobotSensors &sensors);
+    void cancelDeadEndRecovery();
+    bool advanceDeadEndRecoveryIfNeeded();
     void resetRobotPoseToWorldStart();
+    void initializeNavMapFromWorldStart();
     void createRobotItem();
     void createIrSensorItems();
     void createFloorSensorItems();
@@ -147,6 +163,16 @@ private:
     QLabel *turnDebugSmoothPostYawElapsedValueLabel = nullptr;
     QLabel *turnDebugAdvancePhaseValueLabel = nullptr;
     QLabel *turnDebugAdvanceDoneReasonValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontPhaseValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontDoneReasonValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontTargetValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontLeftValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontRightValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontElapsedValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontBrakeElapsedValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontBaseLeftValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontBaseRightValueLabel = nullptr;
+    QLabel *turnDebugApproachFrontCorrectionValueLabel = nullptr;
     QLabel *turnDebugAdvanceYawSetpointValueLabel = nullptr;
     QLabel *turnDebugAdvanceYawMeasuredValueLabel = nullptr;
     QLabel *turnDebugAdvanceYawErrorValueLabel = nullptr;
@@ -168,6 +194,7 @@ private:
     QLabel *turnDebugAdvanceFollowRightValidValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallLeftValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallRightValueLabel = nullptr;
+    QLabel *turnDebugAdvanceWallRawErrorValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallErrorValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallErrorAfterDeadbandValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallPrevErrorValueLabel = nullptr;
@@ -183,6 +210,7 @@ private:
     QLabel *turnDebugWallTargetLeftValueLabel = nullptr;
     QLabel *turnDebugWallTargetRightValueLabel = nullptr;
     QLabel *turnDebugWallCorrectionLimitValueLabel = nullptr;
+    QLabel *turnDebugWallSingleSideErrorScaleValueLabel = nullptr;
     QLabel *turnDebugLastCompletedActionValueLabel = nullptr;
     QLabel *turnDebugLastSmoothDoneReasonValueLabel = nullptr;
     QLabel *turnDebugLastSmoothFinalYawValueLabel = nullptr;
@@ -190,6 +218,7 @@ private:
     QLabel *turnDebugLastAdvanceDoneReasonValueLabel = nullptr;
     QLabel *turnDebugLastAdvanceFinalYawValueLabel = nullptr;
     QLabel *turnDebugLastAdvanceFinalRearValueLabel = nullptr;
+    QLabel *turnDebugLastApproachFrontDoneReasonValueLabel = nullptr;
     QLabel *navLeftMotorValueLabel = nullptr;
     QLabel *navRightMotorValueLabel = nullptr;
     QLabel *simulationRunningValueLabel = nullptr;
@@ -205,11 +234,38 @@ private:
     QLabel *sequenceWaitingNextTickValueLabel = nullptr;
     QLabel *navAutonomyEnabledValueLabel = nullptr;
     QLabel *navPolicyValueLabel = nullptr;
+    QLabel *navRecommendedActionValueLabel = nullptr;
     QLabel *navLastDecisionValueLabel = nullptr;
     QLabel *navDecisionWallFrontValueLabel = nullptr;
     QLabel *navDecisionWallLeftValueLabel = nullptr;
     QLabel *navDecisionWallRightValueLabel = nullptr;
     QLabel *navDecisionPointValidValueLabel = nullptr;
+    QLabel *deadEndRecoveryActiveValueLabel = nullptr;
+    QLabel *deadEndRecoveryPhaseValueLabel = nullptr;
+    QLabel *deadEndRecoveryLastApproachReasonValueLabel = nullptr;
+    QLabel *deadEndRecoveryPendingPivotValueLabel = nullptr;
+    QLabel *navMapCandidateRightCellValueLabel = nullptr;
+    QLabel *navMapCandidateFrontCellValueLabel = nullptr;
+    QLabel *navMapCandidateLeftCellValueLabel = nullptr;
+    QLabel *navMapCandidateRightVisitedValueLabel = nullptr;
+    QLabel *navMapCandidateFrontVisitedValueLabel = nullptr;
+    QLabel *navMapCandidateLeftVisitedValueLabel = nullptr;
+    QLabel *navMapUsedUnvisitedPreferenceValueLabel = nullptr;
+    QLabel *mapEnabledValueLabel = nullptr;
+    QLabel *mapWidthValueLabel = nullptr;
+    QLabel *mapHeightValueLabel = nullptr;
+    QLabel *mapCellXValueLabel = nullptr;
+    QLabel *mapCellYValueLabel = nullptr;
+    QLabel *mapDirValueLabel = nullptr;
+    QLabel *mapCurrentCellVisitedValueLabel = nullptr;
+    QLabel *mapCurrentCellWallsKnownValueLabel = nullptr;
+    QLabel *mapCurrentCellWallsPresentValueLabel = nullptr;
+    QLabel *mapLastPoseUpdateActionValueLabel = nullptr;
+    QLabel *mapLastWallUpdateActionValueLabel = nullptr;
+    QLabel *mapInitialWallSnapshotPendingValueLabel = nullptr;
+    QLabel *mapUpdateCountValueLabel = nullptr;
+    QLabel *mapWallUpdateCountValueLabel = nullptr;
+    QLabel *mapOverlayEnabledValueLabel = nullptr;
     QLabel *simLeftMotorGainValueLabel = nullptr;
     QLabel *simRightMotorGainValueLabel = nullptr;
     QLabel *simPivotCenterCorrectionEnabledValueLabel = nullptr;
@@ -228,11 +284,17 @@ private:
     bool testSequenceWaitingNextTick = false;
     int testSequenceIndex = 0;
     bool basicNavAutonomyEnabled = false;
-    int basicNavLastDecision = 0;
+    NavRecommendedAction basicNavRecommendedAction = NAV_RECOMMENDED_NONE;
+    NavRecommendedAction basicNavLastDecision = NAV_RECOMMENDED_NONE;
+    QString basicNavLastDecisionText = "NONE";
     bool basicNavDecisionWallFront = false;
     bool basicNavDecisionWallLeft = false;
     bool basicNavDecisionWallRight = false;
     bool basicNavDecisionPointValid = false;
+    DeadEndRecoveryPhase deadEndRecoveryPhase = DeadEndRecoveryPhase::None;
+    NavApproachFrontDoneReason deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
+    bool deadEndRecoveryPendingPivot = false;
+    bool shadowMapOverlayEnabled = true;
     uint64_t simulationStepCount = 0;
     double simulationTimeS = 0.0;
     double navYawZeroDeg = 0.0;
@@ -242,6 +304,7 @@ private:
     SimRobot robot;
     std::vector<IrSensor> irSensors;
     std::vector<FloorSensor> floorSensors;
+    std::vector<QGraphicsItem *> shadowMapOverlayItems;
 };
 
 #endif // MAINWINDOW_H

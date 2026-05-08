@@ -7,7 +7,7 @@
   },
   "start": {
     "x_mm": 100,
-    "y_mm": 340,
+    "y_mm": 300,
     "yaw_deg": 0
   },
   "walls": [

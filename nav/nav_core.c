@@ -1,4 +1,5 @@
 #include "nav_core.h"
+#include "nav_map.h"
 #include "pid_controller.h"
 
 enum {
@@ -6,6 +7,11 @@ enum {
     NAV_PWM_FORWARD = 3000,
     NAV_ADVANCE_BASE_LEFT_PWM = 3000,
     NAV_ADVANCE_BASE_RIGHT_PWM = 3370,
+    NAV_APPROACH_FRONT_BASE_LEFT_PWM = 1800,
+    NAV_APPROACH_FRONT_BASE_RIGHT_PWM = 2020,
+    NAV_APPROACH_FRONT_TARGET_MM_Q16 = 70 << 16,
+    NAV_APPROACH_FRONT_TIMEOUT_MS = 2000,
+    NAV_BRAKE_SETTLE_MS = 200,
     NAV_SMOOTH_POST_YAW_BASE_LEFT_PWM = 2500,
     NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM = 2800,
     NAV_SMOOTH_POST_YAW_TIMEOUT_MS = 800,
@@ -40,6 +46,7 @@ enum {
     NAV_ADVANCE_WALL_OUTPUT_LIMIT_PWM_DEFAULT = 4000,
     NAV_ADVANCE_WALL_OUTPUT_LIMIT_PWM_MAX = 4000,
     NAV_ADVANCE_WALL_ERROR_DEADBAND_MM_DEFAULT = 0,
+    NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE = 2,
     NAV_WALL_FRONT_THRESHOLD_MM_Q16 = 140 << 16,
     NAV_WALL_SIDE_THRESHOLD_MM_Q16 = 100 << 16,
     NAV_WALL_DIAG_THRESHOLD_MM_Q16 = 145 << 16,
@@ -59,11 +66,19 @@ static NavTurnPidConfig turn_pid_config = {0};
 static NavAdvanceYawPidConfig advance_yaw_pid_config = {0};
 static NavSmoothPhase smooth_phase = NAV_SMOOTH_PHASE_NONE;
 static NavAdvancePhase advance_phase = NAV_ADVANCE_PHASE_NONE;
+static NavApproachFrontPhase approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
 static NavTurnDebug turn_debug = {0};
 static NavSmoothTurnConfig smooth_turn_config = {0};
 static NavWallPerception wall_perception = {0};
 static uint16_t smooth_post_yaw_elapsed_ms = 0;
+static uint16_t approach_front_elapsed_ms = 0;
+static uint16_t approach_front_brake_elapsed_ms = 0;
+static NavApproachFrontDoneReason approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
 static NavAdvanceGuidanceMode advance_guidance_mode = NAV_ADVANCE_GUIDANCE_WALL_ASSIST;
+static NavPolicy nav_policy = NAV_POLICY_RIGHT_HAND_RULE;
+static NavMapCandidateDebug map_candidate_debug = {0};
+static bool map_walls_recorded_for_current_pose = false;
+static bool map_initial_wall_snapshot_pending = false;
 static NavAdvanceWallConfig advance_wall_config = {
     NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT,
     NAV_ADVANCE_WALL_KD_PWM_PER_MM_PER_TICK_DEFAULT,
@@ -74,6 +89,58 @@ static NavAdvanceWallConfig advance_wall_config = {
 };
 static q16_16_t advance_wall_previous_error_q16 = 0;
 static bool advance_wall_has_previous_error = false;
+
+typedef enum NavMapUpdatePolicy {
+    NAV_MAP_UPDATE_NONE = 0,
+    NAV_MAP_UPDATE_POSE_ONLY,
+    NAV_MAP_UPDATE_WALLS_ONLY,
+    NAV_MAP_UPDATE_POSE_AND_WALLS
+} NavMapUpdatePolicy;
+
+static NavMapDirection map_turn_left(NavMapDirection dir)
+{
+    return (NavMapDirection)((dir + 3) & 3);
+}
+
+static NavMapDirection map_turn_right(NavMapDirection dir)
+{
+    return (NavMapDirection)((dir + 1) & 3);
+}
+
+static void map_neighbor_for_dir(int8_t cell_x,
+                                 int8_t cell_y,
+                                 NavMapDirection dir,
+                                 int8_t *neighbor_x,
+                                 int8_t *neighbor_y)
+{
+    *neighbor_x = cell_x;
+    *neighbor_y = cell_y;
+
+    switch (dir) {
+    case NAV_DIR_NORTH:
+        --(*neighbor_y);
+        break;
+    case NAV_DIR_EAST:
+        ++(*neighbor_x);
+        break;
+    case NAV_DIR_SOUTH:
+        ++(*neighbor_y);
+        break;
+    case NAV_DIR_WEST:
+        --(*neighbor_x);
+        break;
+    }
+}
+
+static bool map_cell_is_inside(const NavMapDebugSnapshot *map_debug, int8_t cell_x, int8_t cell_y)
+{
+    return map_debug != 0
+        && map_debug->enabled
+        && cell_x >= 0
+        && cell_y >= 0
+        && cell_x < (int8_t)map_debug->width
+        && cell_y < (int8_t)map_debug->height;
+}
 
 static q16_16_t abs_q16(q16_16_t value)
 {
@@ -251,6 +318,98 @@ static void update_wall_perception(const RobotSensors *sensors)
         sensors->ir_diag_right_mm_q16 < NAV_WALL_DIAG_THRESHOLD_MM_Q16;
 }
 
+static NavMapAction map_action_from_nav_action(NavAction action)
+{
+    switch (action) {
+    case NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK:
+        return NAV_MAP_ACTION_ADVANCE_LINE;
+    case NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+        return NAV_MAP_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT;
+    case NAV_ACTION_SMOOTH_TURN_LEFT:
+        return NAV_MAP_ACTION_SMOOTH_TURN_LEFT;
+    case NAV_ACTION_SMOOTH_TURN_RIGHT:
+        return NAV_MAP_ACTION_SMOOTH_TURN_RIGHT;
+    case NAV_ACTION_PIVOT_TURN_LEFT:
+        return NAV_MAP_ACTION_PIVOT_TURN_LEFT;
+    case NAV_ACTION_PIVOT_TURN_RIGHT:
+        return NAV_MAP_ACTION_PIVOT_TURN_RIGHT;
+    case NAV_ACTION_PIVOT_TURN_180:
+        return NAV_MAP_ACTION_PIVOT_TURN_180;
+    case NAV_ACTION_NONE:
+        break;
+    }
+
+    return NAV_MAP_ACTION_NONE;
+}
+
+static NavMapUpdatePolicy map_update_policy_from_nav_action(NavAction action)
+{
+    switch (action) {
+    case NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK:
+    case NAV_ACTION_SMOOTH_TURN_LEFT:
+    case NAV_ACTION_SMOOTH_TURN_RIGHT:
+        return NAV_MAP_UPDATE_POSE_AND_WALLS;
+    case NAV_ACTION_PIVOT_TURN_LEFT:
+    case NAV_ACTION_PIVOT_TURN_RIGHT:
+    case NAV_ACTION_PIVOT_TURN_180:
+        return NAV_MAP_UPDATE_POSE_ONLY;
+    case NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+    case NAV_ACTION_NONE:
+        break;
+    }
+
+    return NAV_MAP_UPDATE_NONE;
+}
+
+static void record_current_map_cell_walls(NavMapAction action)
+{
+    nav_map_mark_visited_current();
+    nav_map_update_current_cell_walls_from_relative_for_action(wall_perception.wall_front,
+                                                               wall_perception.wall_left,
+                                                               wall_perception.wall_right,
+                                                               action);
+    map_walls_recorded_for_current_pose = true;
+    map_initial_wall_snapshot_pending = false;
+}
+
+static void apply_completed_action_to_map(NavAction action)
+{
+    const NavMapAction map_action = map_action_from_nav_action(action);
+    const NavMapUpdatePolicy policy = map_update_policy_from_nav_action(action);
+    if (map_action == NAV_MAP_ACTION_NONE || policy == NAV_MAP_UPDATE_NONE) {
+        return;
+    }
+
+    if (policy == NAV_MAP_UPDATE_POSE_ONLY || policy == NAV_MAP_UPDATE_POSE_AND_WALLS) {
+        nav_map_apply_completed_action(map_action);
+    }
+    if (policy == NAV_MAP_UPDATE_WALLS_ONLY || policy == NAV_MAP_UPDATE_POSE_AND_WALLS) {
+        record_current_map_cell_walls(map_action);
+    }
+}
+
+static void record_current_map_cell_if_ready(const RobotSensors *sensors)
+{
+    if (sensors == 0) {
+        return;
+    }
+    if (map_initial_wall_snapshot_pending) {
+        record_current_map_cell_walls(NAV_MAP_ACTION_INITIAL_SNAPSHOT);
+        return;
+    }
+    if (!sensors->floor_rear_black) {
+        return;
+    }
+    if (current_action != NAV_ACTION_NONE) {
+        return;
+    }
+    if (map_walls_recorded_for_current_pose) {
+        return;
+    }
+
+    record_current_map_cell_walls(NAV_MAP_ACTION_NONE);
+}
+
 static int32_t clamp_smooth_target_yaw_rate(int32_t target_yaw_rate_deg_s)
 {
     if (target_yaw_rate_deg_s < NAV_SMOOTH_TARGET_YAW_RATE_MIN_DEG_S) {
@@ -324,6 +483,16 @@ static void clear_live_turn_debug(void)
     turn_debug.smooth_post_yaw_elapsed_ms = 0;
     turn_debug.advance_phase = NAV_ADVANCE_PHASE_NONE;
     turn_debug.advance_done_reason = NAV_ADVANCE_DONE_NONE;
+    turn_debug.approach_front_phase = approach_front_phase;
+    turn_debug.approach_front_done_reason = approach_front_done_reason;
+    turn_debug.approach_front_target_mm_q16 = NAV_APPROACH_FRONT_TARGET_MM_Q16;
+    turn_debug.approach_front_left_mm_q16 = 0;
+    turn_debug.approach_front_right_mm_q16 = 0;
+    turn_debug.approach_front_elapsed_ms = approach_front_elapsed_ms;
+    turn_debug.approach_front_brake_elapsed_ms = approach_front_brake_elapsed_ms;
+    turn_debug.approach_front_base_left_pwm = 0;
+    turn_debug.approach_front_base_right_pwm = 0;
+    turn_debug.approach_front_correction_pwm = 0;
     turn_debug.advance_yaw_setpoint_deg_q16 = 0;
     turn_debug.advance_yaw_measured_deg_q16 = 0;
     turn_debug.advance_yaw_error_deg_q16 = 0;
@@ -345,6 +514,7 @@ static void clear_live_turn_debug(void)
     turn_debug.advance_follow_right_valid = false;
     turn_debug.advance_wall_left_mm_q16 = 0;
     turn_debug.advance_wall_right_mm_q16 = 0;
+    turn_debug.advance_wall_raw_error_mm_q16 = 0;
     turn_debug.advance_wall_error_mm_q16 = 0;
     turn_debug.advance_wall_error_after_deadband_mm_q16 = 0;
     turn_debug.advance_wall_prev_error_mm_q16 = 0;
@@ -360,6 +530,7 @@ static void clear_live_turn_debug(void)
     turn_debug.wall_follow_target_left_mm_q16 = mm_to_q16(advance_wall_config.target_left_mm);
     turn_debug.wall_follow_target_right_mm_q16 = mm_to_q16(advance_wall_config.target_right_mm);
     turn_debug.wall_correction_limit_pwm = advance_wall_config.correction_limit_pwm;
+    turn_debug.wall_single_side_error_scale = NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
 }
 
 static void clear_completed_turn_debug(void)
@@ -371,6 +542,7 @@ static void clear_completed_turn_debug(void)
     turn_debug.last_advance_done_reason = NAV_ADVANCE_DONE_NONE;
     turn_debug.last_advance_final_yaw_deg_q16 = 0;
     turn_debug.last_advance_final_floor_rear_black = false;
+    turn_debug.last_approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
 }
 
 static void reset_turn_debug(void)
@@ -378,6 +550,10 @@ static void reset_turn_debug(void)
     clear_live_turn_debug();
     clear_completed_turn_debug();
 }
+
+static RobotCommand guided_forward_command(const RobotSensors *sensors,
+                                           int16_t base_left_pwm,
+                                           int16_t base_right_pwm);
 
 static void set_smooth_phase(NavSmoothPhase phase)
 {
@@ -397,10 +573,20 @@ static void set_advance_phase(NavAdvancePhase phase)
     turn_debug.advance_done_reason = NAV_ADVANCE_DONE_NONE;
 }
 
+static void set_approach_front_phase(NavApproachFrontPhase phase)
+{
+    approach_front_phase = phase;
+    turn_debug.approach_front_phase = phase;
+    if (phase == NAV_APPROACH_FRONT_PHASE_DRIVE) {
+        approach_front_brake_elapsed_ms = 0;
+    }
+}
+
 static RobotCommand finish_advance_until_rear_black(const RobotSensors *sensors)
 {
     const NavAction completed_action = current_action;
 
+    apply_completed_action_to_map(completed_action);
     current_state = NAV_STATE_DONE;
     current_action = NAV_ACTION_NONE;
     action_start_yaw_q16 = 0;
@@ -418,7 +604,63 @@ static RobotCommand finish_advance_until_rear_black(const RobotSensors *sensors)
     return command;
 }
 
-static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors)
+static RobotCommand finish_approach_front_wall_for_pivot(const RobotSensors *sensors,
+                                                         NavApproachFrontDoneReason reason)
+{
+    const NavAction completed_action = current_action;
+
+    apply_completed_action_to_map(completed_action);
+    current_state = NAV_STATE_DONE;
+    current_action = NAV_ACTION_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_DONE;
+    approach_front_done_reason = reason;
+    reset_advance_wall_pd();
+    clear_live_turn_debug();
+    turn_debug.approach_front_phase = approach_front_phase;
+    turn_debug.approach_front_done_reason = reason;
+    turn_debug.approach_front_target_mm_q16 = NAV_APPROACH_FRONT_TARGET_MM_Q16;
+    turn_debug.approach_front_left_mm_q16 = sensors->ir_front_left_mm_q16;
+    turn_debug.approach_front_right_mm_q16 = sensors->ir_front_right_mm_q16;
+    turn_debug.approach_front_elapsed_ms = approach_front_elapsed_ms;
+    turn_debug.approach_front_brake_elapsed_ms = approach_front_brake_elapsed_ms;
+    turn_debug.approach_front_base_left_pwm = NAV_APPROACH_FRONT_BASE_LEFT_PWM;
+    turn_debug.approach_front_base_right_pwm = NAV_APPROACH_FRONT_BASE_RIGHT_PWM;
+    turn_debug.approach_front_correction_pwm = 0;
+    turn_debug.last_completed_action = completed_action;
+    turn_debug.last_approach_front_done_reason = reason;
+
+    RobotCommand command = {NAV_PWM_STOP, NAV_PWM_STOP};
+    return command;
+}
+
+static bool approach_front_target_reached(const RobotSensors *sensors)
+{
+    return sensors->ir_front_left_mm_q16 <= NAV_APPROACH_FRONT_TARGET_MM_Q16
+        && sensors->ir_front_right_mm_q16 <= NAV_APPROACH_FRONT_TARGET_MM_Q16;
+}
+
+static RobotCommand approach_front_wall_for_pivot_command(const RobotSensors *sensors)
+{
+    RobotCommand command = guided_forward_command(sensors,
+                                                  NAV_APPROACH_FRONT_BASE_LEFT_PWM,
+                                                  NAV_APPROACH_FRONT_BASE_RIGHT_PWM);
+    turn_debug.approach_front_phase = approach_front_phase;
+    turn_debug.approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    turn_debug.approach_front_target_mm_q16 = NAV_APPROACH_FRONT_TARGET_MM_Q16;
+    turn_debug.approach_front_left_mm_q16 = sensors->ir_front_left_mm_q16;
+    turn_debug.approach_front_right_mm_q16 = sensors->ir_front_right_mm_q16;
+    turn_debug.approach_front_elapsed_ms = approach_front_elapsed_ms;
+    turn_debug.approach_front_brake_elapsed_ms = approach_front_brake_elapsed_ms;
+    turn_debug.approach_front_base_left_pwm = NAV_APPROACH_FRONT_BASE_LEFT_PWM;
+    turn_debug.approach_front_base_right_pwm = NAV_APPROACH_FRONT_BASE_RIGHT_PWM;
+    turn_debug.approach_front_correction_pwm =
+        clamp_pwm(command.left_motor_pwm - NAV_APPROACH_FRONT_BASE_LEFT_PWM);
+    return command;
+}
+
+static RobotCommand guided_forward_command(const RobotSensors *sensors,
+                                           int16_t base_left_pwm,
+                                           int16_t base_right_pwm)
 {
     const int32_t pid_output_q16 = PID_Update_Fixed(&advance_yaw_pid, sensors->yaw_deg_q16, 10);
     const int32_t yaw_correction_pwm = FIXED_TO_INT(pid_output_q16);
@@ -428,18 +670,24 @@ static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors
     const bool diag_right_valid = wall_perception.wall_diag_right;
     const bool follow_left_valid = wall_left_valid && diag_left_valid;
     const bool follow_right_valid = wall_right_valid && diag_right_valid;
+    q16_16_t wall_raw_error_q16 = 0;
     q16_16_t wall_error_q16 = 0;
     NavAdvanceCorrectionSource correction_source = NAV_ADVANCE_CORRECTION_YAW_PD;
 
     if (advance_guidance_mode == NAV_ADVANCE_GUIDANCE_WALL_ASSIST) {
         if (follow_left_valid && follow_right_valid) {
-            wall_error_q16 = wall_perception.right_mm_q16 - wall_perception.left_mm_q16;
+            wall_raw_error_q16 = wall_perception.right_mm_q16 - wall_perception.left_mm_q16;
+            wall_error_q16 = wall_raw_error_q16;
             correction_source = NAV_ADVANCE_CORRECTION_WALL_CENTER;
         } else if (follow_left_valid) {
-            wall_error_q16 = mm_to_q16(advance_wall_config.target_left_mm) - wall_perception.left_mm_q16;
+            wall_raw_error_q16 =
+                mm_to_q16(advance_wall_config.target_left_mm) - wall_perception.left_mm_q16;
+            wall_error_q16 = wall_raw_error_q16 * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
             correction_source = NAV_ADVANCE_CORRECTION_WALL_LEFT;
         } else if (follow_right_valid) {
-            wall_error_q16 = wall_perception.right_mm_q16 - mm_to_q16(advance_wall_config.target_right_mm);
+            wall_raw_error_q16 =
+                wall_perception.right_mm_q16 - mm_to_q16(advance_wall_config.target_right_mm);
+            wall_error_q16 = wall_raw_error_q16 * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
             correction_source = NAV_ADVANCE_CORRECTION_WALL_RIGHT;
         }
     }
@@ -483,8 +731,8 @@ static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors
     turn_debug.advance_yaw_ki_q16 = advance_yaw_pid_config.ki_q16;
     turn_debug.advance_yaw_kd_q16 = advance_yaw_pid_config.kd_q16;
     turn_debug.advance_yaw_output_limit_pwm = (int16_t)advance_yaw_pid_config.output_limit_pwm;
-    turn_debug.advance_base_left_pwm = NAV_ADVANCE_BASE_LEFT_PWM;
-    turn_debug.advance_base_right_pwm = NAV_ADVANCE_BASE_RIGHT_PWM;
+    turn_debug.advance_base_left_pwm = base_left_pwm;
+    turn_debug.advance_base_right_pwm = base_right_pwm;
     turn_debug.advance_guidance_mode = advance_guidance_mode;
     turn_debug.advance_final_correction_source = correction_source;
     turn_debug.advance_wall_left_valid = wall_left_valid;
@@ -495,6 +743,7 @@ static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors
     turn_debug.advance_follow_right_valid = follow_right_valid;
     turn_debug.advance_wall_left_mm_q16 = wall_perception.left_mm_q16;
     turn_debug.advance_wall_right_mm_q16 = wall_perception.right_mm_q16;
+    turn_debug.advance_wall_raw_error_mm_q16 = wall_raw_error_q16;
     turn_debug.advance_wall_error_mm_q16 = wall_error_q16;
     turn_debug.advance_wall_error_after_deadband_mm_q16 = wall_error_after_deadband_q16;
     turn_debug.advance_wall_prev_error_mm_q16 = wall_previous_error_q16;
@@ -510,12 +759,18 @@ static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors
     turn_debug.wall_follow_target_left_mm_q16 = mm_to_q16(advance_wall_config.target_left_mm);
     turn_debug.wall_follow_target_right_mm_q16 = mm_to_q16(advance_wall_config.target_right_mm);
     turn_debug.wall_correction_limit_pwm = advance_wall_config.correction_limit_pwm;
+    turn_debug.wall_single_side_error_scale = NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
 
     RobotCommand command = {
-        clamp_pwm(NAV_ADVANCE_BASE_LEFT_PWM + final_correction_pwm),
-        clamp_pwm(NAV_ADVANCE_BASE_RIGHT_PWM - final_correction_pwm)
+        clamp_pwm(base_left_pwm + final_correction_pwm),
+        clamp_pwm(base_right_pwm - final_correction_pwm)
     };
     return command;
+}
+
+static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors)
+{
+    return guided_forward_command(sensors, NAV_ADVANCE_BASE_LEFT_PWM, NAV_ADVANCE_BASE_RIGHT_PWM);
 }
 
 static RobotCommand finish_smooth_turn(const RobotSensors *sensors, NavSmoothDoneReason reason)
@@ -523,6 +778,7 @@ static RobotCommand finish_smooth_turn(const RobotSensors *sensors, NavSmoothDon
     const NavAction completed_action = current_action;
     const uint16_t final_post_yaw_elapsed_ms = smooth_post_yaw_elapsed_ms;
 
+    apply_completed_action_to_map(completed_action);
     current_state = NAV_STATE_DONE;
     current_action = NAV_ACTION_NONE;
     smooth_phase = NAV_SMOOTH_PHASE_DONE;
@@ -641,7 +897,15 @@ void nav_core_init(void)
     action_target_yaw_q16 = 0;
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
+    approach_front_elapsed_ms = 0;
+    approach_front_brake_elapsed_ms = 0;
+    approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    map_walls_recorded_for_current_pose = false;
+    map_initial_wall_snapshot_pending = false;
+    nav_policy = NAV_POLICY_RIGHT_HAND_RULE;
+    map_candidate_debug = (NavMapCandidateDebug){0};
     clear_wall_perception();
     reset_advance_wall_pd();
     advance_guidance_mode = NAV_ADVANCE_GUIDANCE_WALL_ASSIST;
@@ -665,11 +929,34 @@ void nav_core_start_advance_until_rear_black(void)
     action_target_yaw_q16 = 0;
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
+    approach_front_elapsed_ms = 0;
+    approach_front_brake_elapsed_ms = 0;
+    approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
     reset_turn_debug();
     reset_advance_wall_pd();
     PID_Reset(&advance_yaw_pid);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
+}
+
+void nav_core_start_approach_front_wall_for_pivot(void)
+{
+    current_state = NAV_STATE_APPROACHING_FRONT_WALL_FOR_PIVOT;
+    current_action = NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT;
+    action_start_yaw_q16 = 0;
+    action_target_yaw_q16 = 0;
+    smooth_phase = NAV_SMOOTH_PHASE_NONE;
+    advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_elapsed_ms = 0;
+    approach_front_brake_elapsed_ms = 0;
+    approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    reset_turn_debug();
+    set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_DRIVE);
+    reset_advance_wall_pd();
+    PID_Reset(&advance_yaw_pid);
+    PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
+    /* TODO: add front-wall alignment using front_left - front_right before pivot. */
 }
 
 void nav_core_start_smooth_turn_left(const RobotSensors *sensors)
@@ -681,6 +968,7 @@ void nav_core_start_smooth_turn_left(const RobotSensors *sensors)
         action_target_yaw_q16 = 0;
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         advance_phase = NAV_ADVANCE_PHASE_NONE;
+        approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
         smooth_post_yaw_elapsed_ms = 0;
         reset_turn_debug();
         return;
@@ -692,6 +980,7 @@ void nav_core_start_smooth_turn_left(const RobotSensors *sensors)
     PID_Set_Setpoint_Fixed(&turn_yaw_rate_pid,
                            -INT_TO_FIXED(smooth_turn_config.target_yaw_rate_deg_s));
     reset_turn_debug();
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     set_smooth_phase(sensors->floor_rear_black
                          ? NAV_SMOOTH_PHASE_WAIT_LEAVE_START_LINE
                          : NAV_SMOOTH_PHASE_SEEK_TARGET_LINE);
@@ -708,6 +997,7 @@ void nav_core_start_smooth_turn_right(const RobotSensors *sensors)
         action_target_yaw_q16 = 0;
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         advance_phase = NAV_ADVANCE_PHASE_NONE;
+        approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
         smooth_post_yaw_elapsed_ms = 0;
         reset_turn_debug();
         return;
@@ -719,6 +1009,7 @@ void nav_core_start_smooth_turn_right(const RobotSensors *sensors)
     PID_Set_Setpoint_Fixed(&turn_yaw_rate_pid,
                            INT_TO_FIXED(smooth_turn_config.target_yaw_rate_deg_s));
     reset_turn_debug();
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     set_smooth_phase(sensors->floor_rear_black
                          ? NAV_SMOOTH_PHASE_WAIT_LEAVE_START_LINE
                          : NAV_SMOOTH_PHASE_SEEK_TARGET_LINE);
@@ -735,6 +1026,7 @@ void nav_core_start_pivot_turn_left(const RobotSensors *sensors)
         action_target_yaw_q16 = 0;
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         advance_phase = NAV_ADVANCE_PHASE_NONE;
+        approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
         reset_turn_debug();
         return;
     }
@@ -745,6 +1037,7 @@ void nav_core_start_pivot_turn_left(const RobotSensors *sensors)
     PID_Set_Setpoint_Fixed(&turn_yaw_rate_pid, -INT_TO_FIXED(NAV_PIVOT_YAW_RATE_TARGET_ABS_DEG_S));
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     reset_turn_debug();
     current_state = NAV_STATE_PIVOT_TURNING;
     current_action = NAV_ACTION_PIVOT_TURN_LEFT;
@@ -759,6 +1052,7 @@ void nav_core_start_pivot_turn_right(const RobotSensors *sensors)
         action_target_yaw_q16 = 0;
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         advance_phase = NAV_ADVANCE_PHASE_NONE;
+        approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
         reset_turn_debug();
         return;
     }
@@ -769,6 +1063,7 @@ void nav_core_start_pivot_turn_right(const RobotSensors *sensors)
     PID_Set_Setpoint_Fixed(&turn_yaw_rate_pid, INT_TO_FIXED(NAV_PIVOT_YAW_RATE_TARGET_ABS_DEG_S));
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     reset_turn_debug();
     current_state = NAV_STATE_PIVOT_TURNING;
     current_action = NAV_ACTION_PIVOT_TURN_RIGHT;
@@ -783,6 +1078,7 @@ void nav_core_start_pivot_turn_180(const RobotSensors *sensors)
         action_target_yaw_q16 = 0;
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         advance_phase = NAV_ADVANCE_PHASE_NONE;
+        approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
         reset_turn_debug();
         return;
     }
@@ -793,6 +1089,7 @@ void nav_core_start_pivot_turn_180(const RobotSensors *sensors)
     PID_Set_Setpoint_Fixed(&turn_yaw_rate_pid, INT_TO_FIXED(NAV_PIVOT_YAW_RATE_TARGET_ABS_DEG_S));
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     reset_turn_debug();
     current_state = NAV_STATE_PIVOT_TURNING;
     current_action = NAV_ACTION_PIVOT_TURN_180;
@@ -806,7 +1103,14 @@ void nav_core_stop(void)
     action_target_yaw_q16 = 0;
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
+    approach_front_elapsed_ms = 0;
+    approach_front_brake_elapsed_ms = 0;
+    approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    map_walls_recorded_for_current_pose = false;
+    map_initial_wall_snapshot_pending = false;
+    map_candidate_debug = (NavMapCandidateDebug){0};
     reset_turn_debug();
     reset_advance_wall_pd();
 }
@@ -958,6 +1262,195 @@ void nav_core_reset_advance_yaw_pid_defaults(void)
     clear_live_turn_debug();
 }
 
+void nav_core_map_init(uint8_t width,
+                       uint8_t height,
+                       int8_t start_cell_x,
+                       int8_t start_cell_y,
+                       NavMapDirection start_dir)
+{
+    nav_map_init(width, height, start_cell_x, start_cell_y, start_dir);
+    map_walls_recorded_for_current_pose = false;
+    map_initial_wall_snapshot_pending = true;
+}
+
+void nav_core_get_map_debug(NavMapDebugSnapshot *snapshot)
+{
+    nav_map_get_debug_snapshot(snapshot);
+    if (snapshot != 0) {
+        snapshot->initial_wall_snapshot_pending = map_initial_wall_snapshot_pending;
+    }
+}
+
+bool nav_core_get_map_cell(int8_t cell_x, int8_t cell_y, NavMapCell *cell)
+{
+    return nav_map_get_cell(cell_x, cell_y, cell);
+}
+
+void nav_core_set_policy(NavPolicy policy)
+{
+    if (policy != NAV_POLICY_RIGHT_HAND_RULE && policy != NAV_POLICY_MAP_PREFER_UNVISITED) {
+        policy = NAV_POLICY_RIGHT_HAND_RULE;
+    }
+
+    nav_policy = policy;
+    map_candidate_debug = (NavMapCandidateDebug){0};
+}
+
+NavPolicy nav_core_get_policy(void)
+{
+    return nav_policy;
+}
+
+void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug)
+{
+    if (debug == 0) {
+        return;
+    }
+
+    *debug = map_candidate_debug;
+}
+
+static NavRecommendedAction recommend_right_hand_rule(const RobotSensors *sensors)
+{
+    if (sensors == 0) {
+        return NAV_RECOMMENDED_NONE;
+    }
+
+    if (!sensors->floor_rear_black) {
+        return wall_perception.wall_front
+            ? NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED
+            : NAV_RECOMMENDED_ACQUIRE_REAR_LINE;
+    }
+
+    if (!wall_perception.wall_right) {
+        return NAV_RECOMMENDED_SMOOTH_RIGHT;
+    }
+    if (!wall_perception.wall_front) {
+        return NAV_RECOMMENDED_ADVANCE_LINE;
+    }
+    if (!wall_perception.wall_left) {
+        return NAV_RECOMMENDED_SMOOTH_LEFT;
+    }
+
+    return NAV_RECOMMENDED_PIVOT_180;
+}
+
+static void fill_map_candidate(bool free_path,
+                               NavMapDirection dir,
+                               int8_t *cell_x,
+                               int8_t *cell_y,
+                               bool *valid,
+                               bool *visited,
+                               const NavMapDebugSnapshot *map_debug)
+{
+    *cell_x = -1;
+    *cell_y = -1;
+    *valid = false;
+    *visited = false;
+
+    if (!free_path || map_debug == 0 || !map_debug->enabled) {
+        return;
+    }
+
+    int8_t candidate_x = map_debug->cell_x;
+    int8_t candidate_y = map_debug->cell_y;
+    map_neighbor_for_dir(map_debug->cell_x, map_debug->cell_y, dir, &candidate_x, &candidate_y);
+    *cell_x = candidate_x;
+    *cell_y = candidate_y;
+
+    if (!map_cell_is_inside(map_debug, candidate_x, candidate_y)) {
+        return;
+    }
+
+    NavMapCell cell = {0};
+    if (!nav_map_get_cell(candidate_x, candidate_y, &cell)) {
+        return;
+    }
+
+    *valid = true;
+    *visited = cell.visited;
+}
+
+static NavRecommendedAction recommend_map_prefer_unvisited(const RobotSensors *sensors)
+{
+    map_candidate_debug = (NavMapCandidateDebug){0};
+
+    if (sensors == 0 || !sensors->floor_rear_black) {
+        return recommend_right_hand_rule(sensors);
+    }
+
+    NavMapDebugSnapshot map_debug = {0};
+    nav_map_get_debug_snapshot(&map_debug);
+    if (!map_debug.enabled) {
+        return recommend_right_hand_rule(sensors);
+    }
+
+    const NavMapDirection right_dir = map_turn_right(map_debug.dir);
+    const NavMapDirection front_dir = map_debug.dir;
+    const NavMapDirection left_dir = map_turn_left(map_debug.dir);
+    const bool right_free = !wall_perception.wall_right;
+    const bool front_free = !wall_perception.wall_front;
+    const bool left_free = !wall_perception.wall_left;
+
+    fill_map_candidate(right_free,
+                       right_dir,
+                       &map_candidate_debug.right_cell_x,
+                       &map_candidate_debug.right_cell_y,
+                       &map_candidate_debug.right_cell_valid,
+                       &map_candidate_debug.right_cell_visited,
+                       &map_debug);
+    fill_map_candidate(front_free,
+                       front_dir,
+                       &map_candidate_debug.front_cell_x,
+                       &map_candidate_debug.front_cell_y,
+                       &map_candidate_debug.front_cell_valid,
+                       &map_candidate_debug.front_cell_visited,
+                       &map_debug);
+    fill_map_candidate(left_free,
+                       left_dir,
+                       &map_candidate_debug.left_cell_x,
+                       &map_candidate_debug.left_cell_y,
+                       &map_candidate_debug.left_cell_valid,
+                       &map_candidate_debug.left_cell_visited,
+                       &map_debug);
+
+    if (map_candidate_debug.right_cell_valid && !map_candidate_debug.right_cell_visited) {
+        map_candidate_debug.used_unvisited_preference = true;
+        return NAV_RECOMMENDED_SMOOTH_RIGHT;
+    }
+    if (map_candidate_debug.front_cell_valid && !map_candidate_debug.front_cell_visited) {
+        map_candidate_debug.used_unvisited_preference = true;
+        return NAV_RECOMMENDED_ADVANCE_LINE;
+    }
+    if (map_candidate_debug.left_cell_valid && !map_candidate_debug.left_cell_visited) {
+        map_candidate_debug.used_unvisited_preference = true;
+        return NAV_RECOMMENDED_SMOOTH_LEFT;
+    }
+
+    if (right_free && map_candidate_debug.right_cell_valid) {
+        return NAV_RECOMMENDED_SMOOTH_RIGHT;
+    }
+    if (front_free && map_candidate_debug.front_cell_valid) {
+        return NAV_RECOMMENDED_ADVANCE_LINE;
+    }
+    if (left_free && map_candidate_debug.left_cell_valid) {
+        return NAV_RECOMMENDED_SMOOTH_LEFT;
+    }
+
+    return NAV_RECOMMENDED_PIVOT_180;
+}
+
+NavRecommendedAction nav_core_recommend_basic_action(const RobotSensors *sensors)
+{
+    map_candidate_debug.used_unvisited_preference = false;
+    if (nav_policy == NAV_POLICY_MAP_PREFER_UNVISITED) {
+        return recommend_map_prefer_unvisited(sensors);
+    }
+
+    map_candidate_debug = (NavMapCandidateDebug){0};
+    return recommend_right_hand_rule(sensors);
+}
+
 NavState nav_core_state(void)
 {
     return current_state;
@@ -994,10 +1487,13 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
     if (sensors == 0) {
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         advance_phase = NAV_ADVANCE_PHASE_NONE;
+        approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
         clear_live_turn_debug();
         RobotCommand command = {NAV_PWM_STOP, NAV_PWM_STOP};
         return command;
     }
+
+    record_current_map_cell_if_ready(sensors);
 
     if (current_action == NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK) {
         if (advance_phase == NAV_ADVANCE_PHASE_NONE) {
@@ -1018,6 +1514,50 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
         smooth_phase = NAV_SMOOTH_PHASE_NONE;
         return advance_until_rear_black_command(sensors);
+    }
+
+    if (current_action == NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT) {
+        smooth_phase = NAV_SMOOTH_PHASE_NONE;
+        advance_phase = NAV_ADVANCE_PHASE_NONE;
+        turn_debug.approach_front_target_mm_q16 = NAV_APPROACH_FRONT_TARGET_MM_Q16;
+        turn_debug.approach_front_left_mm_q16 = sensors->ir_front_left_mm_q16;
+        turn_debug.approach_front_right_mm_q16 = sensors->ir_front_right_mm_q16;
+
+        if (approach_front_phase == NAV_APPROACH_FRONT_PHASE_NONE) {
+            set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_DRIVE);
+        }
+
+        if (approach_front_phase == NAV_APPROACH_FRONT_PHASE_DRIVE) {
+            if (approach_front_target_reached(sensors)) {
+                approach_front_done_reason = NAV_APPROACH_FRONT_DONE_TARGET_DISTANCE;
+                set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_BRAKE_SETTLE);
+            } else if (approach_front_elapsed_ms >= NAV_APPROACH_FRONT_TIMEOUT_MS) {
+                approach_front_done_reason = NAV_APPROACH_FRONT_DONE_TIMEOUT;
+                set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_BRAKE_SETTLE);
+            } else {
+                approach_front_elapsed_ms += 10;
+                return approach_front_wall_for_pivot_command(sensors);
+            }
+        }
+
+        if (approach_front_phase == NAV_APPROACH_FRONT_PHASE_BRAKE_SETTLE) {
+            if (approach_front_brake_elapsed_ms >= NAV_BRAKE_SETTLE_MS) {
+                return finish_approach_front_wall_for_pivot(sensors, approach_front_done_reason);
+            }
+
+            approach_front_brake_elapsed_ms += 10;
+            turn_debug.approach_front_phase = approach_front_phase;
+            turn_debug.approach_front_done_reason = approach_front_done_reason;
+            turn_debug.approach_front_elapsed_ms = approach_front_elapsed_ms;
+            turn_debug.approach_front_brake_elapsed_ms = approach_front_brake_elapsed_ms;
+            turn_debug.approach_front_base_left_pwm = NAV_APPROACH_FRONT_BASE_LEFT_PWM;
+            turn_debug.approach_front_base_right_pwm = NAV_APPROACH_FRONT_BASE_RIGHT_PWM;
+            turn_debug.approach_front_correction_pwm = 0;
+            RobotCommand command = {NAV_PWM_STOP, NAV_PWM_STOP};
+            return command;
+        }
+
+        return finish_approach_front_wall_for_pivot(sensors, approach_front_done_reason);
     }
 
     if (current_action == NAV_ACTION_SMOOTH_TURN_RIGHT) {
@@ -1086,6 +1626,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
     if (current_action == NAV_ACTION_PIVOT_TURN_RIGHT) {
         if (sensors->yaw_deg_q16 >= Q16_90_DEG - Q16_TURN_TOLERANCE_DEG) {
+            apply_completed_action_to_map(current_action);
             current_state = NAV_STATE_DONE;
             current_action = NAV_ACTION_NONE;
             smooth_phase = NAV_SMOOTH_PHASE_NONE;
@@ -1100,6 +1641,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
     if (current_action == NAV_ACTION_PIVOT_TURN_LEFT) {
         if (sensors->yaw_deg_q16 <= Q16_NEG_90_DEG + Q16_TURN_TOLERANCE_DEG) {
+            apply_completed_action_to_map(current_action);
             current_state = NAV_STATE_DONE;
             current_action = NAV_ACTION_NONE;
             smooth_phase = NAV_SMOOTH_PHASE_NONE;
@@ -1114,6 +1656,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
     if (current_action == NAV_ACTION_PIVOT_TURN_180) {
         if (abs_q16(sensors->yaw_deg_q16) >= Q16_180_DEG - Q16_TURN_TOLERANCE_DEG) {
+            apply_completed_action_to_map(current_action);
             current_state = NAV_STATE_DONE;
             current_action = NAV_ACTION_NONE;
             smooth_phase = NAV_SMOOTH_PHASE_NONE;
@@ -1128,6 +1671,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
     smooth_phase = NAV_SMOOTH_PHASE_NONE;
     advance_phase = NAV_ADVANCE_PHASE_NONE;
+    approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     clear_live_turn_debug();
     RobotCommand command = {NAV_PWM_STOP, NAV_PWM_STOP};
     return command;
