@@ -10,6 +10,10 @@
     "y_mm": 300,
     "yaw_deg": 0
   },
+  "special_cells": [
+    { "cell_x": 2, "cell_y": 1, "size_mm": 100 },
+    { "cell_x": 3, "cell_y": 1, "size_mm": 100 }
+  ],
   "walls": [
     { "cell_x": 0, "cell_y": 0, "dir": "N" },
     { "cell_x": 0, "cell_y": 1, "dir": "S" },

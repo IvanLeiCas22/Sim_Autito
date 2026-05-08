@@ -47,6 +47,8 @@ enum {
     NAV_ADVANCE_WALL_OUTPUT_LIMIT_PWM_MAX = 4000,
     NAV_ADVANCE_WALL_ERROR_DEADBAND_MM_DEFAULT = 0,
     NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE = 2,
+    NAV_SPECIAL_DETECT_MIN_MS = 100,
+    NAV_SPECIAL_DETECT_MAX_MS = 800,
     NAV_WALL_FRONT_THRESHOLD_MM_Q16 = 140 << 16,
     NAV_WALL_SIDE_THRESHOLD_MM_Q16 = 100 << 16,
     NAV_WALL_DIAG_THRESHOLD_MM_Q16 = 145 << 16,
@@ -71,9 +73,12 @@ static NavTurnDebug turn_debug = {0};
 static NavSmoothTurnConfig smooth_turn_config = {0};
 static NavWallPerception wall_perception = {0};
 static uint16_t smooth_post_yaw_elapsed_ms = 0;
+static uint16_t advance_elapsed_since_leave_start_line_ms = 0;
 static uint16_t approach_front_elapsed_ms = 0;
 static uint16_t approach_front_brake_elapsed_ms = 0;
 static NavApproachFrontDoneReason approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+static bool special_ignore_rear_until_white = false;
+static bool special_confirmed = false;
 static NavAdvanceGuidanceMode advance_guidance_mode = NAV_ADVANCE_GUIDANCE_WALL_ASSIST;
 static NavPolicy nav_policy = NAV_POLICY_RIGHT_HAND_RULE;
 static NavMapCandidateDebug map_candidate_debug = {0};
@@ -483,6 +488,13 @@ static void clear_live_turn_debug(void)
     turn_debug.smooth_post_yaw_elapsed_ms = 0;
     turn_debug.advance_phase = NAV_ADVANCE_PHASE_NONE;
     turn_debug.advance_done_reason = NAV_ADVANCE_DONE_NONE;
+    turn_debug.special_candidate = false;
+    turn_debug.special_confirmed = special_confirmed;
+    turn_debug.special_ignore_rear_until_white = special_ignore_rear_until_white;
+    turn_debug.advance_elapsed_since_leave_start_line_ms =
+        advance_elapsed_since_leave_start_line_ms;
+    turn_debug.special_detect_min_ms = NAV_SPECIAL_DETECT_MIN_MS;
+    turn_debug.special_detect_max_ms = NAV_SPECIAL_DETECT_MAX_MS;
     turn_debug.approach_front_phase = approach_front_phase;
     turn_debug.approach_front_done_reason = approach_front_done_reason;
     turn_debug.approach_front_target_mm_q16 = NAV_APPROACH_FRONT_TARGET_MM_Q16;
@@ -571,6 +583,13 @@ static void set_advance_phase(NavAdvancePhase phase)
     advance_phase = phase;
     turn_debug.advance_phase = phase;
     turn_debug.advance_done_reason = NAV_ADVANCE_DONE_NONE;
+    if (phase == NAV_ADVANCE_PHASE_WAIT_LEAVE_START_LINE) {
+        advance_elapsed_since_leave_start_line_ms = 0;
+        special_ignore_rear_until_white = false;
+        special_confirmed = false;
+    } else if (phase == NAV_ADVANCE_PHASE_SEEK_TARGET_LINE) {
+        advance_elapsed_since_leave_start_line_ms = 0;
+    }
 }
 
 static void set_approach_front_phase(NavApproachFrontPhase phase)
@@ -899,9 +918,12 @@ void nav_core_init(void)
     advance_phase = NAV_ADVANCE_PHASE_NONE;
     approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
+    advance_elapsed_since_leave_start_line_ms = 0;
     approach_front_elapsed_ms = 0;
     approach_front_brake_elapsed_ms = 0;
     approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    special_ignore_rear_until_white = false;
+    special_confirmed = false;
     map_walls_recorded_for_current_pose = false;
     map_initial_wall_snapshot_pending = false;
     nav_policy = NAV_POLICY_RIGHT_HAND_RULE;
@@ -931,9 +953,12 @@ void nav_core_start_advance_until_rear_black(void)
     advance_phase = NAV_ADVANCE_PHASE_NONE;
     approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
+    advance_elapsed_since_leave_start_line_ms = 0;
     approach_front_elapsed_ms = 0;
     approach_front_brake_elapsed_ms = 0;
     approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    special_ignore_rear_until_white = false;
+    special_confirmed = false;
     reset_turn_debug();
     reset_advance_wall_pd();
     PID_Reset(&advance_yaw_pid);
@@ -1105,9 +1130,12 @@ void nav_core_stop(void)
     advance_phase = NAV_ADVANCE_PHASE_NONE;
     approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
+    advance_elapsed_since_leave_start_line_ms = 0;
     approach_front_elapsed_ms = 0;
     approach_front_brake_elapsed_ms = 0;
     approach_front_done_reason = NAV_APPROACH_FRONT_DONE_NONE;
+    special_ignore_rear_until_white = false;
+    special_confirmed = false;
     map_walls_recorded_for_current_pose = false;
     map_initial_wall_snapshot_pending = false;
     map_candidate_debug = (NavMapCandidateDebug){0};
@@ -1507,8 +1535,38 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
             set_advance_phase(NAV_ADVANCE_PHASE_SEEK_TARGET_LINE);
         }
 
+        if (advance_phase == NAV_ADVANCE_PHASE_SEEK_TARGET_LINE) {
+            if (advance_elapsed_since_leave_start_line_ms < UINT16_MAX - 10) {
+                advance_elapsed_since_leave_start_line_ms += 10;
+            }
+
+            if (special_ignore_rear_until_white && !sensors->floor_rear_black) {
+                special_ignore_rear_until_white = false;
+            }
+
+            const bool special_candidate = sensors->floor_front_black && sensors->floor_rear_black;
+            const bool in_special_window =
+                advance_elapsed_since_leave_start_line_ms >= NAV_SPECIAL_DETECT_MIN_MS
+                && advance_elapsed_since_leave_start_line_ms <= NAV_SPECIAL_DETECT_MAX_MS;
+            special_confirmed = false;
+            if (special_candidate && !special_ignore_rear_until_white && in_special_window) {
+                (void)nav_map_mark_current_cell_special();
+                special_confirmed = true;
+                special_ignore_rear_until_white = true;
+            }
+
+            turn_debug.special_candidate = special_candidate;
+            turn_debug.special_confirmed = special_confirmed;
+            turn_debug.special_ignore_rear_until_white = special_ignore_rear_until_white;
+            turn_debug.advance_elapsed_since_leave_start_line_ms =
+                advance_elapsed_since_leave_start_line_ms;
+            turn_debug.special_detect_min_ms = NAV_SPECIAL_DETECT_MIN_MS;
+            turn_debug.special_detect_max_ms = NAV_SPECIAL_DETECT_MAX_MS;
+        }
+
         if (advance_phase == NAV_ADVANCE_PHASE_SEEK_TARGET_LINE
-            && sensors->floor_rear_black) {
+            && sensors->floor_rear_black
+            && !special_ignore_rear_until_white) {
             return finish_advance_until_rear_black(sensors);
         }
 

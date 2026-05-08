@@ -41,7 +41,7 @@ private:
     double leftMotorGain_ = 1.0;
     double rightMotorGain_ = 0.89;
     bool usePivotCenterCorrection_ = true;
-    double pivotCenterLocalXmm_ = -35.0;
+    double pivotCenterLocalXmm_ = -42.0;
     double pivotCenterLocalYmm_ = 0.0;
     bool lastMotionWasPivotLike_ = false;
 

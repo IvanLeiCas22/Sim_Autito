@@ -20,6 +20,7 @@
 #include <QGraphicsLineItem>
 #include <QGraphicsPolygonItem>
 #include <QGraphicsRectItem>
+#include <QGraphicsTextItem>
 #include <QGroupBox>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -882,6 +883,8 @@ void MainWindow::drawShadowMapOverlay()
     presentWallPen.setCapStyle(Qt::SquareCap);
     QPen absentWallPen(QColor(40, 160, 90, 95), 1.0, Qt::DashLine);
     absentWallPen.setCapStyle(Qt::SquareCap);
+    QPen specialCellPen(QColor(255, 210, 0, 230), 5.0);
+    specialCellPen.setJoinStyle(Qt::MiterJoin);
     QPen arrowPen(QColor(0, 70, 180, 230), 4.0);
     arrowPen.setCapStyle(Qt::RoundCap);
     const QBrush arrowBrush(QColor(0, 70, 180, 230));
@@ -926,6 +929,28 @@ void MainWindow::drawShadowMapOverlay()
                                         noPen,
                                         visitedBrush),
                          2.0);
+            }
+
+            if (cell.special_detected) {
+                const double inset = std::max(6.0, cellSizeMm * 0.08);
+                remember(scene->addRect(x0 + inset,
+                                        y0 + inset,
+                                        cellSizeMm - inset * 2.0,
+                                        cellSizeMm - inset * 2.0,
+                                        specialCellPen,
+                                        Qt::NoBrush),
+                         3.0);
+
+                QGraphicsTextItem *label = scene->addText("S");
+                QFont font = label->font();
+                font.setBold(true);
+                font.setPointSizeF(std::max(10.0, cellSizeMm * 0.13));
+                label->setFont(font);
+                label->setDefaultTextColor(QColor(255, 210, 0, 240));
+                const QRectF labelBounds = label->boundingRect();
+                label->setPos(x0 + cellSizeMm * 0.5 - labelBounds.width() * 0.5,
+                              y0 + cellSizeMm * 0.5 - labelBounds.height() * 0.5);
+                remember(label, 3.05);
             }
 
             if ((cell.walls_known & NAV_MAP_WALL_NORTH) != 0) {
@@ -1009,8 +1034,8 @@ void MainWindow::initializeIrSensors()
 void MainWindow::initializeFloorSensors()
 {
     floorSensors = {
-        {"floor_front", 35.0, 0.0},
-        {"floor_rear", -35.0, 0.0}
+        {"floor_front", 42.0, 0.0},
+        {"floor_rear", -42.0, 0.0}
     };
 }
 
@@ -1123,6 +1148,12 @@ void MainWindow::createTelemetryPanel()
     turnDebugSmoothPostYawElapsedValueLabel = new QLabel(panel);
     turnDebugAdvancePhaseValueLabel = new QLabel(panel);
     turnDebugAdvanceDoneReasonValueLabel = new QLabel(panel);
+    turnDebugSpecialCandidateValueLabel = new QLabel(panel);
+    turnDebugSpecialConfirmedValueLabel = new QLabel(panel);
+    turnDebugSpecialIgnoreRearValueLabel = new QLabel(panel);
+    turnDebugAdvanceElapsedSinceLeaveValueLabel = new QLabel(panel);
+    turnDebugSpecialDetectMinValueLabel = new QLabel(panel);
+    turnDebugSpecialDetectMaxValueLabel = new QLabel(panel);
     turnDebugApproachFrontPhaseValueLabel = new QLabel(panel);
     turnDebugApproachFrontDoneReasonValueLabel = new QLabel(panel);
     turnDebugApproachFrontTargetValueLabel = new QLabel(panel);
@@ -1218,6 +1249,7 @@ void MainWindow::createTelemetryPanel()
     mapCellYValueLabel = new QLabel(panel);
     mapDirValueLabel = new QLabel(panel);
     mapCurrentCellVisitedValueLabel = new QLabel(panel);
+    mapCurrentCellSpecialValueLabel = new QLabel(panel);
     mapCurrentCellWallsKnownValueLabel = new QLabel(panel);
     mapCurrentCellWallsPresentValueLabel = new QLabel(panel);
     mapLastPoseUpdateActionValueLabel = new QLabel(panel);
@@ -1225,6 +1257,8 @@ void MainWindow::createTelemetryPanel()
     mapInitialWallSnapshotPendingValueLabel = new QLabel(panel);
     mapUpdateCountValueLabel = new QLabel(panel);
     mapWallUpdateCountValueLabel = new QLabel(panel);
+    mapSpecialCellsFoundCountValueLabel = new QLabel(panel);
+    mapLastSpecialCellValueLabel = new QLabel(panel);
     mapOverlayEnabledValueLabel = new QLabel(panel);
     simLeftMotorGainValueLabel = new QLabel(panel);
     simRightMotorGainValueLabel = new QLabel(panel);
@@ -1275,6 +1309,12 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugSmoothPostYawElapsedValueLabel);
     configureTelemetryValueLabel(turnDebugAdvancePhaseValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceDoneReasonValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialCandidateValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialConfirmedValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialIgnoreRearValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceElapsedSinceLeaveValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialDetectMinValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialDetectMaxValueLabel);
     configureTelemetryValueLabel(turnDebugApproachFrontPhaseValueLabel);
     configureTelemetryValueLabel(turnDebugApproachFrontDoneReasonValueLabel);
     configureTelemetryValueLabel(turnDebugApproachFrontTargetValueLabel);
@@ -1370,6 +1410,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mapCellYValueLabel);
     configureTelemetryValueLabel(mapDirValueLabel);
     configureTelemetryValueLabel(mapCurrentCellVisitedValueLabel);
+    configureTelemetryValueLabel(mapCurrentCellSpecialValueLabel);
     configureTelemetryValueLabel(mapCurrentCellWallsKnownValueLabel);
     configureTelemetryValueLabel(mapCurrentCellWallsPresentValueLabel);
     configureTelemetryValueLabel(mapLastPoseUpdateActionValueLabel);
@@ -1377,6 +1418,8 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mapInitialWallSnapshotPendingValueLabel);
     configureTelemetryValueLabel(mapUpdateCountValueLabel);
     configureTelemetryValueLabel(mapWallUpdateCountValueLabel);
+    configureTelemetryValueLabel(mapSpecialCellsFoundCountValueLabel);
+    configureTelemetryValueLabel(mapLastSpecialCellValueLabel);
     configureTelemetryValueLabel(mapOverlayEnabledValueLabel);
     configureTelemetryValueLabel(simLeftMotorGainValueLabel);
     configureTelemetryValueLabel(simRightMotorGainValueLabel);
@@ -1433,6 +1476,13 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("smooth_post_yaw_elapsed_ms:", turnDebugSmoothPostYawElapsedValueLabel);
     layout->addRow("advance_phase:", turnDebugAdvancePhaseValueLabel);
     layout->addRow("advance_done_reason:", turnDebugAdvanceDoneReasonValueLabel);
+    layout->addRow("special_candidate:", turnDebugSpecialCandidateValueLabel);
+    layout->addRow("special_confirmed:", turnDebugSpecialConfirmedValueLabel);
+    layout->addRow("special_ignore_rear_until_white:", turnDebugSpecialIgnoreRearValueLabel);
+    layout->addRow("advance_elapsed_since_leave_start_line_ms:",
+                   turnDebugAdvanceElapsedSinceLeaveValueLabel);
+    layout->addRow("special_detect_min_ms:", turnDebugSpecialDetectMinValueLabel);
+    layout->addRow("special_detect_max_ms:", turnDebugSpecialDetectMaxValueLabel);
     layout->addRow("approach_front_phase:", turnDebugApproachFrontPhaseValueLabel);
     layout->addRow("approach_front_done_reason:", turnDebugApproachFrontDoneReasonValueLabel);
     layout->addRow("approach_front_target_mm:", turnDebugApproachFrontTargetValueLabel);
@@ -1548,6 +1598,7 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("logical_cell_y:", mapCellYValueLabel);
     layout->addRow("logical_dir:", mapDirValueLabel);
     layout->addRow("current_cell_visited:", mapCurrentCellVisitedValueLabel);
+    layout->addRow("current_cell_special:", mapCurrentCellSpecialValueLabel);
     layout->addRow("current_cell_walls_known:", mapCurrentCellWallsKnownValueLabel);
     layout->addRow("current_cell_walls_present:", mapCurrentCellWallsPresentValueLabel);
     layout->addRow("map_last_pose_update_action:", mapLastPoseUpdateActionValueLabel);
@@ -1555,6 +1606,8 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("map_initial_wall_snapshot_pending:", mapInitialWallSnapshotPendingValueLabel);
     layout->addRow("map_update_count:", mapUpdateCountValueLabel);
     layout->addRow("map_wall_update_count:", mapWallUpdateCountValueLabel);
+    layout->addRow("special_cells_found_count:", mapSpecialCellsFoundCountValueLabel);
+    layout->addRow("last_special_cell:", mapLastSpecialCellValueLabel);
     layout->addRow("map_overlay_enabled:", mapOverlayEnabledValueLabel);
 
     layout->addRow(motorTestTitle);
@@ -1758,6 +1811,26 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugAdvanceDoneReasonValueLabel) {
         turnDebugAdvanceDoneReasonValueLabel->setText(
             advanceDoneReasonText(turnDebug.advance_done_reason));
+    }
+    if (turnDebugSpecialCandidateValueLabel) {
+        turnDebugSpecialCandidateValueLabel->setText(turnDebug.special_candidate ? "true" : "false");
+    }
+    if (turnDebugSpecialConfirmedValueLabel) {
+        turnDebugSpecialConfirmedValueLabel->setText(turnDebug.special_confirmed ? "true" : "false");
+    }
+    if (turnDebugSpecialIgnoreRearValueLabel) {
+        turnDebugSpecialIgnoreRearValueLabel->setText(
+            turnDebug.special_ignore_rear_until_white ? "true" : "false");
+    }
+    if (turnDebugAdvanceElapsedSinceLeaveValueLabel) {
+        turnDebugAdvanceElapsedSinceLeaveValueLabel->setText(
+            QString::number(turnDebug.advance_elapsed_since_leave_start_line_ms));
+    }
+    if (turnDebugSpecialDetectMinValueLabel) {
+        turnDebugSpecialDetectMinValueLabel->setText(QString::number(turnDebug.special_detect_min_ms));
+    }
+    if (turnDebugSpecialDetectMaxValueLabel) {
+        turnDebugSpecialDetectMaxValueLabel->setText(QString::number(turnDebug.special_detect_max_ms));
     }
     if (turnDebugApproachFrontPhaseValueLabel) {
         turnDebugApproachFrontPhaseValueLabel->setText(
@@ -2128,6 +2201,10 @@ void MainWindow::updateTelemetryPanel()
         mapCurrentCellVisitedValueLabel->setText(
             mapDebug.current_cell_visited ? "true" : "false");
     }
+    if (mapCurrentCellSpecialValueLabel) {
+        mapCurrentCellSpecialValueLabel->setText(
+            mapDebug.current_cell_special ? "true" : "false");
+    }
     if (mapCurrentCellWallsKnownValueLabel) {
         mapCurrentCellWallsKnownValueLabel->setText(
             QString("0x%1 (%2)")
@@ -2157,6 +2234,18 @@ void MainWindow::updateTelemetryPanel()
     }
     if (mapWallUpdateCountValueLabel) {
         mapWallUpdateCountValueLabel->setText(QString::number(mapDebug.wall_update_count));
+    }
+    if (mapSpecialCellsFoundCountValueLabel) {
+        mapSpecialCellsFoundCountValueLabel->setText(
+            QString::number(mapDebug.special_cells_found_count));
+    }
+    if (mapLastSpecialCellValueLabel) {
+        if (mapDebug.last_special_cell_x >= 0 && mapDebug.last_special_cell_y >= 0) {
+            mapLastSpecialCellValueLabel->setText(
+                QString("(%1,%2)").arg(mapDebug.last_special_cell_x).arg(mapDebug.last_special_cell_y));
+        } else {
+            mapLastSpecialCellValueLabel->setText("none");
+        }
     }
     if (mapOverlayEnabledValueLabel) {
         mapOverlayEnabledValueLabel->setText(shadowMapOverlayEnabled ? "true" : "false");

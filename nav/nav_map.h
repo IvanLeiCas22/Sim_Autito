@@ -41,6 +41,7 @@ typedef struct NavMapCell {
     uint8_t walls_known;
     uint8_t walls_present;
     bool visited;
+    bool special_detected;
 } NavMapCell;
 
 typedef struct NavMapDebugSnapshot {
@@ -53,11 +54,15 @@ typedef struct NavMapDebugSnapshot {
     bool current_cell_visited;
     uint8_t current_cell_walls_known;
     uint8_t current_cell_walls_present;
+    bool current_cell_special;
     NavMapAction last_pose_update_action;
     NavMapAction last_wall_update_action;
     bool initial_wall_snapshot_pending;
     uint32_t update_count;
     uint32_t wall_update_count;
+    uint16_t special_cells_found_count;
+    int8_t last_special_cell_x;
+    int8_t last_special_cell_y;
 } NavMapDebugSnapshot;
 
 void nav_map_init(uint8_t width,
@@ -68,6 +73,7 @@ void nav_map_init(uint8_t width,
 void nav_map_set_pose(int8_t cell_x, int8_t cell_y, NavMapDirection dir);
 void nav_map_get_pose(int8_t *cell_x, int8_t *cell_y, NavMapDirection *dir);
 void nav_map_mark_visited_current(void);
+bool nav_map_mark_current_cell_special(void);
 void nav_map_update_current_cell_walls_from_relative(bool front, bool left, bool right);
 void nav_map_update_current_cell_walls_from_relative_for_action(bool front,
                                                                 bool left,

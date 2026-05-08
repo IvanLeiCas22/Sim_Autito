@@ -39,11 +39,14 @@ Este documento registra una configuracion funcional validada para probar navegac
 | Wall perception | side threshold | 100 mm |
 | Wall perception | diagonal threshold | 145 mm |
 | IR sensors | max range | 150 mm |
+| Floor sensors | front local x | +42.0 mm |
+| Floor sensors | rear local x | -42.0 mm |
+| Floor sensors | separation | 84.0 mm |
 | Smooth turn | target yaw-rate min | 60 deg/s |
 | Smooth turn | target yaw-rate default | 120 deg/s |
 | Smooth turn | target yaw-rate max | 120 deg/s |
 | Pivot center correction | enabled | true |
-| Pivot center correction | pivotCenterLocalXmm | -35.0 mm |
+| Pivot center correction | pivotCenterLocalXmm | -42.0 mm |
 | Pivot center correction | pivotCenterLocalYmm | 0.0 mm |
 
 ## Tuning runtime
@@ -75,7 +78,7 @@ Los cambios no se guardan en archivo. Al reiniciar el programa vuelven los defau
    - `sim_left_motor_gain = 1.000`
    - `sim_right_motor_gain = 0.890`
    - `sim_pivot_center_correction_enabled = true`
-   - `sim_pivot_center_local_x_mm = -35.0 mm`
+   - `sim_pivot_center_local_x_mm = -42.0 mm`
    - `sim_pivot_center_local_y_mm = 0.0 mm`
 
 2. Probar `ADVANCE_LINE`:

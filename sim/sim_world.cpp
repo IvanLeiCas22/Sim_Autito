@@ -232,8 +232,20 @@ bool SimWorld::isBoundaryTapeAt(double x_mm, double y_mm) const
 
 bool SimWorld::isTargetTapeAt(double x_mm, double y_mm) const
 {
-    (void)x_mm;
-    (void)y_mm;
+    for (const SpecialCell &cell : specialCells_) {
+        if (!isInside(cell.row, cell.col)) {
+            continue;
+        }
+
+        const double size = cell.size_mm > 0.0 ? cell.size_mm : kDefaultSpecialCellSizeMm;
+        const double halfSize = size / 2.0;
+        const double centerX = (cell.col + 0.5) * cellSizeMm_;
+        const double centerY = (cell.row + 0.5) * cellSizeMm_;
+        if (std::abs(x_mm - centerX) <= halfSize && std::abs(y_mm - centerY) <= halfSize) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -258,12 +270,27 @@ std::vector<SimRect> SimWorld::boundaryTapeRects() const
 
 std::vector<SimRect> SimWorld::targetTapeRects() const
 {
-    return {};
+    std::vector<SimRect> rects;
+    for (const SpecialCell &cell : specialCells_) {
+        if (!isInside(cell.row, cell.col)) {
+            continue;
+        }
+
+        const double size = cell.size_mm > 0.0 ? cell.size_mm : kDefaultSpecialCellSizeMm;
+        const double centerX = (cell.col + 0.5) * cellSizeMm_;
+        const double centerY = (cell.row + 0.5) * cellSizeMm_;
+        rects.push_back({centerX - size / 2.0, centerY - size / 2.0, size, size});
+    }
+
+    return rects;
 }
 
 std::vector<SimRect> SimWorld::blackTapeRects() const
 {
-    return boundaryTapeRects();
+    std::vector<SimRect> rects = boundaryTapeRects();
+    const std::vector<SimRect> targets = targetTapeRects();
+    rects.insert(rects.end(), targets.begin(), targets.end());
+    return rects;
 }
 
 void SimWorld::initializeDefaultMaze()
@@ -274,6 +301,7 @@ void SimWorld::initializeDefaultMaze()
     startXMm_ = 100.0;
     startYMm_ = 100.0;
     startYawDeg_ = 0.0;
+    specialCells_.clear();
     addBoundaryWalls();
 
     // Temporary internal walls to validate rendering before JSON loading exists.
@@ -376,6 +404,25 @@ bool SimWorld::loadFromJsonFile(const QString &path)
         addWall(row, col, dir);
     }
 
+    specialCells_.clear();
+    const QJsonArray specialCells = root.value("special_cells").toArray();
+    for (const QJsonValue &specialValue : specialCells) {
+        const QJsonObject special = specialValue.toObject();
+        const int col = special.contains("cell_x")
+            ? special.value("cell_x").toInt(-1)
+            : special.value("col").toInt(-1);
+        const int row = special.contains("cell_y")
+            ? special.value("cell_y").toInt(-1)
+            : special.value("row").toInt(-1);
+        const double sizeMm = special.value("size_mm").toDouble(kDefaultSpecialCellSizeMm);
+        if (!isInside(row, col) || sizeMm <= 0.0) {
+            qWarning() << "Skipping special cell outside maze or invalid size";
+            continue;
+        }
+
+        specialCells_.push_back({row, col, sizeMm});
+    }
+
     addBoundaryWalls();
     return true;
 }
@@ -386,6 +433,7 @@ void SimWorld::resizeMaze(int rows, int cols, double cell_size_mm)
     cols_ = cols;
     cellSizeMm_ = cell_size_mm;
     cells_.assign(rows_ * cols_, Cell{});
+    specialCells_.clear();
 }
 
 void SimWorld::addBoundaryWalls()

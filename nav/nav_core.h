@@ -176,6 +176,12 @@ typedef struct NavTurnDebug {
     uint16_t smooth_post_yaw_elapsed_ms;
     NavAdvancePhase advance_phase;
     NavAdvanceDoneReason advance_done_reason;
+    bool special_candidate;
+    bool special_confirmed;
+    bool special_ignore_rear_until_white;
+    uint16_t advance_elapsed_since_leave_start_line_ms;
+    uint16_t special_detect_min_ms;
+    uint16_t special_detect_max_ms;
     NavApproachFrontPhase approach_front_phase;
     NavApproachFrontDoneReason approach_front_done_reason;
     q16_16_t approach_front_target_mm_q16;

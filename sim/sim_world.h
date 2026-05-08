@@ -79,9 +79,16 @@ public:
 private:
     static constexpr double kCellSizeMm = 200.0;
     static constexpr int kWallDirCount = 4;
+    static constexpr double kDefaultSpecialCellSizeMm = 100.0;
 
     struct Cell {
         std::array<bool, kWallDirCount> walls = {};
+    };
+
+    struct SpecialCell {
+        int row = 0;
+        int col = 0;
+        double size_mm = kDefaultSpecialCellSizeMm;
     };
 
     void initializeDefaultMaze();
@@ -98,6 +105,7 @@ private:
     int neighborCol(int col, WallDir dir) const;
 
     std::vector<Cell> cells_;
+    std::vector<SpecialCell> specialCells_;
     QString mazeName_ = "default";
     QString mazeFilePath_;
     int rows_ = 8;

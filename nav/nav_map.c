@@ -11,6 +11,9 @@ typedef struct NavMapState {
     NavMapAction last_wall_update_action;
     uint32_t update_count;
     uint32_t wall_update_count;
+    uint16_t special_cells_found_count;
+    int8_t last_special_cell_x;
+    int8_t last_special_cell_y;
     NavMapCell cells[NAV_MAP_MAX_HEIGHT][NAV_MAP_MAX_WIDTH];
 } NavMapState;
 
@@ -143,6 +146,9 @@ void nav_map_init(uint8_t width,
     map_state.last_wall_update_action = NAV_MAP_ACTION_NONE;
     map_state.update_count = 0;
     map_state.wall_update_count = 0;
+    map_state.special_cells_found_count = 0;
+    map_state.last_special_cell_x = -1;
+    map_state.last_special_cell_y = -1;
 }
 
 void nav_map_set_pose(int8_t cell_x, int8_t cell_y, NavMapDirection dir)
@@ -188,6 +194,24 @@ void nav_map_mark_visited_current(void)
     }
 
     map_state.cells[(uint8_t)map_state.cell_y][(uint8_t)map_state.cell_x].visited = true;
+}
+
+bool nav_map_mark_current_cell_special(void)
+{
+    if (!is_inside(map_state.cell_x, map_state.cell_y)) {
+        return false;
+    }
+
+    NavMapCell *cell = &map_state.cells[(uint8_t)map_state.cell_y][(uint8_t)map_state.cell_x];
+    cell->visited = true;
+    const bool newlyDetected = !cell->special_detected;
+    if (newlyDetected) {
+        cell->special_detected = true;
+        ++map_state.special_cells_found_count;
+    }
+    map_state.last_special_cell_x = map_state.cell_x;
+    map_state.last_special_cell_y = map_state.cell_y;
+    return newlyDetected;
 }
 
 void nav_map_update_current_cell_walls_from_relative(bool front, bool left, bool right)
@@ -295,5 +319,9 @@ void nav_map_get_debug_snapshot(NavMapDebugSnapshot *snapshot)
         snapshot->current_cell_visited = current.visited;
         snapshot->current_cell_walls_known = current.walls_known;
         snapshot->current_cell_walls_present = current.walls_present;
+        snapshot->current_cell_special = current.special_detected;
     }
+    snapshot->special_cells_found_count = map_state.special_cells_found_count;
+    snapshot->last_special_cell_x = map_state.last_special_cell_x;
+    snapshot->last_special_cell_y = map_state.last_special_cell_y;
 }

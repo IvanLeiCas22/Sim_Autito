@@ -163,6 +163,12 @@ private:
     QLabel *turnDebugSmoothPostYawElapsedValueLabel = nullptr;
     QLabel *turnDebugAdvancePhaseValueLabel = nullptr;
     QLabel *turnDebugAdvanceDoneReasonValueLabel = nullptr;
+    QLabel *turnDebugSpecialCandidateValueLabel = nullptr;
+    QLabel *turnDebugSpecialConfirmedValueLabel = nullptr;
+    QLabel *turnDebugSpecialIgnoreRearValueLabel = nullptr;
+    QLabel *turnDebugAdvanceElapsedSinceLeaveValueLabel = nullptr;
+    QLabel *turnDebugSpecialDetectMinValueLabel = nullptr;
+    QLabel *turnDebugSpecialDetectMaxValueLabel = nullptr;
     QLabel *turnDebugApproachFrontPhaseValueLabel = nullptr;
     QLabel *turnDebugApproachFrontDoneReasonValueLabel = nullptr;
     QLabel *turnDebugApproachFrontTargetValueLabel = nullptr;
@@ -258,6 +264,7 @@ private:
     QLabel *mapCellYValueLabel = nullptr;
     QLabel *mapDirValueLabel = nullptr;
     QLabel *mapCurrentCellVisitedValueLabel = nullptr;
+    QLabel *mapCurrentCellSpecialValueLabel = nullptr;
     QLabel *mapCurrentCellWallsKnownValueLabel = nullptr;
     QLabel *mapCurrentCellWallsPresentValueLabel = nullptr;
     QLabel *mapLastPoseUpdateActionValueLabel = nullptr;
@@ -265,6 +272,8 @@ private:
     QLabel *mapInitialWallSnapshotPendingValueLabel = nullptr;
     QLabel *mapUpdateCountValueLabel = nullptr;
     QLabel *mapWallUpdateCountValueLabel = nullptr;
+    QLabel *mapSpecialCellsFoundCountValueLabel = nullptr;
+    QLabel *mapLastSpecialCellValueLabel = nullptr;
     QLabel *mapOverlayEnabledValueLabel = nullptr;
     QLabel *simLeftMotorGainValueLabel = nullptr;
     QLabel *simRightMotorGainValueLabel = nullptr;
