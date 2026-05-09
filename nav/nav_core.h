@@ -115,7 +115,8 @@ typedef enum NavRecommendedAction {
 
 typedef enum NavPolicy {
     NAV_POLICY_RIGHT_HAND_RULE = 0,
-    NAV_POLICY_MAP_PREFER_UNVISITED
+    NAV_POLICY_MAP_PREFER_UNVISITED,
+    NAV_POLICY_SMART_RECOGNITION
 } NavPolicy;
 
 enum {
@@ -144,12 +145,21 @@ typedef struct NavPlanDebugSnapshot {
 typedef enum NavRouteStatus {
     NAV_ROUTE_STATUS_IDLE = 0,
     NAV_ROUTE_STATUS_FOUND,
+    NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE,
     NAV_ROUTE_STATUS_NO_PATH,
+    NAV_ROUTE_STATUS_NO_FRONTIER,
     NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS,
     NAV_ROUTE_STATUS_TARGET_NOT_VISITED,
     NAV_ROUTE_STATUS_ROUTE_TOO_LONG,
     NAV_ROUTE_STATUS_QUEUE_OVERFLOW
 } NavRouteStatus;
+
+typedef enum NavFrontierExitRelative {
+    NAV_FRONTIER_EXIT_NONE = 0,
+    NAV_FRONTIER_EXIT_FRONT,
+    NAV_FRONTIER_EXIT_RIGHT,
+    NAV_FRONTIER_EXIT_LEFT
+} NavFrontierExitRelative;
 
 typedef struct NavRouteDebugSnapshot {
     NavRouteStatus status;
@@ -163,6 +173,15 @@ typedef struct NavRouteDebugSnapshot {
     NavPlanAction first_action;
     NavPlanAction last_action;
     bool loaded_into_plan_queue;
+    bool frontier_mode;
+    int8_t frontier_target_cell_x;
+    int8_t frontier_target_cell_y;
+    NavMapDirection frontier_target_dir;
+    NavMapDirection frontier_exit_dir_absolute;
+    NavFrontierExitRelative frontier_exit_relative;
+    int8_t frontier_neighbor_cell_x;
+    int8_t frontier_neighbor_cell_y;
+    uint16_t frontier_count_found;
 } NavRouteDebugSnapshot;
 
 typedef struct NavMapCandidateDebug {
@@ -374,6 +393,7 @@ NavPlanAction nav_core_plan_peek_next(void);
 NavPlanAction nav_core_plan_pop_next(void);
 void nav_core_plan_debug_snapshot(NavPlanDebugSnapshot *snapshot);
 NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target_cell_y);
+NavRouteStatus nav_core_route_plan_to_nearest_frontier(void);
 void nav_core_get_route_debug(NavRouteDebugSnapshot *snapshot);
 void nav_core_route_clear_debug(void);
 NavState nav_core_state(void);

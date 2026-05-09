@@ -79,7 +79,7 @@ public:
 private:
     static constexpr double kCellSizeMm = 200.0;
     static constexpr int kWallDirCount = 4;
-    static constexpr double kDefaultSpecialCellSizeMm = 100.0;
+    static constexpr double kDefaultSpecialCellSizeMm = 120.0;
 
     struct Cell {
         std::array<bool, kWallDirCount> walls = {};

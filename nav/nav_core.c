@@ -725,6 +725,13 @@ void nav_core_route_clear_debug(void)
     route_debug.start_dir = NAV_DIR_NORTH;
     route_debug.first_action = NAV_PLAN_ACTION_NONE;
     route_debug.last_action = NAV_PLAN_ACTION_NONE;
+    route_debug.frontier_target_cell_x = -1;
+    route_debug.frontier_target_cell_y = -1;
+    route_debug.frontier_target_dir = NAV_DIR_NORTH;
+    route_debug.frontier_exit_dir_absolute = NAV_DIR_NORTH;
+    route_debug.frontier_exit_relative = NAV_FRONTIER_EXIT_NONE;
+    route_debug.frontier_neighbor_cell_x = -1;
+    route_debug.frontier_neighbor_cell_y = -1;
 }
 
 void nav_core_get_route_debug(NavRouteDebugSnapshot *snapshot)
@@ -834,6 +841,163 @@ static bool route_next_state_for_action(int8_t cell_x,
     map_neighbor_for_dir(cell_x, cell_y, move_dir, next_x, next_y);
     *next_dir = move_dir;
     return true;
+}
+
+static bool route_cell_has_known_open_exit_to_unvisited(int8_t cell_x,
+                                                        int8_t cell_y,
+                                                        NavMapDirection exit_dir,
+                                                        const NavMapDebugSnapshot *map_debug,
+                                                        int8_t *neighbor_x,
+                                                        int8_t *neighbor_y)
+{
+    int8_t next_x = cell_x;
+    int8_t next_y = cell_y;
+    map_neighbor_for_dir(cell_x, cell_y, exit_dir, &next_x, &next_y);
+    if (!map_cell_is_inside(map_debug, next_x, next_y)) {
+        return false;
+    }
+
+    NavMapCell cell = {0};
+    if (!nav_map_get_cell(cell_x, cell_y, &cell) || !cell.visited) {
+        return false;
+    }
+
+    const uint8_t bit = route_wall_bit(exit_dir);
+    if ((cell.walls_known & bit) == 0 || (cell.walls_present & bit) != 0) {
+        return false;
+    }
+
+    NavMapCell neighbor = {0};
+    if (!nav_map_get_cell(next_x, next_y, &neighbor) || neighbor.visited) {
+        return false;
+    }
+
+    if (neighbor_x != 0) {
+        *neighbor_x = next_x;
+    }
+    if (neighbor_y != 0) {
+        *neighbor_y = next_y;
+    }
+    return true;
+}
+
+static bool route_state_is_usable_frontier(int8_t cell_x,
+                                           int8_t cell_y,
+                                           NavMapDirection dir,
+                                           const NavMapDebugSnapshot *map_debug,
+                                           NavMapDirection *exit_dir_absolute,
+                                           NavFrontierExitRelative *exit_relative,
+                                           int8_t *neighbor_x,
+                                           int8_t *neighbor_y)
+{
+    const NavMapDirection dirs[] = {
+        map_turn_right(dir),
+        dir,
+        map_turn_left(dir)
+    };
+    const NavFrontierExitRelative relatives[] = {
+        NAV_FRONTIER_EXIT_RIGHT,
+        NAV_FRONTIER_EXIT_FRONT,
+        NAV_FRONTIER_EXIT_LEFT
+    };
+
+    for (uint8_t i = 0; i < 3; ++i) {
+        int8_t next_x = -1;
+        int8_t next_y = -1;
+        if (!route_cell_has_known_open_exit_to_unvisited(cell_x,
+                                                         cell_y,
+                                                         dirs[i],
+                                                         map_debug,
+                                                         &next_x,
+                                                         &next_y)) {
+            continue;
+        }
+
+        if (exit_dir_absolute != 0) {
+            *exit_dir_absolute = dirs[i];
+        }
+        if (exit_relative != 0) {
+            *exit_relative = relatives[i];
+        }
+        if (neighbor_x != 0) {
+            *neighbor_x = next_x;
+        }
+        if (neighbor_y != 0) {
+            *neighbor_y = next_y;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+static uint16_t route_count_visited_frontier_cells(const NavMapDebugSnapshot *map_debug)
+{
+    uint16_t count = 0;
+    for (int8_t y = 0; y < (int8_t)map_debug->height; ++y) {
+        for (int8_t x = 0; x < (int8_t)map_debug->width; ++x) {
+            NavMapCell cell = {0};
+            if (!nav_map_get_cell(x, y, &cell) || !cell.visited) {
+                continue;
+            }
+
+            bool is_frontier = false;
+            for (uint8_t dir = 0; dir < 4; ++dir) {
+                if (route_cell_has_known_open_exit_to_unvisited(x,
+                                                                y,
+                                                                (NavMapDirection)dir,
+                                                                map_debug,
+                                                                0,
+                                                                0)) {
+                    is_frontier = true;
+                    break;
+                }
+            }
+            if (is_frontier) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+static NavRouteStatus route_load_plan_from_found_state(int16_t found_index,
+                                                       uint16_t start_index,
+                                                       const int16_t *parent,
+                                                       const NavPlanAction *parent_action)
+{
+    NavPlanAction reverse_actions[NAV_PLAN_MAX_ACTIONS];
+    uint8_t route_length = 0;
+    int16_t cursor = found_index;
+    while (cursor >= 0 && cursor != (int16_t)start_index) {
+        if (route_length >= NAV_PLAN_MAX_ACTIONS) {
+            route_debug.status = NAV_ROUTE_STATUS_ROUTE_TOO_LONG;
+            route_debug.route_length = route_length;
+            return route_debug.status;
+        }
+
+        reverse_actions[route_length++] = parent_action[cursor];
+        cursor = parent[cursor];
+    }
+
+    for (uint8_t i = 0; i < route_length; ++i) {
+        const NavPlanAction action = reverse_actions[route_length - 1u - i];
+        if (!nav_core_plan_push(action)) {
+            route_debug.status = NAV_ROUTE_STATUS_QUEUE_OVERFLOW;
+            route_debug.route_length = i;
+            return route_debug.status;
+        }
+    }
+
+    route_debug.route_length = route_length;
+    route_debug.loaded_into_plan_queue = route_length > 0;
+    route_debug.first_action = route_length > 0
+        ? reverse_actions[route_length - 1u]
+        : NAV_PLAN_ACTION_NONE;
+    route_debug.last_action = route_length > 0
+        ? reverse_actions[0]
+        : NAV_PLAN_ACTION_NONE;
+    return NAV_ROUTE_STATUS_FOUND;
 }
 
 NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target_cell_y)
@@ -946,38 +1110,149 @@ NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target
         return route_debug.status;
     }
 
-    NavPlanAction reverse_actions[NAV_PLAN_MAX_ACTIONS];
-    uint8_t route_length = 0;
-    int16_t cursor = found_index;
-    while (cursor >= 0 && cursor != (int16_t)start_index) {
-        if (route_length >= NAV_PLAN_MAX_ACTIONS) {
-            route_debug.status = NAV_ROUTE_STATUS_ROUTE_TOO_LONG;
-            route_debug.route_length = route_length;
-            return route_debug.status;
-        }
-
-        reverse_actions[route_length++] = parent_action[cursor];
-        cursor = parent[cursor];
+    route_debug.status =
+        route_load_plan_from_found_state(found_index, start_index, parent, parent_action);
+    if (route_debug.status != NAV_ROUTE_STATUS_FOUND) {
+        return route_debug.status;
     }
-
-    for (uint8_t i = 0; i < route_length; ++i) {
-        const NavPlanAction action = reverse_actions[route_length - 1u - i];
-        if (!nav_core_plan_push(action)) {
-            route_debug.status = NAV_ROUTE_STATUS_QUEUE_OVERFLOW;
-            route_debug.route_length = i;
-            return route_debug.status;
-        }
-    }
-
-    route_debug.status = NAV_ROUTE_STATUS_FOUND;
-    route_debug.route_length = route_length;
     route_debug.loaded_into_plan_queue = true;
-    route_debug.first_action = route_length > 0
-        ? reverse_actions[route_length - 1u]
-        : NAV_PLAN_ACTION_NONE;
-    route_debug.last_action = route_length > 0
-        ? reverse_actions[0]
-        : NAV_PLAN_ACTION_NONE;
+    return route_debug.status;
+}
+
+NavRouteStatus nav_core_route_plan_to_nearest_frontier(void)
+{
+    nav_core_route_clear_debug();
+    nav_core_plan_clear();
+    route_debug.frontier_mode = true;
+
+    NavMapDebugSnapshot map_debug = {0};
+    nav_map_get_debug_snapshot(&map_debug);
+    route_debug.start_cell_x = map_debug.cell_x;
+    route_debug.start_cell_y = map_debug.cell_y;
+    route_debug.start_dir = map_debug.dir;
+
+    if (!map_debug.enabled
+        || !map_cell_is_inside(&map_debug, map_debug.cell_x, map_debug.cell_y)) {
+        route_debug.status = NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
+        return route_debug.status;
+    }
+
+    route_debug.frontier_count_found = route_count_visited_frontier_cells(&map_debug);
+    if (route_debug.frontier_count_found == 0) {
+        route_debug.status = NAV_ROUTE_STATUS_NO_FRONTIER;
+        return route_debug.status;
+    }
+
+    enum {
+        ROUTE_MAX_STATES = NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT * 4
+    };
+
+    bool visited[ROUTE_MAX_STATES] = {false};
+    int16_t parent[ROUTE_MAX_STATES];
+    NavPlanAction parent_action[ROUTE_MAX_STATES];
+    uint16_t queue[ROUTE_MAX_STATES];
+
+    for (uint16_t i = 0; i < ROUTE_MAX_STATES; ++i) {
+        parent[i] = -1;
+        parent_action[i] = NAV_PLAN_ACTION_NONE;
+    }
+
+    const uint16_t start_index =
+        route_state_index(map_debug.cell_x, map_debug.cell_y, map_debug.dir, map_debug.width);
+    visited[start_index] = true;
+    queue[0] = start_index;
+    uint16_t queue_head = 0;
+    uint16_t queue_tail = 1;
+    int16_t found_index = -1;
+
+    while (queue_head < queue_tail) {
+        const uint16_t current_index = queue[queue_head++];
+        ++route_debug.expanded_states;
+
+        int8_t cell_x = 0;
+        int8_t cell_y = 0;
+        NavMapDirection dir = NAV_DIR_NORTH;
+        route_decode_state(current_index, map_debug.width, &cell_x, &cell_y, &dir);
+
+        NavMapDirection exit_dir = NAV_DIR_NORTH;
+        NavFrontierExitRelative exit_relative = NAV_FRONTIER_EXIT_NONE;
+        int8_t neighbor_x = -1;
+        int8_t neighbor_y = -1;
+        if (route_state_is_usable_frontier(cell_x,
+                                           cell_y,
+                                           dir,
+                                           &map_debug,
+                                           &exit_dir,
+                                           &exit_relative,
+                                           &neighbor_x,
+                                           &neighbor_y)) {
+            found_index = (int16_t)current_index;
+            route_debug.frontier_target_cell_x = cell_x;
+            route_debug.frontier_target_cell_y = cell_y;
+            route_debug.frontier_target_dir = dir;
+            route_debug.frontier_exit_dir_absolute = exit_dir;
+            route_debug.frontier_exit_relative = exit_relative;
+            route_debug.frontier_neighbor_cell_x = neighbor_x;
+            route_debug.frontier_neighbor_cell_y = neighbor_y;
+            route_debug.target_cell_x = cell_x;
+            route_debug.target_cell_y = cell_y;
+            break;
+        }
+
+        const NavPlanAction actions[] = {
+            NAV_PLAN_ACTION_ADVANCE_LINE,
+            NAV_PLAN_ACTION_SMOOTH_RIGHT,
+            NAV_PLAN_ACTION_SMOOTH_LEFT,
+            NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
+        };
+        for (uint8_t i = 0; i < 4; ++i) {
+            if (parent_action[current_index] == NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
+                && (actions[i] == NAV_PLAN_ACTION_SMOOTH_RIGHT
+                    || actions[i] == NAV_PLAN_ACTION_SMOOTH_LEFT)) {
+                continue;
+            }
+
+            int8_t next_x = 0;
+            int8_t next_y = 0;
+            NavMapDirection next_dir = NAV_DIR_NORTH;
+            if (!route_next_state_for_action(cell_x,
+                                             cell_y,
+                                             dir,
+                                             actions[i],
+                                             &map_debug,
+                                             &next_x,
+                                             &next_y,
+                                             &next_dir)) {
+                continue;
+            }
+
+            const uint16_t next_index =
+                route_state_index(next_x, next_y, next_dir, map_debug.width);
+            if (visited[next_index]) {
+                continue;
+            }
+
+            visited[next_index] = true;
+            parent[next_index] = (int16_t)current_index;
+            parent_action[next_index] = actions[i];
+            queue[queue_tail++] = next_index;
+        }
+    }
+
+    if (found_index < 0) {
+        route_debug.status = NAV_ROUTE_STATUS_NO_FRONTIER;
+        return route_debug.status;
+    }
+
+    route_debug.status =
+        route_load_plan_from_found_state(found_index, start_index, parent, parent_action);
+    if (route_debug.status != NAV_ROUTE_STATUS_FOUND) {
+        return route_debug.status;
+    }
+    if (route_debug.route_length == 0) {
+        route_debug.status = NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE;
+        route_debug.loaded_into_plan_queue = false;
+    }
     return route_debug.status;
 }
 
@@ -1966,7 +2241,9 @@ bool nav_core_get_map_cell(int8_t cell_x, int8_t cell_y, NavMapCell *cell)
 
 void nav_core_set_policy(NavPolicy policy)
 {
-    if (policy != NAV_POLICY_RIGHT_HAND_RULE && policy != NAV_POLICY_MAP_PREFER_UNVISITED) {
+    if (policy != NAV_POLICY_RIGHT_HAND_RULE
+        && policy != NAV_POLICY_MAP_PREFER_UNVISITED
+        && policy != NAV_POLICY_SMART_RECOGNITION) {
         policy = NAV_POLICY_RIGHT_HAND_RULE;
     }
 
@@ -2121,7 +2398,8 @@ static NavRecommendedAction recommend_map_prefer_unvisited(const RobotSensors *s
 NavRecommendedAction nav_core_recommend_basic_action(const RobotSensors *sensors)
 {
     map_candidate_debug.used_unvisited_preference = false;
-    if (nav_policy == NAV_POLICY_MAP_PREFER_UNVISITED) {
+    if (nav_policy == NAV_POLICY_MAP_PREFER_UNVISITED
+        || nav_policy == NAV_POLICY_SMART_RECOGNITION) {
         return recommend_map_prefer_unvisited(sensors);
     }
 

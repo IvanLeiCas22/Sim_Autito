@@ -42,6 +42,7 @@ Este documento registra una configuracion funcional validada para probar navegac
 | Floor sensors | front local x | +42.0 mm |
 | Floor sensors | rear local x | -42.0 mm |
 | Floor sensors | separation | 84.0 mm |
+| Special cell marker | default/recommended size | 120x120 mm |
 | Smooth turn | target yaw-rate min | 60 deg/s |
 | Smooth turn | target yaw-rate default | 120 deg/s |
 | Smooth turn | target yaw-rate max | 120 deg/s |
@@ -111,6 +112,7 @@ Los cambios no se guardan en archivo. Al reiniciar el programa vuelven los defau
 - `smooth_target_yaw_rate_deg_s`: afecta radio de giro y bases PWM recalculadas.
 - `rightMotorGain`: si cambia el desbalance del simulador, hay que recalibrar bases de avance y smooth turns.
 - `pivotCenterLocalXmm/Ymm`: cambiarlo modifica donde queda fijo el robot durante pivots, aunque no cambia el origen visual.
+- `Special cell marker size`: con sensores de suelo separados 84 mm, 100x100 mm deja una ventana de deteccion simultanea demasiado chica; 120x120 mm aumenta la robustez y sigue dejando separacion razonable respecto de las cintas de frontera.
 
 ## Notas
 

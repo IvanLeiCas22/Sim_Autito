@@ -59,6 +59,16 @@ public:
         FrontWall
     };
 
+    enum class SmartRecognitionState {
+        Idle,
+        LocalUnvisited,
+        PlanToFrontier,
+        ExecutingFrontierRoute,
+        FrontierAlreadyHere,
+        NoFrontier,
+        Error
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -85,6 +95,7 @@ private:
     void adjustSmoothTargetYawRate(int delta_deg_s);
     void promptSmoothTargetYawRate();
     void promptRoutePlanToCell();
+    void planRouteToNearestFrontier();
     void toggleTestSequence();
     void cancelTestSequence();
     void startCurrentTestSequenceStep();
@@ -321,6 +332,16 @@ private:
     QLabel *routeFirstActionValueLabel = nullptr;
     QLabel *routeLastActionValueLabel = nullptr;
     QLabel *routeLoadedIntoPlanQueueValueLabel = nullptr;
+    QLabel *frontierRouteStatusValueLabel = nullptr;
+    QLabel *frontierTargetCellValueLabel = nullptr;
+    QLabel *frontierTargetDirValueLabel = nullptr;
+    QLabel *frontierExitDirAbsoluteValueLabel = nullptr;
+    QLabel *frontierExitRelativeValueLabel = nullptr;
+    QLabel *frontierNeighborCellValueLabel = nullptr;
+    QLabel *frontierRouteLengthValueLabel = nullptr;
+    QLabel *frontierExpandedStatesValueLabel = nullptr;
+    QLabel *frontierLoadedIntoPlanQueueValueLabel = nullptr;
+    QLabel *frontierCountFoundValueLabel = nullptr;
     QLabel *routeExecuteStatusValueLabel = nullptr;
     QLabel *routeStartPhysicalValidValueLabel = nullptr;
     QLabel *routeStartFloorRearBlackValueLabel = nullptr;
@@ -344,6 +365,12 @@ private:
     QLabel *navMapCandidateFrontVisitedValueLabel = nullptr;
     QLabel *navMapCandidateLeftVisitedValueLabel = nullptr;
     QLabel *navMapUsedUnvisitedPreferenceValueLabel = nullptr;
+    QLabel *smartRecognitionStateValueLabel = nullptr;
+    QLabel *smartLastFrontierStatusValueLabel = nullptr;
+    QLabel *smartFrontierPlanRequestedCountValueLabel = nullptr;
+    QLabel *smartFrontierRoutesExecutedCountValueLabel = nullptr;
+    QLabel *smartNoFrontierCountValueLabel = nullptr;
+    QLabel *smartLocalActionValueLabel = nullptr;
     QLabel *mapEnabledValueLabel = nullptr;
     QLabel *mapWidthValueLabel = nullptr;
     QLabel *mapHeightValueLabel = nullptr;
@@ -404,6 +431,12 @@ private:
     bool basicNavDecisionWallLeft = false;
     bool basicNavDecisionWallRight = false;
     bool basicNavDecisionPointValid = false;
+    SmartRecognitionState smartRecognitionState = SmartRecognitionState::Idle;
+    NavRouteStatus smartLastFrontierStatus = NAV_ROUTE_STATUS_IDLE;
+    uint16_t smartFrontierPlanRequestedCount = 0;
+    uint16_t smartFrontierRoutesExecutedCount = 0;
+    uint16_t smartNoFrontierCount = 0;
+    NavRecommendedAction smartLocalAction = NAV_RECOMMENDED_NONE;
     DeadEndRecoveryPhase deadEndRecoveryPhase = DeadEndRecoveryPhase::None;
     NavApproachFrontDoneReason deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
     bool deadEndRecoveryPendingPivot = false;

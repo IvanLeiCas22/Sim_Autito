@@ -473,8 +473,12 @@ QString routeStatusText(NavRouteStatus status)
         return "IDLE";
     case NAV_ROUTE_STATUS_FOUND:
         return "FOUND";
+    case NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE:
+        return "FRONTIER_ALREADY_HERE";
     case NAV_ROUTE_STATUS_NO_PATH:
         return "NO_PATH";
+    case NAV_ROUTE_STATUS_NO_FRONTIER:
+        return "NO_FRONTIER";
     case NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS:
         return "TARGET_OUT_OF_BOUNDS";
     case NAV_ROUTE_STATUS_TARGET_NOT_VISITED:
@@ -483,6 +487,22 @@ QString routeStatusText(NavRouteStatus status)
         return "ROUTE_TOO_LONG";
     case NAV_ROUTE_STATUS_QUEUE_OVERFLOW:
         return "QUEUE_OVERFLOW";
+    }
+
+    return "UNKNOWN";
+}
+
+QString frontierExitRelativeText(NavFrontierExitRelative relative)
+{
+    switch (relative) {
+    case NAV_FRONTIER_EXIT_NONE:
+        return "NONE";
+    case NAV_FRONTIER_EXIT_FRONT:
+        return "FRONT";
+    case NAV_FRONTIER_EXIT_RIGHT:
+        return "RIGHT";
+    case NAV_FRONTIER_EXIT_LEFT:
+        return "LEFT";
     }
 
     return "UNKNOWN";
@@ -541,6 +561,30 @@ QString navPolicyText(NavPolicy policy)
         return "RIGHT_HAND_RULE";
     case NAV_POLICY_MAP_PREFER_UNVISITED:
         return "MAP_PREFER_UNVISITED";
+    case NAV_POLICY_SMART_RECOGNITION:
+        return "SMART_RECOGNITION";
+    }
+
+    return "UNKNOWN";
+}
+
+QString smartRecognitionStateText(MainWindow::SmartRecognitionState state)
+{
+    switch (state) {
+    case MainWindow::SmartRecognitionState::Idle:
+        return "IDLE";
+    case MainWindow::SmartRecognitionState::LocalUnvisited:
+        return "LOCAL_UNVISITED";
+    case MainWindow::SmartRecognitionState::PlanToFrontier:
+        return "PLAN_TO_FRONTIER";
+    case MainWindow::SmartRecognitionState::ExecutingFrontierRoute:
+        return "EXECUTING_FRONTIER_ROUTE";
+    case MainWindow::SmartRecognitionState::FrontierAlreadyHere:
+        return "FRONTIER_ALREADY_HERE";
+    case MainWindow::SmartRecognitionState::NoFrontier:
+        return "NO_FRONTIER";
+    case MainWindow::SmartRecognitionState::Error:
+        return "ERROR";
     }
 
     return "UNKNOWN";
@@ -680,7 +724,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_T:
-        motorTestModeEnabled = !motorTestModeEnabled;
+        planRouteToNearestFrontier();
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
@@ -1432,6 +1476,16 @@ void MainWindow::createTelemetryPanel()
     routeFirstActionValueLabel = new QLabel(panel);
     routeLastActionValueLabel = new QLabel(panel);
     routeLoadedIntoPlanQueueValueLabel = new QLabel(panel);
+    frontierRouteStatusValueLabel = new QLabel(panel);
+    frontierTargetCellValueLabel = new QLabel(panel);
+    frontierTargetDirValueLabel = new QLabel(panel);
+    frontierExitDirAbsoluteValueLabel = new QLabel(panel);
+    frontierExitRelativeValueLabel = new QLabel(panel);
+    frontierNeighborCellValueLabel = new QLabel(panel);
+    frontierRouteLengthValueLabel = new QLabel(panel);
+    frontierExpandedStatesValueLabel = new QLabel(panel);
+    frontierLoadedIntoPlanQueueValueLabel = new QLabel(panel);
+    frontierCountFoundValueLabel = new QLabel(panel);
     routeExecuteStatusValueLabel = new QLabel(panel);
     routeStartPhysicalValidValueLabel = new QLabel(panel);
     routeStartFloorRearBlackValueLabel = new QLabel(panel);
@@ -1455,6 +1509,12 @@ void MainWindow::createTelemetryPanel()
     navMapCandidateFrontVisitedValueLabel = new QLabel(panel);
     navMapCandidateLeftVisitedValueLabel = new QLabel(panel);
     navMapUsedUnvisitedPreferenceValueLabel = new QLabel(panel);
+    smartRecognitionStateValueLabel = new QLabel(panel);
+    smartLastFrontierStatusValueLabel = new QLabel(panel);
+    smartFrontierPlanRequestedCountValueLabel = new QLabel(panel);
+    smartFrontierRoutesExecutedCountValueLabel = new QLabel(panel);
+    smartNoFrontierCountValueLabel = new QLabel(panel);
+    smartLocalActionValueLabel = new QLabel(panel);
     mapEnabledValueLabel = new QLabel(panel);
     mapWidthValueLabel = new QLabel(panel);
     mapHeightValueLabel = new QLabel(panel);
@@ -1642,6 +1702,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(routeFirstActionValueLabel);
     configureTelemetryValueLabel(routeLastActionValueLabel);
     configureTelemetryValueLabel(routeLoadedIntoPlanQueueValueLabel);
+    configureTelemetryValueLabel(frontierRouteStatusValueLabel);
+    configureTelemetryValueLabel(frontierTargetCellValueLabel);
+    configureTelemetryValueLabel(frontierTargetDirValueLabel);
+    configureTelemetryValueLabel(frontierExitDirAbsoluteValueLabel);
+    configureTelemetryValueLabel(frontierExitRelativeValueLabel);
+    configureTelemetryValueLabel(frontierNeighborCellValueLabel);
+    configureTelemetryValueLabel(frontierRouteLengthValueLabel);
+    configureTelemetryValueLabel(frontierExpandedStatesValueLabel);
+    configureTelemetryValueLabel(frontierLoadedIntoPlanQueueValueLabel);
+    configureTelemetryValueLabel(frontierCountFoundValueLabel);
     configureTelemetryValueLabel(routeExecuteStatusValueLabel);
     configureTelemetryValueLabel(routeStartPhysicalValidValueLabel);
     configureTelemetryValueLabel(routeStartFloorRearBlackValueLabel);
@@ -1665,6 +1735,12 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(navMapCandidateFrontVisitedValueLabel);
     configureTelemetryValueLabel(navMapCandidateLeftVisitedValueLabel);
     configureTelemetryValueLabel(navMapUsedUnvisitedPreferenceValueLabel);
+    configureTelemetryValueLabel(smartRecognitionStateValueLabel);
+    configureTelemetryValueLabel(smartLastFrontierStatusValueLabel);
+    configureTelemetryValueLabel(smartFrontierPlanRequestedCountValueLabel);
+    configureTelemetryValueLabel(smartFrontierRoutesExecutedCountValueLabel);
+    configureTelemetryValueLabel(smartNoFrontierCountValueLabel);
+    configureTelemetryValueLabel(smartLocalActionValueLabel);
     configureTelemetryValueLabel(mapEnabledValueLabel);
     configureTelemetryValueLabel(mapWidthValueLabel);
     configureTelemetryValueLabel(mapHeightValueLabel);
@@ -1887,6 +1963,16 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("route_first_action:", routeFirstActionValueLabel);
     layout->addRow("route_last_action:", routeLastActionValueLabel);
     layout->addRow("route_loaded_into_plan_queue:", routeLoadedIntoPlanQueueValueLabel);
+    layout->addRow("frontier_route_status:", frontierRouteStatusValueLabel);
+    layout->addRow("frontier_target_cell:", frontierTargetCellValueLabel);
+    layout->addRow("frontier_target_dir:", frontierTargetDirValueLabel);
+    layout->addRow("frontier_exit_dir_absolute:", frontierExitDirAbsoluteValueLabel);
+    layout->addRow("frontier_exit_relative:", frontierExitRelativeValueLabel);
+    layout->addRow("frontier_neighbor_cell:", frontierNeighborCellValueLabel);
+    layout->addRow("frontier_route_length:", frontierRouteLengthValueLabel);
+    layout->addRow("frontier_expanded_states:", frontierExpandedStatesValueLabel);
+    layout->addRow("frontier_loaded_into_plan_queue:", frontierLoadedIntoPlanQueueValueLabel);
+    layout->addRow("frontier_count_found:", frontierCountFoundValueLabel);
     layout->addRow("route_execute_status:", routeExecuteStatusValueLabel);
     layout->addRow("route_start_physical_valid:", routeStartPhysicalValidValueLabel);
     layout->addRow("route_start_floor_rear_black:", routeStartFloorRearBlackValueLabel);
@@ -1914,6 +2000,14 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("nav_map_candidate_left_visited:", navMapCandidateLeftVisitedValueLabel);
     layout->addRow("nav_map_used_unvisited_preference:",
                    navMapUsedUnvisitedPreferenceValueLabel);
+    layout->addRow("smart_recognition_state:", smartRecognitionStateValueLabel);
+    layout->addRow("smart_last_frontier_status:", smartLastFrontierStatusValueLabel);
+    layout->addRow("smart_frontier_plan_requested_count:",
+                   smartFrontierPlanRequestedCountValueLabel);
+    layout->addRow("smart_frontier_routes_executed_count:",
+                   smartFrontierRoutesExecutedCountValueLabel);
+    layout->addRow("smart_no_frontier_count:", smartNoFrontierCountValueLabel);
+    layout->addRow("smart_local_action:", smartLocalActionValueLabel);
 
     layout->addRow(mapTitle);
     layout->addRow("map_enabled:", mapEnabledValueLabel);
@@ -2600,6 +2694,48 @@ void MainWindow::updateTelemetryPanel()
         routeLoadedIntoPlanQueueValueLabel->setText(
             routeDebug.loaded_into_plan_queue ? "true" : "false");
     }
+    if (frontierRouteStatusValueLabel) {
+        frontierRouteStatusValueLabel->setText(
+            routeDebug.frontier_mode ? routeStatusText(routeDebug.status) : "IDLE");
+    }
+    if (frontierTargetCellValueLabel) {
+        frontierTargetCellValueLabel->setText(
+            QString("(%1,%2)")
+                .arg(routeDebug.frontier_target_cell_x)
+                .arg(routeDebug.frontier_target_cell_y));
+    }
+    if (frontierTargetDirValueLabel) {
+        frontierTargetDirValueLabel->setText(mapDirectionText(routeDebug.frontier_target_dir));
+    }
+    if (frontierExitDirAbsoluteValueLabel) {
+        frontierExitDirAbsoluteValueLabel->setText(
+            mapDirectionText(routeDebug.frontier_exit_dir_absolute));
+    }
+    if (frontierExitRelativeValueLabel) {
+        frontierExitRelativeValueLabel->setText(
+            frontierExitRelativeText(routeDebug.frontier_exit_relative));
+    }
+    if (frontierNeighborCellValueLabel) {
+        frontierNeighborCellValueLabel->setText(
+            QString("(%1,%2)")
+                .arg(routeDebug.frontier_neighbor_cell_x)
+                .arg(routeDebug.frontier_neighbor_cell_y));
+    }
+    if (frontierRouteLengthValueLabel) {
+        frontierRouteLengthValueLabel->setText(
+            QString::number(routeDebug.frontier_mode ? routeDebug.route_length : 0));
+    }
+    if (frontierExpandedStatesValueLabel) {
+        frontierExpandedStatesValueLabel->setText(
+            QString::number(routeDebug.frontier_mode ? routeDebug.expanded_states : 0));
+    }
+    if (frontierLoadedIntoPlanQueueValueLabel) {
+        frontierLoadedIntoPlanQueueValueLabel->setText(
+            routeDebug.frontier_mode && routeDebug.loaded_into_plan_queue ? "true" : "false");
+    }
+    if (frontierCountFoundValueLabel) {
+        frontierCountFoundValueLabel->setText(QString::number(routeDebug.frontier_count_found));
+    }
     routePlanReadyToExecute =
         routeDebug.status == NAV_ROUTE_STATUS_FOUND
         && routeDebug.loaded_into_plan_queue
@@ -2692,6 +2828,27 @@ void MainWindow::updateTelemetryPanel()
     if (navMapUsedUnvisitedPreferenceValueLabel) {
         navMapUsedUnvisitedPreferenceValueLabel->setText(
             candidateDebug.used_unvisited_preference ? "true" : "false");
+    }
+    if (smartRecognitionStateValueLabel) {
+        smartRecognitionStateValueLabel->setText(
+            smartRecognitionStateText(smartRecognitionState));
+    }
+    if (smartLastFrontierStatusValueLabel) {
+        smartLastFrontierStatusValueLabel->setText(routeStatusText(smartLastFrontierStatus));
+    }
+    if (smartFrontierPlanRequestedCountValueLabel) {
+        smartFrontierPlanRequestedCountValueLabel->setText(
+            QString::number(smartFrontierPlanRequestedCount));
+    }
+    if (smartFrontierRoutesExecutedCountValueLabel) {
+        smartFrontierRoutesExecutedCountValueLabel->setText(
+            QString::number(smartFrontierRoutesExecutedCount));
+    }
+    if (smartNoFrontierCountValueLabel) {
+        smartNoFrontierCountValueLabel->setText(QString::number(smartNoFrontierCount));
+    }
+    if (smartLocalActionValueLabel) {
+        smartLocalActionValueLabel->setText(recommendedActionText(smartLocalAction));
     }
     NavMapDebugSnapshot mapDebug = {};
     nav_core_get_map_debug(&mapDebug);
@@ -3306,6 +3463,8 @@ void MainWindow::setBasicNavAutonomyEnabled(bool enabled)
         basicNavRecommendedAction = NAV_RECOMMENDED_NONE;
         basicNavLastDecision = NAV_RECOMMENDED_NONE;
         basicNavLastDecisionText = "NONE";
+        smartRecognitionState = SmartRecognitionState::Idle;
+        smartLocalAction = NAV_RECOMMENDED_NONE;
         basicNavDecisionWallFront = false;
         basicNavDecisionWallLeft = false;
         basicNavDecisionWallRight = false;
@@ -3317,9 +3476,18 @@ void MainWindow::setBasicNavAutonomyEnabled(bool enabled)
 void MainWindow::toggleNavPolicy()
 {
     const NavPolicy currentPolicy = nav_core_get_policy();
-    const NavPolicy nextPolicy = currentPolicy == NAV_POLICY_RIGHT_HAND_RULE
-        ? NAV_POLICY_MAP_PREFER_UNVISITED
-        : NAV_POLICY_RIGHT_HAND_RULE;
+    NavPolicy nextPolicy = NAV_POLICY_RIGHT_HAND_RULE;
+    switch (currentPolicy) {
+    case NAV_POLICY_RIGHT_HAND_RULE:
+        nextPolicy = NAV_POLICY_MAP_PREFER_UNVISITED;
+        break;
+    case NAV_POLICY_MAP_PREFER_UNVISITED:
+        nextPolicy = NAV_POLICY_SMART_RECOGNITION;
+        break;
+    case NAV_POLICY_SMART_RECOGNITION:
+        nextPolicy = NAV_POLICY_RIGHT_HAND_RULE;
+        break;
+    }
     nav_core_set_policy(nextPolicy);
     updateTelemetryPanel();
 }
@@ -3376,6 +3544,11 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         return;
     }
 
+    if (nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION && planExecutionEnabled) {
+        smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
+        return;
+    }
+
     if (advanceDeadEndRecoveryIfNeeded()) {
         return;
     }
@@ -3396,6 +3569,51 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     RobotSensors sensors = buildRobotSensorsSnapshot();
     basicNavDecisionPointValid = sensors.floor_rear_black;
     basicNavRecommendedAction = nav_core_recommend_basic_action(&sensors);
+    smartLocalAction = basicNavRecommendedAction;
+
+    if (nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION) {
+        NavMapCandidateDebug candidateDebug = {};
+        nav_core_get_map_candidate_debug(&candidateDebug);
+        if (!basicNavDecisionPointValid
+            || candidateDebug.used_unvisited_preference
+            || basicNavRecommendedAction == NAV_RECOMMENDED_ACQUIRE_REAR_LINE
+            || basicNavRecommendedAction == NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED) {
+            smartRecognitionState = candidateDebug.used_unvisited_preference
+                ? SmartRecognitionState::LocalUnvisited
+                : SmartRecognitionState::Idle;
+            startBasicNavRecommendedAction(basicNavRecommendedAction, sensors);
+            return;
+        }
+
+        ++smartFrontierPlanRequestedCount;
+        smartRecognitionState = SmartRecognitionState::PlanToFrontier;
+        const NavRouteStatus frontierStatus = nav_core_route_plan_to_nearest_frontier();
+        smartLastFrontierStatus = frontierStatus;
+        NavPlanDebugSnapshot planDebug = {};
+        nav_core_plan_debug_snapshot(&planDebug);
+        if (frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0) {
+            planExecutionEnabled = true;
+            ++smartFrontierRoutesExecutedCount;
+            smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
+            routeExecuteStatus = RouteExecuteStatus::Running;
+            advancePlanExecutionIfNeeded();
+            return;
+        }
+        if (frontierStatus == NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE) {
+            smartRecognitionState = SmartRecognitionState::FrontierAlreadyHere;
+            return;
+        }
+        if (frontierStatus == NAV_ROUTE_STATUS_NO_FRONTIER) {
+            ++smartNoFrontierCount;
+            setBasicNavAutonomyEnabled(false);
+            smartRecognitionState = SmartRecognitionState::NoFrontier;
+            return;
+        }
+
+        smartRecognitionState = SmartRecognitionState::Error;
+        return;
+    }
+
     startBasicNavRecommendedAction(basicNavRecommendedAction, sensors);
 }
 
@@ -3531,6 +3749,19 @@ void MainWindow::promptRoutePlanToCell()
     routeExecuteStatus = RouteExecuteStatus::Idle;
     routeStartPhysicalValid = false;
     routeStartFloorRearBlack = false;
+    updateTelemetryPanel();
+}
+
+void MainWindow::planRouteToNearestFrontier()
+{
+    planExecutionEnabled = false;
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    planAdvanceStartedAfterCenterPivotDiagnostic = false;
+    planNextAdvanceFromCenteredPose = false;
+    routeExecuteStatus = RouteExecuteStatus::Idle;
+    routeStartPhysicalValid = false;
+    routeStartFloorRearBlack = false;
+    nav_core_route_plan_to_nearest_frontier();
     updateTelemetryPanel();
 }
 
@@ -3704,14 +3935,14 @@ void MainWindow::showControlsHelp()
         "- U: Load and execute planned test action queue\n"
         "- J: Execute route currently loaded by K, only when rear sensor is on line\n"
         "- K: Dry-run route plan to target cell\n"
+        "- T: Dry-run route plan to nearest exploration frontier\n"
         "- L: Test CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE -> PIVOT_180 sequence\n"
         "- B: Toggle basic autonomous navigation; dead-ends use approach-front then PIVOT_180\n"
-        "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED\n"
+        "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED / SMART_RECOGNITION\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
         "- Y: Toggle shadow logical map overlay\n"
         "\n"
         "Motor test:\n"
-        "- T: Toggle motor test mode\n"
         "- I: test PWM {3000, 3000} avanzar\n"
         "\n"
         "Smooth tuning:\n"
