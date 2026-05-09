@@ -226,6 +226,18 @@ QString advanceDoneReasonText(NavAdvanceDoneReason reason)
     return "UNKNOWN";
 }
 
+QString advanceStartModeText(NavAdvanceStartMode mode)
+{
+    switch (mode) {
+    case NAV_ADVANCE_START_REAR_LINE:
+        return "REAR_LINE";
+    case NAV_ADVANCE_START_CENTERED_POSE:
+        return "CENTERED_POSE";
+    }
+
+    return "UNKNOWN";
+}
+
 QString approachFrontPhaseText(NavApproachFrontPhase phase)
 {
     switch (phase) {
@@ -465,6 +477,8 @@ QString routeStatusText(NavRouteStatus status)
         return "NO_PATH";
     case NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS:
         return "TARGET_OUT_OF_BOUNDS";
+    case NAV_ROUTE_STATUS_TARGET_NOT_VISITED:
+        return "TARGET_NOT_VISITED";
     case NAV_ROUTE_STATUS_ROUTE_TOO_LONG:
         return "ROUTE_TOO_LONG";
     case NAV_ROUTE_STATUS_QUEUE_OVERFLOW:
@@ -562,12 +576,28 @@ QString centerPivotSequencePhaseText(MainWindow::CenterPivotSequencePhase phase)
         return "NONE";
     case MainWindow::CenterPivotSequencePhase::Centering:
         return "CENTERING";
+    case MainWindow::CenterPivotSequencePhase::ApproachFront:
+        return "APPROACH_FRONT";
     case MainWindow::CenterPivotSequencePhase::Pivot180:
         return "PIVOT_180";
     case MainWindow::CenterPivotSequencePhase::Done:
         return "DONE";
     case MainWindow::CenterPivotSequencePhase::Failed:
         return "FAILED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString planCompositePrepareMethodText(MainWindow::PlanCompositePrepareMethod method)
+{
+    switch (method) {
+    case MainWindow::PlanCompositePrepareMethod::None:
+        return "NONE";
+    case MainWindow::PlanCompositePrepareMethod::FrontLine:
+        return "FRONT_LINE";
+    case MainWindow::PlanCompositePrepareMethod::FrontWall:
+        return "FRONT_WALL";
     }
 
     return "UNKNOWN";
@@ -1282,9 +1312,16 @@ void MainWindow::createTelemetryPanel()
     turnDebugSmoothPostYawElapsedValueLabel = new QLabel(panel);
     turnDebugAdvancePhaseValueLabel = new QLabel(panel);
     turnDebugAdvanceDoneReasonValueLabel = new QLabel(panel);
+    turnDebugRearBlackForLineValueLabel = new QLabel(panel);
+    turnDebugFloorRearRealValueLabel = new QLabel(panel);
+    turnDebugAdvanceStartedOnRearLineValueLabel = new QLabel(panel);
+    turnDebugAdvanceStartModeValueLabel = new QLabel(panel);
+    turnDebugAdvanceCenteredWaitingRearWhiteValueLabel = new QLabel(panel);
     turnDebugSpecialCandidateValueLabel = new QLabel(panel);
     turnDebugSpecialConfirmedValueLabel = new QLabel(panel);
     turnDebugSpecialIgnoreRearValueLabel = new QLabel(panel);
+    turnDebugSpecialStartedOnRearLineValueLabel = new QLabel(panel);
+    turnDebugSpecialEnabledForMotionValueLabel = new QLabel(panel);
     turnDebugAdvanceElapsedSinceLeaveValueLabel = new QLabel(panel);
     turnDebugSpecialDetectMinValueLabel = new QLabel(panel);
     turnDebugSpecialDetectMaxValueLabel = new QLabel(panel);
@@ -1380,7 +1417,12 @@ void MainWindow::createTelemetryPanel()
     planQueueOverflowValueLabel = new QLabel(panel);
     planCompositeActionActiveValueLabel = new QLabel(panel);
     planCompositeActionPhaseValueLabel = new QLabel(panel);
+    planCompositePrepareMethodValueLabel = new QLabel(panel);
+    planCompositeWallFrontAtStartValueLabel = new QLabel(panel);
     planCompositeLastCenterReasonValueLabel = new QLabel(panel);
+    planCompositeLastApproachReasonValueLabel = new QLabel(panel);
+    planAdvanceAfterCenterPivotValueLabel = new QLabel(panel);
+    planNextAdvanceFromCenteredPoseValueLabel = new QLabel(panel);
     routeStatusValueLabel = new QLabel(panel);
     routeTargetCellValueLabel = new QLabel(panel);
     routeStartCellValueLabel = new QLabel(panel);
@@ -1480,9 +1522,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugSmoothPostYawElapsedValueLabel);
     configureTelemetryValueLabel(turnDebugAdvancePhaseValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceDoneReasonValueLabel);
+    configureTelemetryValueLabel(turnDebugRearBlackForLineValueLabel);
+    configureTelemetryValueLabel(turnDebugFloorRearRealValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceStartedOnRearLineValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceStartModeValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceCenteredWaitingRearWhiteValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialCandidateValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialConfirmedValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialIgnoreRearValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialStartedOnRearLineValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialEnabledForMotionValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceElapsedSinceLeaveValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialDetectMinValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialDetectMaxValueLabel);
@@ -1578,7 +1627,12 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(planQueueOverflowValueLabel);
     configureTelemetryValueLabel(planCompositeActionActiveValueLabel);
     configureTelemetryValueLabel(planCompositeActionPhaseValueLabel);
+    configureTelemetryValueLabel(planCompositePrepareMethodValueLabel);
+    configureTelemetryValueLabel(planCompositeWallFrontAtStartValueLabel);
     configureTelemetryValueLabel(planCompositeLastCenterReasonValueLabel);
+    configureTelemetryValueLabel(planCompositeLastApproachReasonValueLabel);
+    configureTelemetryValueLabel(planAdvanceAfterCenterPivotValueLabel);
+    configureTelemetryValueLabel(planNextAdvanceFromCenteredPoseValueLabel);
     configureTelemetryValueLabel(routeStatusValueLabel);
     configureTelemetryValueLabel(routeTargetCellValueLabel);
     configureTelemetryValueLabel(routeStartCellValueLabel);
@@ -1684,9 +1738,20 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("smooth_post_yaw_elapsed_ms:", turnDebugSmoothPostYawElapsedValueLabel);
     layout->addRow("advance_phase:", turnDebugAdvancePhaseValueLabel);
     layout->addRow("advance_done_reason:", turnDebugAdvanceDoneReasonValueLabel);
+    layout->addRow("rear_black_for_line:", turnDebugRearBlackForLineValueLabel);
+    layout->addRow("floor_rear_black_real:", turnDebugFloorRearRealValueLabel);
+    layout->addRow("advance_started_on_rear_line:",
+                   turnDebugAdvanceStartedOnRearLineValueLabel);
+    layout->addRow("advance_start_mode:", turnDebugAdvanceStartModeValueLabel);
+    layout->addRow("advance_from_centered_waiting_rear_white:",
+                   turnDebugAdvanceCenteredWaitingRearWhiteValueLabel);
     layout->addRow("special_candidate:", turnDebugSpecialCandidateValueLabel);
     layout->addRow("special_confirmed:", turnDebugSpecialConfirmedValueLabel);
     layout->addRow("special_ignore_rear_until_white:", turnDebugSpecialIgnoreRearValueLabel);
+    layout->addRow("special_detection_started_on_rear_line:",
+                   turnDebugSpecialStartedOnRearLineValueLabel);
+    layout->addRow("special_detection_enabled_for_current_motion:",
+                   turnDebugSpecialEnabledForMotionValueLabel);
     layout->addRow("advance_elapsed_since_leave_start_line_ms:",
                    turnDebugAdvanceElapsedSinceLeaveValueLabel);
     layout->addRow("special_detect_min_ms:", turnDebugSpecialDetectMinValueLabel);
@@ -1801,8 +1866,18 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("plan_queue_overflow:", planQueueOverflowValueLabel);
     layout->addRow("plan_composite_action_active:", planCompositeActionActiveValueLabel);
     layout->addRow("plan_composite_action_phase:", planCompositeActionPhaseValueLabel);
+    layout->addRow("plan_composite_prepare_method:",
+                   planCompositePrepareMethodValueLabel);
+    layout->addRow("plan_composite_wall_front_at_start:",
+                   planCompositeWallFrontAtStartValueLabel);
     layout->addRow("plan_composite_last_center_reason:",
                    planCompositeLastCenterReasonValueLabel);
+    layout->addRow("plan_composite_last_approach_reason:",
+                   planCompositeLastApproachReasonValueLabel);
+    layout->addRow("plan_advance_after_center_and_pivot_180:",
+                   planAdvanceAfterCenterPivotValueLabel);
+    layout->addRow("plan_next_advance_from_centered_pose:",
+                   planNextAdvanceFromCenteredPoseValueLabel);
     layout->addRow("route_status:", routeStatusValueLabel);
     layout->addRow("route_target_cell:", routeTargetCellValueLabel);
     layout->addRow("route_start_cell:", routeStartCellValueLabel);
@@ -2062,6 +2137,26 @@ void MainWindow::updateTelemetryPanel()
         turnDebugAdvanceDoneReasonValueLabel->setText(
             advanceDoneReasonText(turnDebug.advance_done_reason));
     }
+    if (turnDebugRearBlackForLineValueLabel) {
+        turnDebugRearBlackForLineValueLabel->setText(
+            turnDebug.rear_black_for_line ? "true" : "false");
+    }
+    if (turnDebugFloorRearRealValueLabel) {
+        turnDebugFloorRearRealValueLabel->setText(
+            turnDebug.floor_rear_black ? "true" : "false");
+    }
+    if (turnDebugAdvanceStartedOnRearLineValueLabel) {
+        turnDebugAdvanceStartedOnRearLineValueLabel->setText(
+            turnDebug.advance_started_on_rear_line ? "true" : "false");
+    }
+    if (turnDebugAdvanceStartModeValueLabel) {
+        turnDebugAdvanceStartModeValueLabel->setText(
+            advanceStartModeText(turnDebug.advance_start_mode));
+    }
+    if (turnDebugAdvanceCenteredWaitingRearWhiteValueLabel) {
+        turnDebugAdvanceCenteredWaitingRearWhiteValueLabel->setText(
+            turnDebug.advance_from_centered_waiting_rear_white ? "true" : "false");
+    }
     if (turnDebugSpecialCandidateValueLabel) {
         turnDebugSpecialCandidateValueLabel->setText(turnDebug.special_candidate ? "true" : "false");
     }
@@ -2071,6 +2166,14 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugSpecialIgnoreRearValueLabel) {
         turnDebugSpecialIgnoreRearValueLabel->setText(
             turnDebug.special_ignore_rear_until_white ? "true" : "false");
+    }
+    if (turnDebugSpecialStartedOnRearLineValueLabel) {
+        turnDebugSpecialStartedOnRearLineValueLabel->setText(
+            turnDebug.special_detection_started_on_rear_line ? "true" : "false");
+    }
+    if (turnDebugSpecialEnabledForMotionValueLabel) {
+        turnDebugSpecialEnabledForMotionValueLabel->setText(
+            turnDebug.special_detection_enabled_for_current_motion ? "true" : "false");
     }
     if (turnDebugAdvanceElapsedSinceLeaveValueLabel) {
         turnDebugAdvanceElapsedSinceLeaveValueLabel->setText(
@@ -2433,6 +2536,7 @@ void MainWindow::updateTelemetryPanel()
     }
     if (planCompositeActionActiveValueLabel) {
         const bool active = planCompositeActionPhase == CenterPivotSequencePhase::Centering
+            || planCompositeActionPhase == CenterPivotSequencePhase::ApproachFront
             || planCompositeActionPhase == CenterPivotSequencePhase::Pivot180;
         planCompositeActionActiveValueLabel->setText(active ? "true" : "false");
     }
@@ -2440,9 +2544,29 @@ void MainWindow::updateTelemetryPanel()
         planCompositeActionPhaseValueLabel->setText(
             centerPivotSequencePhaseText(planCompositeActionPhase));
     }
+    if (planCompositePrepareMethodValueLabel) {
+        planCompositePrepareMethodValueLabel->setText(
+            planCompositePrepareMethodText(planCompositePrepareMethod));
+    }
+    if (planCompositeWallFrontAtStartValueLabel) {
+        planCompositeWallFrontAtStartValueLabel->setText(
+            planCompositeWallFrontAtStart ? "true" : "false");
+    }
     if (planCompositeLastCenterReasonValueLabel) {
         planCompositeLastCenterReasonValueLabel->setText(
             centerPivotDoneReasonText(planCompositeLastCenterReason));
+    }
+    if (planCompositeLastApproachReasonValueLabel) {
+        planCompositeLastApproachReasonValueLabel->setText(
+            approachFrontDoneReasonText(planCompositeLastApproachReason));
+    }
+    if (planAdvanceAfterCenterPivotValueLabel) {
+        planAdvanceAfterCenterPivotValueLabel->setText(
+            planAdvanceStartedAfterCenterPivotDiagnostic ? "true" : "false");
+    }
+    if (planNextAdvanceFromCenteredPoseValueLabel) {
+        planNextAdvanceFromCenteredPoseValueLabel->setText(
+            planNextAdvanceFromCenteredPose ? "true" : "false");
     }
     NavRouteDebugSnapshot routeDebug = {};
     nav_core_get_route_debug(&routeDebug);
@@ -2846,6 +2970,8 @@ void MainWindow::loadAndStartTestPlan()
     planCurrentAction = NAV_PLAN_ACTION_NONE;
     planLastExecutedAction = NAV_PLAN_ACTION_NONE;
     planActionsExecutedCount = 0;
+    planAdvanceStartedAfterCenterPivotDiagnostic = false;
+    planNextAdvanceFromCenteredPose = false;
     routeExecuteStatus = RouteExecuteStatus::Idle;
     routeStartPhysicalValid = false;
     routeStartFloorRearBlack = false;
@@ -2861,6 +2987,8 @@ void MainWindow::cancelPlanExecution()
 {
     planExecutionEnabled = false;
     planCurrentAction = NAV_PLAN_ACTION_NONE;
+    planAdvanceStartedAfterCenterPivotDiagnostic = false;
+    planNextAdvanceFromCenteredPose = false;
     cancelPlanCompositeAction();
     nav_core_plan_clear();
     lastNavCommand = {0, 0};
@@ -2873,18 +3001,36 @@ void MainWindow::cancelPlanExecution()
 void MainWindow::cancelPlanCompositeAction()
 {
     planCompositeActionPhase = CenterPivotSequencePhase::None;
+    planCompositePrepareMethod = PlanCompositePrepareMethod::None;
+    planCompositeWallFrontAtStart = false;
     planCompositeLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    planCompositeLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
 }
 
 void MainWindow::startPlanCompositeCenterAndPivot180()
 {
-    planCompositeActionPhase = CenterPivotSequencePhase::Centering;
+    NavWallPerception perception = {};
+    nav_core_get_wall_perception(&perception);
+    planCompositeWallFrontAtStart = perception.wall_front;
+    planCompositePrepareMethod = planCompositeWallFrontAtStart
+        ? PlanCompositePrepareMethod::FrontWall
+        : PlanCompositePrepareMethod::FrontLine;
+    planCompositeActionPhase = planCompositeWallFrontAtStart
+        ? CenterPivotSequencePhase::ApproachFront
+        : CenterPivotSequencePhase::Centering;
     planCompositeLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    planCompositeLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
+    planAdvanceStartedAfterCenterPivotDiagnostic = false;
+    planNextAdvanceFromCenteredPose = false;
     planCurrentAction = NAV_PLAN_ACTION_CENTER_AND_PIVOT_180;
     planLastExecutedAction = NAV_PLAN_ACTION_CENTER_AND_PIVOT_180;
     ++planActionsExecutedCount;
     resetNavigationYawReference();
-    nav_core_start_center_in_cell_for_pivot_by_front_line();
+    if (planCompositeWallFrontAtStart) {
+        nav_core_start_approach_front_wall_for_pivot();
+    } else {
+        nav_core_start_center_in_cell_for_pivot_by_front_line();
+    }
 }
 
 bool MainWindow::advancePlanCompositeActionIfNeeded()
@@ -2897,6 +3043,26 @@ bool MainWindow::advancePlanCompositeActionIfNeeded()
         (nav_core_action() == NAV_ACTION_NONE)
         && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
     if (!navReady) {
+        return true;
+    }
+
+    if (planCompositeActionPhase == CenterPivotSequencePhase::ApproachFront) {
+        NavTurnDebug turnDebug = {};
+        nav_core_get_turn_debug(&turnDebug);
+        planCompositeLastApproachReason = turnDebug.last_approach_front_done_reason;
+        if (planCompositeLastApproachReason != NAV_APPROACH_FRONT_DONE_TARGET_DISTANCE
+            && planCompositeLastApproachReason != NAV_APPROACH_FRONT_DONE_TIMEOUT) {
+            planCompositeActionPhase = CenterPivotSequencePhase::Failed;
+            planExecutionEnabled = false;
+            nav_core_stop();
+            lastNavCommand = {0, 0};
+            return true;
+        }
+
+        RobotSensors sensors = buildRobotSensorsSnapshot();
+        resetNavigationYawReference();
+        nav_core_start_pivot_turn_180(&sensors);
+        planCompositeActionPhase = CenterPivotSequencePhase::Pivot180;
         return true;
     }
 
@@ -2922,6 +3088,7 @@ bool MainWindow::advancePlanCompositeActionIfNeeded()
     if (planCompositeActionPhase == CenterPivotSequencePhase::Pivot180) {
         planCompositeActionPhase = CenterPivotSequencePhase::Done;
         planCurrentAction = NAV_PLAN_ACTION_NONE;
+        planNextAdvanceFromCenteredPose = true;
         return false;
     }
 
@@ -2982,11 +3149,25 @@ bool MainWindow::startPlanAction(NavPlanAction action)
         return false;
     }
 
+    const bool startedAfterCenterAndPivot =
+        action == NAV_PLAN_ACTION_ADVANCE_LINE
+        && planNextAdvanceFromCenteredPose;
+
+    if (planNextAdvanceFromCenteredPose && action != NAV_PLAN_ACTION_ADVANCE_LINE) {
+        planNextAdvanceFromCenteredPose = false;
+        return false;
+    }
+
     resetNavigationYawReference();
     RobotSensors sensors = buildRobotSensorsSnapshot();
     switch (action) {
     case NAV_PLAN_ACTION_ADVANCE_LINE:
-        nav_core_start_advance_until_rear_black();
+        if (startedAfterCenterAndPivot) {
+            nav_core_start_advance_until_rear_black_from_centered_pose();
+            planNextAdvanceFromCenteredPose = false;
+        } else {
+            nav_core_start_advance_until_rear_black();
+        }
         break;
     case NAV_PLAN_ACTION_SMOOTH_LEFT:
         nav_core_start_smooth_turn_left(&sensors);
@@ -3007,6 +3188,7 @@ bool MainWindow::startPlanAction(NavPlanAction action)
         return false;
     }
 
+    planAdvanceStartedAfterCenterPivotDiagnostic = startedAfterCenterAndPivot;
     planCurrentAction = action;
     planLastExecutedAction = action;
     ++planActionsExecutedCount;
@@ -3034,6 +3216,7 @@ void MainWindow::advancePlanExecutionIfNeeded()
     const NavPlanAction nextAction = nav_core_plan_pop_next();
     if (nextAction == NAV_PLAN_ACTION_NONE) {
         planExecutionEnabled = false;
+        planNextAdvanceFromCenteredPose = false;
         cancelPlanCompositeAction();
         lastNavCommand = {0, 0};
         if (routeExecuteStatus == RouteExecuteStatus::Running
@@ -3188,6 +3371,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     }
 
     if (planCompositeActionPhase == CenterPivotSequencePhase::Centering
+        || planCompositeActionPhase == CenterPivotSequencePhase::ApproachFront
         || planCompositeActionPhase == CenterPivotSequencePhase::Pivot180) {
         return;
     }
@@ -3340,6 +3524,8 @@ void MainWindow::promptRoutePlanToCell()
 
     planExecutionEnabled = false;
     planCurrentAction = NAV_PLAN_ACTION_NONE;
+    planAdvanceStartedAfterCenterPivotDiagnostic = false;
+    planNextAdvanceFromCenteredPose = false;
     nav_core_route_plan_to_cell(static_cast<int16_t>(targetX),
                                 static_cast<int16_t>(targetY));
     routeExecuteStatus = RouteExecuteStatus::Idle;

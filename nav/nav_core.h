@@ -56,6 +56,11 @@ typedef enum NavAdvanceDoneReason {
     NAV_ADVANCE_DONE_REAR_SENSOR_TARGET_LINE
 } NavAdvanceDoneReason;
 
+typedef enum NavAdvanceStartMode {
+    NAV_ADVANCE_START_REAR_LINE = 0,
+    NAV_ADVANCE_START_CENTERED_POSE
+} NavAdvanceStartMode;
+
 typedef enum NavApproachFrontPhase {
     NAV_APPROACH_FRONT_PHASE_NONE = 0,
     NAV_APPROACH_FRONT_PHASE_DRIVE,
@@ -141,6 +146,7 @@ typedef enum NavRouteStatus {
     NAV_ROUTE_STATUS_FOUND,
     NAV_ROUTE_STATUS_NO_PATH,
     NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS,
+    NAV_ROUTE_STATUS_TARGET_NOT_VISITED,
     NAV_ROUTE_STATUS_ROUTE_TOO_LONG,
     NAV_ROUTE_STATUS_QUEUE_OVERFLOW
 } NavRouteStatus;
@@ -241,9 +247,16 @@ typedef struct NavTurnDebug {
     uint16_t smooth_post_yaw_elapsed_ms;
     NavAdvancePhase advance_phase;
     NavAdvanceDoneReason advance_done_reason;
+    bool rear_black_for_line;
+    bool floor_rear_black;
+    bool advance_started_on_rear_line;
+    NavAdvanceStartMode advance_start_mode;
+    bool advance_from_centered_waiting_rear_white;
     bool special_candidate;
     bool special_confirmed;
     bool special_ignore_rear_until_white;
+    bool special_detection_started_on_rear_line;
+    bool special_detection_enabled_for_current_motion;
     uint16_t advance_elapsed_since_leave_start_line_ms;
     uint16_t special_detect_min_ms;
     uint16_t special_detect_max_ms;
@@ -318,6 +331,7 @@ typedef struct NavTurnDebug {
 
 void nav_core_init(void);
 void nav_core_start_advance_until_rear_black(void);
+void nav_core_start_advance_until_rear_black_from_centered_pose(void);
 void nav_core_start_approach_front_wall_for_pivot(void);
 void nav_core_start_center_in_cell_for_pivot_by_front_line(void);
 void nav_core_start_smooth_turn_left(const RobotSensors *sensors);

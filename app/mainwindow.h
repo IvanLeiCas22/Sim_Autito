@@ -47,9 +47,16 @@ public:
     enum class CenterPivotSequencePhase {
         None,
         Centering,
+        ApproachFront,
         Pivot180,
         Done,
         Failed
+    };
+
+    enum class PlanCompositePrepareMethod {
+        None,
+        FrontLine,
+        FrontWall
     };
 
     explicit MainWindow(QWidget *parent = nullptr);
@@ -194,9 +201,16 @@ private:
     QLabel *turnDebugSmoothPostYawElapsedValueLabel = nullptr;
     QLabel *turnDebugAdvancePhaseValueLabel = nullptr;
     QLabel *turnDebugAdvanceDoneReasonValueLabel = nullptr;
+    QLabel *turnDebugRearBlackForLineValueLabel = nullptr;
+    QLabel *turnDebugFloorRearRealValueLabel = nullptr;
+    QLabel *turnDebugAdvanceStartedOnRearLineValueLabel = nullptr;
+    QLabel *turnDebugAdvanceStartModeValueLabel = nullptr;
+    QLabel *turnDebugAdvanceCenteredWaitingRearWhiteValueLabel = nullptr;
     QLabel *turnDebugSpecialCandidateValueLabel = nullptr;
     QLabel *turnDebugSpecialConfirmedValueLabel = nullptr;
     QLabel *turnDebugSpecialIgnoreRearValueLabel = nullptr;
+    QLabel *turnDebugSpecialStartedOnRearLineValueLabel = nullptr;
+    QLabel *turnDebugSpecialEnabledForMotionValueLabel = nullptr;
     QLabel *turnDebugAdvanceElapsedSinceLeaveValueLabel = nullptr;
     QLabel *turnDebugSpecialDetectMinValueLabel = nullptr;
     QLabel *turnDebugSpecialDetectMaxValueLabel = nullptr;
@@ -292,7 +306,12 @@ private:
     QLabel *planQueueOverflowValueLabel = nullptr;
     QLabel *planCompositeActionActiveValueLabel = nullptr;
     QLabel *planCompositeActionPhaseValueLabel = nullptr;
+    QLabel *planCompositePrepareMethodValueLabel = nullptr;
+    QLabel *planCompositeWallFrontAtStartValueLabel = nullptr;
     QLabel *planCompositeLastCenterReasonValueLabel = nullptr;
+    QLabel *planCompositeLastApproachReasonValueLabel = nullptr;
+    QLabel *planAdvanceAfterCenterPivotValueLabel = nullptr;
+    QLabel *planNextAdvanceFromCenteredPoseValueLabel = nullptr;
     QLabel *routeStatusValueLabel = nullptr;
     QLabel *routeTargetCellValueLabel = nullptr;
     QLabel *routeStartCellValueLabel = nullptr;
@@ -367,7 +386,12 @@ private:
     NavPlanAction planLastExecutedAction = NAV_PLAN_ACTION_NONE;
     uint16_t planActionsExecutedCount = 0;
     CenterPivotSequencePhase planCompositeActionPhase = CenterPivotSequencePhase::None;
+    PlanCompositePrepareMethod planCompositePrepareMethod = PlanCompositePrepareMethod::None;
+    bool planCompositeWallFrontAtStart = false;
     NavCenterPivotDoneReason planCompositeLastCenterReason = NAV_CENTER_PIVOT_DONE_NONE;
+    NavApproachFrontDoneReason planCompositeLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
+    bool planAdvanceStartedAfterCenterPivotDiagnostic = false;
+    bool planNextAdvanceFromCenteredPose = false;
     RouteExecuteStatus routeExecuteStatus = RouteExecuteStatus::Idle;
     bool routeStartPhysicalValid = false;
     bool routeStartFloorRearBlack = false;
