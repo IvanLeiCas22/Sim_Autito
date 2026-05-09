@@ -90,6 +90,15 @@ static bool special_ignore_rear_until_white = false;
 static bool special_confirmed = false;
 static bool special_detection_started_on_rear_line = false;
 static bool special_detection_enabled_for_current_motion = false;
+static NavSpecialDetectionContext special_detection_context = NAV_SPECIAL_DETECT_DISABLED;
+static bool special_aux_detection_enabled = false;
+static bool special_aux_started_after_rear_line_left = false;
+static bool special_aux_waiting_rear_white = false;
+static int8_t special_mark_target_cell_x = -1;
+static int8_t special_mark_target_cell_y = -1;
+static NavSpecialMarkTargetSource special_mark_target_source =
+    NAV_SPECIAL_MARK_TARGET_INVALID;
+static NavAction last_special_mark_action = NAV_ACTION_NONE;
 static bool advance_started_on_rear_line = false;
 static NavAdvanceStartMode advance_start_mode = NAV_ADVANCE_START_REAR_LINE;
 static bool advance_from_centered_waiting_rear_white = false;
@@ -103,6 +112,10 @@ static bool plan_overflow = false;
 static NavRouteDebugSnapshot route_debug = {0};
 static bool map_walls_recorded_for_current_pose = false;
 static bool map_initial_wall_snapshot_pending = false;
+static bool initial_special_snapshot_pending = false;
+static bool initial_special_snapshot_done = false;
+static bool rear_line_trusted_for_decision = false;
+static NavRearLineTrustSource rear_line_trust_source = NAV_REAR_LINE_TRUST_NONE;
 static NavAdvanceWallConfig advance_wall_config = {
     NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT,
     NAV_ADVANCE_WALL_KD_PWM_PER_MM_PER_TICK_DEFAULT,
@@ -169,6 +182,30 @@ static bool map_cell_is_inside(const NavMapDebugSnapshot *map_debug, int8_t cell
         && cell_y >= 0
         && cell_x < (int8_t)map_debug->width
         && cell_y < (int8_t)map_debug->height;
+}
+
+static void clear_special_mark_debug(void)
+{
+    special_mark_target_cell_x = -1;
+    special_mark_target_cell_y = -1;
+    special_mark_target_source = NAV_SPECIAL_MARK_TARGET_INVALID;
+    last_special_mark_action = NAV_ACTION_NONE;
+}
+
+static void sync_special_mark_debug(void)
+{
+    turn_debug.special_mark_target_cell_x = special_mark_target_cell_x;
+    turn_debug.special_mark_target_cell_y = special_mark_target_cell_y;
+    turn_debug.special_mark_target_source = special_mark_target_source;
+    turn_debug.last_special_mark_action = last_special_mark_action;
+}
+
+static void set_rear_line_trust(bool trusted, NavRearLineTrustSource source)
+{
+    rear_line_trusted_for_decision = trusted;
+    rear_line_trust_source = trusted ? source : NAV_REAR_LINE_TRUST_NONE;
+    turn_debug.rear_line_trusted_for_decision = rear_line_trusted_for_decision;
+    turn_debug.rear_line_trust_source = rear_line_trust_source;
 }
 
 static q16_16_t abs_q16(q16_16_t value)
@@ -442,6 +479,36 @@ static void record_current_map_cell_if_ready(const RobotSensors *sensors)
     record_current_map_cell_walls(NAV_MAP_ACTION_NONE);
 }
 
+static void record_initial_special_snapshot_if_ready(const RobotSensors *sensors)
+{
+    if (sensors == 0 || !initial_special_snapshot_pending) {
+        return;
+    }
+
+    initial_special_snapshot_pending = false;
+    initial_special_snapshot_done = true;
+    if (sensors->floor_front_black && sensors->floor_rear_black) {
+        NavMapDebugSnapshot map_debug = {0};
+        nav_map_get_debug_snapshot(&map_debug);
+        special_mark_target_cell_x = map_debug.cell_x;
+        special_mark_target_cell_y = map_debug.cell_y;
+        special_mark_target_source = NAV_SPECIAL_MARK_TARGET_CURRENT_CELL;
+        last_special_mark_action = NAV_ACTION_NONE;
+        (void)nav_map_mark_current_cell_special();
+        special_confirmed = true;
+        set_rear_line_trust(false, NAV_REAR_LINE_TRUST_NONE);
+    } else if (sensors->floor_rear_black && !sensors->floor_front_black) {
+        set_rear_line_trust(true, NAV_REAR_LINE_TRUST_INITIAL_REAR_LINE);
+    } else {
+        set_rear_line_trust(false, NAV_REAR_LINE_TRUST_NONE);
+    }
+    turn_debug.special_candidate = sensors->floor_front_black && sensors->floor_rear_black;
+    turn_debug.special_confirmed = special_confirmed;
+    turn_debug.initial_special_snapshot_pending = initial_special_snapshot_pending;
+    turn_debug.initial_special_snapshot_done = initial_special_snapshot_done;
+    sync_special_mark_debug();
+}
+
 static int32_t clamp_smooth_target_yaw_rate(int32_t target_yaw_rate_deg_s)
 {
     if (target_yaw_rate_deg_s < NAV_SMOOTH_TARGET_YAW_RATE_MIN_DEG_S) {
@@ -524,6 +591,19 @@ static void clear_live_turn_debug(void)
     turn_debug.special_candidate = false;
     turn_debug.special_confirmed = special_confirmed;
     turn_debug.special_ignore_rear_until_white = special_ignore_rear_until_white;
+    turn_debug.special_detection_started_on_rear_line =
+        special_detection_started_on_rear_line;
+    turn_debug.special_detection_enabled_for_current_motion =
+        special_detection_enabled_for_current_motion;
+    turn_debug.special_detection_context = special_detection_context;
+    turn_debug.special_aux_detection_enabled = special_aux_detection_enabled;
+    turn_debug.special_aux_started_after_rear_line_left =
+        special_aux_started_after_rear_line_left;
+    turn_debug.initial_special_snapshot_pending = initial_special_snapshot_pending;
+    turn_debug.initial_special_snapshot_done = initial_special_snapshot_done;
+    turn_debug.rear_line_trusted_for_decision = rear_line_trusted_for_decision;
+    turn_debug.rear_line_trust_source = rear_line_trust_source;
+    sync_special_mark_debug();
     turn_debug.advance_elapsed_since_leave_start_line_ms =
         advance_elapsed_since_leave_start_line_ms;
     turn_debug.special_detect_min_ms = NAV_SPECIAL_DETECT_MIN_MS;
@@ -618,6 +698,10 @@ static void reset_special_detection_state(void)
     special_confirmed = false;
     special_detection_started_on_rear_line = false;
     special_detection_enabled_for_current_motion = false;
+    special_detection_context = NAV_SPECIAL_DETECT_DISABLED;
+    special_aux_detection_enabled = false;
+    special_aux_started_after_rear_line_left = false;
+    special_aux_waiting_rear_white = false;
     advance_started_on_rear_line = false;
     advance_from_centered_waiting_rear_white = false;
     turn_debug.special_candidate = false;
@@ -625,6 +709,13 @@ static void reset_special_detection_state(void)
     turn_debug.special_ignore_rear_until_white = false;
     turn_debug.special_detection_started_on_rear_line = false;
     turn_debug.special_detection_enabled_for_current_motion = false;
+    turn_debug.special_detection_context = special_detection_context;
+    turn_debug.special_aux_detection_enabled = false;
+    turn_debug.special_aux_started_after_rear_line_left = false;
+    turn_debug.initial_special_snapshot_pending = initial_special_snapshot_pending;
+    turn_debug.initial_special_snapshot_done = initial_special_snapshot_done;
+    turn_debug.rear_line_trusted_for_decision = rear_line_trusted_for_decision;
+    turn_debug.rear_line_trust_source = rear_line_trust_source;
     turn_debug.rear_black_for_line = false;
     turn_debug.floor_rear_black = false;
     turn_debug.advance_started_on_rear_line = false;
@@ -637,9 +728,33 @@ static void begin_special_detection_for_motion(bool started_on_rear_line)
 {
     special_detection_started_on_rear_line = started_on_rear_line;
     special_detection_enabled_for_current_motion = started_on_rear_line;
+    special_detection_context = NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL;
+    special_aux_detection_enabled = false;
+    special_aux_started_after_rear_line_left = false;
+    special_aux_waiting_rear_white = false;
     turn_debug.special_detection_started_on_rear_line = started_on_rear_line;
     turn_debug.special_detection_enabled_for_current_motion =
         special_detection_enabled_for_current_motion;
+    turn_debug.special_detection_context = special_detection_context;
+    turn_debug.special_aux_detection_enabled = special_aux_detection_enabled;
+    turn_debug.special_aux_started_after_rear_line_left =
+        special_aux_started_after_rear_line_left;
+}
+
+static void begin_special_detection_for_aux_translation(bool starts_on_rear_black)
+{
+    special_detection_started_on_rear_line = false;
+    special_detection_enabled_for_current_motion = false;
+    special_detection_context = NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION;
+    special_aux_waiting_rear_white = starts_on_rear_black;
+    special_aux_detection_enabled = !starts_on_rear_black;
+    special_aux_started_after_rear_line_left = !starts_on_rear_black;
+    turn_debug.special_detection_started_on_rear_line = false;
+    turn_debug.special_detection_enabled_for_current_motion = false;
+    turn_debug.special_detection_context = special_detection_context;
+    turn_debug.special_aux_detection_enabled = special_aux_detection_enabled;
+    turn_debug.special_aux_started_after_rear_line_left =
+        special_aux_started_after_rear_line_left;
 }
 
 void nav_core_plan_clear(void)
@@ -1279,7 +1394,9 @@ static void update_floor_line_debug(const RobotSensors *sensors)
         advance_from_centered_waiting_rear_white;
 }
 
-static void update_special_detection(const RobotSensors *sensors, bool allow_confirm)
+static void update_special_detection(const RobotSensors *sensors,
+                                     NavSpecialDetectionContext context,
+                                     bool allow_confirm)
 {
     if (sensors == 0) {
         return;
@@ -1297,16 +1414,44 @@ static void update_special_detection(const RobotSensors *sensors, bool allow_con
     const bool in_special_window =
         advance_elapsed_since_leave_start_line_ms >= NAV_SPECIAL_DETECT_MIN_MS
         && advance_elapsed_since_leave_start_line_ms <= NAV_SPECIAL_DETECT_MAX_MS;
+    const bool after_special_min_time =
+        advance_elapsed_since_leave_start_line_ms >= NAV_SPECIAL_DETECT_MIN_MS;
+    bool can_confirm = false;
+
+    special_detection_context = context;
+    if (context == NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL) {
+        can_confirm = allow_confirm
+            && special_detection_enabled_for_current_motion
+            && !special_ignore_rear_until_white
+            && in_special_window;
+    } else if (context == NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION) {
+        if (special_aux_waiting_rear_white && !sensors->floor_rear_black) {
+            special_aux_waiting_rear_white = false;
+            special_aux_detection_enabled = true;
+            special_aux_started_after_rear_line_left = true;
+        }
+        can_confirm = allow_confirm
+            && special_aux_detection_enabled
+            && after_special_min_time;
+    }
 
     special_confirmed = false;
-    if (allow_confirm
-        && special_detection_enabled_for_current_motion
-        && special_candidate
-        && !special_ignore_rear_until_white
-        && in_special_window) {
+    if (can_confirm
+        && special_candidate) {
+        NavMapDebugSnapshot map_debug = {0};
+        nav_map_get_debug_snapshot(&map_debug);
+        special_mark_target_cell_x = map_debug.cell_x;
+        special_mark_target_cell_y = map_debug.cell_y;
+        special_mark_target_source =
+            context == NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION
+                ? NAV_SPECIAL_MARK_TARGET_AUX_CURRENT_CELL
+                : NAV_SPECIAL_MARK_TARGET_CURRENT_CELL;
+        last_special_mark_action = current_action;
         (void)nav_map_mark_current_cell_special();
         special_confirmed = true;
-        special_ignore_rear_until_white = true;
+        if (context == NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL) {
+            special_ignore_rear_until_white = true;
+        }
     }
 
     turn_debug.special_candidate = special_candidate;
@@ -1315,6 +1460,11 @@ static void update_special_detection(const RobotSensors *sensors, bool allow_con
     turn_debug.special_detection_started_on_rear_line = special_detection_started_on_rear_line;
     turn_debug.special_detection_enabled_for_current_motion =
         special_detection_enabled_for_current_motion;
+    turn_debug.special_detection_context = special_detection_context;
+    turn_debug.special_aux_detection_enabled = special_aux_detection_enabled;
+    turn_debug.special_aux_started_after_rear_line_left =
+        special_aux_started_after_rear_line_left;
+    sync_special_mark_debug();
     update_floor_line_debug(sensors);
     turn_debug.advance_elapsed_since_leave_start_line_ms =
         advance_elapsed_since_leave_start_line_ms;
@@ -1394,6 +1544,11 @@ static RobotCommand finish_advance_until_rear_black(const RobotSensors *sensors)
     turn_debug.last_advance_done_reason = NAV_ADVANCE_DONE_REAR_SENSOR_TARGET_LINE;
     turn_debug.last_advance_final_yaw_deg_q16 = sensors->yaw_deg_q16;
     turn_debug.last_advance_final_floor_rear_black = sensors->floor_rear_black;
+    set_rear_line_trust(
+        true,
+        advance_start_mode == NAV_ADVANCE_START_CENTERED_POSE
+            ? NAV_REAR_LINE_TRUST_CENTERED_ADVANCE_DONE
+            : NAV_REAR_LINE_TRUST_ADVANCE_DONE);
 
     RobotCommand command = {NAV_PWM_STOP, NAV_PWM_STOP};
     return command;
@@ -1636,6 +1791,9 @@ static RobotCommand finish_smooth_turn(const RobotSensors *sensors, NavSmoothDon
     turn_debug.last_smooth_done_reason = reason;
     turn_debug.last_smooth_final_yaw_deg_q16 = sensors->yaw_deg_q16;
     turn_debug.last_smooth_final_floor_rear_black = sensors->floor_rear_black;
+    if (reason == NAV_SMOOTH_DONE_REAR_SENSOR_TARGET_LINE) {
+        set_rear_line_trust(true, NAV_REAR_LINE_TRUST_SMOOTH_DONE);
+    }
     smooth_post_yaw_elapsed_ms = 0;
 
     RobotCommand command = {NAV_PWM_STOP, NAV_PWM_STOP};
@@ -1763,8 +1921,12 @@ void nav_core_init(void)
     advance_from_centered_waiting_rear_white = false;
     map_walls_recorded_for_current_pose = false;
     map_initial_wall_snapshot_pending = false;
+    initial_special_snapshot_pending = false;
+    initial_special_snapshot_done = false;
+    set_rear_line_trust(false, NAV_REAR_LINE_TRUST_NONE);
     nav_policy = NAV_POLICY_RIGHT_HAND_RULE;
     map_candidate_debug = (NavMapCandidateDebug){0};
+    clear_special_mark_debug();
     nav_core_plan_clear();
     nav_core_route_clear_debug();
     clear_wall_perception();
@@ -2063,7 +2225,11 @@ void nav_core_stop(void)
     special_detection_enabled_for_current_motion = false;
     map_walls_recorded_for_current_pose = false;
     map_initial_wall_snapshot_pending = false;
+    initial_special_snapshot_pending = false;
+    initial_special_snapshot_done = false;
+    set_rear_line_trust(false, NAV_REAR_LINE_TRUST_NONE);
     map_candidate_debug = (NavMapCandidateDebug){0};
+    clear_special_mark_debug();
     reset_turn_debug();
     reset_advance_wall_pd();
 }
@@ -2224,6 +2390,9 @@ void nav_core_map_init(uint8_t width,
     nav_map_init(width, height, start_cell_x, start_cell_y, start_dir);
     map_walls_recorded_for_current_pose = false;
     map_initial_wall_snapshot_pending = true;
+    initial_special_snapshot_pending = true;
+    initial_special_snapshot_done = false;
+    set_rear_line_trust(false, NAV_REAR_LINE_TRUST_NONE);
 }
 
 void nav_core_get_map_debug(NavMapDebugSnapshot *snapshot)
@@ -2265,13 +2434,26 @@ void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug)
     *debug = map_candidate_debug;
 }
 
+bool nav_core_rear_line_trusted_for_decision(void)
+{
+    return rear_line_trusted_for_decision;
+}
+
+NavRearLineTrustSource nav_core_rear_line_trust_source(void)
+{
+    return rear_line_trust_source;
+}
+
 static NavRecommendedAction recommend_right_hand_rule(const RobotSensors *sensors)
 {
     if (sensors == 0) {
         return NAV_RECOMMENDED_NONE;
     }
 
-    if (!sensors->floor_rear_black) {
+    if (!sensors->floor_rear_black || !rear_line_trusted_for_decision) {
+        if (sensors->floor_rear_black && !rear_line_trusted_for_decision) {
+            return NAV_RECOMMENDED_ACQUIRE_REAR_LINE;
+        }
         return wall_perception.wall_front
             ? NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED
             : NAV_RECOMMENDED_ACQUIRE_REAR_LINE;
@@ -2330,7 +2512,7 @@ static NavRecommendedAction recommend_map_prefer_unvisited(const RobotSensors *s
 {
     map_candidate_debug = (NavMapCandidateDebug){0};
 
-    if (sensors == 0 || !sensors->floor_rear_black) {
+    if (sensors == 0 || !sensors->floor_rear_black || !rear_line_trusted_for_decision) {
         return recommend_right_hand_rule(sensors);
     }
 
@@ -2451,6 +2633,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
     }
 
     record_current_map_cell_if_ready(sensors);
+    record_initial_special_snapshot_if_ready(sensors);
     update_floor_line_debug(sensors);
 
     if (current_action == NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK) {
@@ -2488,7 +2671,10 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
         if (advance_start_mode == NAV_ADVANCE_START_REAR_LINE
             && advance_phase == NAV_ADVANCE_PHASE_SEEK_TARGET_LINE) {
-            update_special_detection(sensors, true);
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL,
+                true);
         } else {
             special_confirmed = false;
             turn_debug.special_candidate = sensors->floor_front_black && sensors->floor_rear_black;
@@ -2521,8 +2707,15 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
         if (approach_front_phase == NAV_APPROACH_FRONT_PHASE_NONE) {
             set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_DRIVE);
         }
+        if (special_detection_context != NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION) {
+            begin_special_detection_for_aux_translation(sensors->floor_rear_black);
+        }
 
         if (approach_front_phase == NAV_APPROACH_FRONT_PHASE_DRIVE) {
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION,
+                true);
             if (approach_front_target_reached(sensors)) {
                 approach_front_done_reason = NAV_APPROACH_FRONT_DONE_TARGET_DISTANCE;
                 set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_BRAKE_SETTLE);
@@ -2574,11 +2767,20 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
                     NAV_CENTER_PIVOT_DONE_START_NOT_ON_REAR_LINE);
             }
             set_center_pivot_phase(NAV_CENTER_PIVOT_PHASE_WAIT_LEAVE_START_LINE);
+            begin_special_detection_for_aux_translation(true);
         }
 
         if (center_pivot_phase == NAV_CENTER_PIVOT_PHASE_WAIT_LEAVE_START_LINE
             && !sensors->floor_rear_black) {
             set_center_pivot_phase(NAV_CENTER_PIVOT_PHASE_WAIT_FRONT_WHITE);
+        }
+
+        if (center_pivot_phase == NAV_CENTER_PIVOT_PHASE_WAIT_FRONT_WHITE
+            || center_pivot_phase == NAV_CENTER_PIVOT_PHASE_SEEK_FRONT_LINE) {
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION,
+                true);
         }
 
         if (center_pivot_phase == NAV_CENTER_PIVOT_PHASE_WAIT_FRONT_WHITE
@@ -2631,7 +2833,10 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
         }
 
         if (smooth_phase == NAV_SMOOTH_PHASE_SEEK_TARGET_LINE) {
-            update_special_detection(sensors, true);
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL,
+                true);
         }
 
         if (smooth_phase == NAV_SMOOTH_PHASE_SEEK_TARGET_LINE
@@ -2640,7 +2845,10 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
         }
 
         if (smooth_phase == NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE) {
-            update_special_detection(sensors, true);
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL,
+                true);
             if (rear_black_for_line(sensors)) {
                 return finish_smooth_turn(sensors, NAV_SMOOTH_DONE_REAR_SENSOR_TARGET_LINE);
             }
@@ -2669,7 +2877,10 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
         }
 
         if (smooth_phase == NAV_SMOOTH_PHASE_SEEK_TARGET_LINE) {
-            update_special_detection(sensors, true);
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL,
+                true);
         }
 
         if (smooth_phase == NAV_SMOOTH_PHASE_SEEK_TARGET_LINE
@@ -2678,7 +2889,10 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
         }
 
         if (smooth_phase == NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE) {
-            update_special_detection(sensors, true);
+            update_special_detection(
+                sensors,
+                NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL,
+                true);
             if (rear_black_for_line(sensors)) {
                 return finish_smooth_turn(sensors, NAV_SMOOTH_DONE_REAR_SENSOR_TARGET_LINE);
             }

@@ -61,6 +61,15 @@ typedef enum NavAdvanceStartMode {
     NAV_ADVANCE_START_CENTERED_POSE
 } NavAdvanceStartMode;
 
+typedef enum NavRearLineTrustSource {
+    NAV_REAR_LINE_TRUST_NONE = 0,
+    NAV_REAR_LINE_TRUST_INITIAL_REAR_LINE,
+    NAV_REAR_LINE_TRUST_ADVANCE_DONE,
+    NAV_REAR_LINE_TRUST_SMOOTH_DONE,
+    NAV_REAR_LINE_TRUST_CENTERED_ADVANCE_DONE,
+    NAV_REAR_LINE_TRUST_OTHER
+} NavRearLineTrustSource;
+
 typedef enum NavApproachFrontPhase {
     NAV_APPROACH_FRONT_PHASE_NONE = 0,
     NAV_APPROACH_FRONT_PHASE_DRIVE,
@@ -248,6 +257,19 @@ typedef struct NavWallPerception {
     q16_16_t diag_threshold_mm_q16;
 } NavWallPerception;
 
+typedef enum NavSpecialMarkTargetSource {
+    NAV_SPECIAL_MARK_TARGET_INVALID = 0,
+    NAV_SPECIAL_MARK_TARGET_CURRENT_CELL,
+    NAV_SPECIAL_MARK_TARGET_SMOOTH_DESTINATION,
+    NAV_SPECIAL_MARK_TARGET_AUX_CURRENT_CELL
+} NavSpecialMarkTargetSource;
+
+typedef enum NavSpecialDetectionContext {
+    NAV_SPECIAL_DETECT_DISABLED = 0,
+    NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL,
+    NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION
+} NavSpecialDetectionContext;
+
 typedef struct NavTurnDebug {
     q16_16_t yaw_rate_setpoint_deg_s_q16;
     q16_16_t yaw_rate_measured_deg_s_q16;
@@ -276,6 +298,17 @@ typedef struct NavTurnDebug {
     bool special_ignore_rear_until_white;
     bool special_detection_started_on_rear_line;
     bool special_detection_enabled_for_current_motion;
+    NavSpecialDetectionContext special_detection_context;
+    bool special_aux_detection_enabled;
+    bool special_aux_started_after_rear_line_left;
+    bool initial_special_snapshot_pending;
+    bool initial_special_snapshot_done;
+    bool rear_line_trusted_for_decision;
+    NavRearLineTrustSource rear_line_trust_source;
+    int8_t special_mark_target_cell_x;
+    int8_t special_mark_target_cell_y;
+    NavSpecialMarkTargetSource special_mark_target_source;
+    NavAction last_special_mark_action;
     uint16_t advance_elapsed_since_leave_start_line_ms;
     uint16_t special_detect_min_ms;
     uint16_t special_detect_max_ms;
@@ -385,6 +418,8 @@ void nav_core_set_policy(NavPolicy policy);
 NavPolicy nav_core_get_policy(void);
 void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug);
 NavRecommendedAction nav_core_recommend_basic_action(const RobotSensors *sensors);
+bool nav_core_rear_line_trusted_for_decision(void);
+NavRearLineTrustSource nav_core_rear_line_trust_source(void);
 void nav_core_plan_clear(void);
 bool nav_core_plan_push(NavPlanAction action);
 uint8_t nav_core_plan_count(void);

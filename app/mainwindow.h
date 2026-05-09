@@ -21,6 +21,7 @@ class QGraphicsPolygonItem;
 class QKeyEvent;
 class QResizeEvent;
 class QTimer;
+class QTreeWidgetItem;
 
 class MainWindow : public QMainWindow
 {
@@ -88,6 +89,7 @@ private:
     void initializeFloorSensors();
     void createTelemetryPanel();
     void updateTelemetryPanel();
+    void syncPinnedTelemetryRows();
     void showControlsHelp();
     void showControlTuningDialog();
     void loadMazeFromDialog();
@@ -162,6 +164,11 @@ private:
         QLabel *value_label = nullptr;
     };
 
+    struct TelemetryPinnedRow {
+        QTreeWidgetItem *item = nullptr;
+        QLabel *source_label = nullptr;
+    };
+
     QGraphicsScene *scene = nullptr;
     QGraphicsView *view = nullptr;
     QGraphicsPolygonItem *robotItem = nullptr;
@@ -222,6 +229,16 @@ private:
     QLabel *turnDebugSpecialIgnoreRearValueLabel = nullptr;
     QLabel *turnDebugSpecialStartedOnRearLineValueLabel = nullptr;
     QLabel *turnDebugSpecialEnabledForMotionValueLabel = nullptr;
+    QLabel *turnDebugSpecialDetectionContextValueLabel = nullptr;
+    QLabel *turnDebugSpecialAuxEnabledValueLabel = nullptr;
+    QLabel *turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel = nullptr;
+    QLabel *turnDebugInitialSpecialSnapshotPendingValueLabel = nullptr;
+    QLabel *turnDebugInitialSpecialSnapshotDoneValueLabel = nullptr;
+    QLabel *turnDebugRearLineTrustedValueLabel = nullptr;
+    QLabel *turnDebugRearLineTrustSourceValueLabel = nullptr;
+    QLabel *turnDebugSpecialMarkTargetCellValueLabel = nullptr;
+    QLabel *turnDebugSpecialMarkTargetSourceValueLabel = nullptr;
+    QLabel *turnDebugLastSpecialMarkActionValueLabel = nullptr;
     QLabel *turnDebugAdvanceElapsedSinceLeaveValueLabel = nullptr;
     QLabel *turnDebugSpecialDetectMinValueLabel = nullptr;
     QLabel *turnDebugSpecialDetectMaxValueLabel = nullptr;
@@ -450,6 +467,7 @@ private:
     SimRobot robot;
     std::vector<IrSensor> irSensors;
     std::vector<FloorSensor> floorSensors;
+    std::vector<TelemetryPinnedRow> telemetryPinnedRows;
     std::vector<QGraphicsItem *> shadowMapOverlayItems;
 };
 

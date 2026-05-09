@@ -22,6 +22,7 @@
 #include <QGraphicsRectItem>
 #include <QGraphicsTextItem>
 #include <QGroupBox>
+#include <QHeaderView>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
@@ -32,17 +33,19 @@
 #include <QPen>
 #include <QPolygonF>
 #include <QPushButton>
-#include <QScrollArea>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStringList>
 #include <QTimer>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace {
 constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
@@ -184,6 +187,36 @@ QString smoothPhaseText(NavSmoothPhase phase)
     return "UNKNOWN";
 }
 
+QString specialMarkTargetSourceText(NavSpecialMarkTargetSource source)
+{
+    switch (source) {
+    case NAV_SPECIAL_MARK_TARGET_INVALID:
+        return "INVALID";
+    case NAV_SPECIAL_MARK_TARGET_CURRENT_CELL:
+        return "CURRENT_CELL";
+    case NAV_SPECIAL_MARK_TARGET_SMOOTH_DESTINATION:
+        return "SMOOTH_DESTINATION";
+    case NAV_SPECIAL_MARK_TARGET_AUX_CURRENT_CELL:
+        return "AUX_CURRENT_CELL";
+    }
+
+    return "UNKNOWN";
+}
+
+QString specialDetectionContextText(NavSpecialDetectionContext context)
+{
+    switch (context) {
+    case NAV_SPECIAL_DETECT_DISABLED:
+        return "DISABLED";
+    case NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL:
+        return "TRANSLATION_TO_NEXT_CELL";
+    case NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION:
+        return "IN_CELL_AUX_TRANSLATION";
+    }
+
+    return "UNKNOWN";
+}
+
 QString smoothDoneReasonText(NavSmoothDoneReason reason)
 {
     switch (reason) {
@@ -233,6 +266,26 @@ QString advanceStartModeText(NavAdvanceStartMode mode)
         return "REAR_LINE";
     case NAV_ADVANCE_START_CENTERED_POSE:
         return "CENTERED_POSE";
+    }
+
+    return "UNKNOWN";
+}
+
+QString rearLineTrustSourceText(NavRearLineTrustSource source)
+{
+    switch (source) {
+    case NAV_REAR_LINE_TRUST_NONE:
+        return "NONE";
+    case NAV_REAR_LINE_TRUST_INITIAL_REAR_LINE:
+        return "INITIAL_REAR_LINE";
+    case NAV_REAR_LINE_TRUST_ADVANCE_DONE:
+        return "ADVANCE_DONE";
+    case NAV_REAR_LINE_TRUST_SMOOTH_DONE:
+        return "SMOOTH_DONE";
+    case NAV_REAR_LINE_TRUST_CENTERED_ADVANCE_DONE:
+        return "CENTERED_ADVANCE_DONE";
+    case NAV_REAR_LINE_TRUST_OTHER:
+        return "OTHER";
     }
 
     return "UNKNOWN";
@@ -429,6 +482,78 @@ void configureTelemetryValueLabel(QLabel *label)
     label->setMinimumWidth(220);
     label->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Preferred);
 }
+
+QString telemetrySectionText(QLabel *label)
+{
+    QString text = label ? label->text() : QString();
+    text.remove("<b>");
+    text.remove("</b>");
+    return text.trimmed();
+}
+
+QString compactTelemetryName(QString name)
+{
+    if (name.endsWith(':')) {
+        name.chop(1);
+    }
+
+    static const std::pair<const char *, const char *> replacements[] = {
+        {"special_detection_", "special_"},
+        {"special_mark_target_", "mark_"},
+        {"advance_wall_", "wall_"},
+        {"advance_yaw_", "yaw_"},
+        {"advance_", "adv_"},
+        {"approach_front_", "approach_"},
+        {"center_pivot_", "center_"},
+        {"smooth_", "sm_"},
+        {"frontier_", "fr_"},
+        {"plan_composite_", "comp_"},
+        {"nav_map_candidate_", "cand_"},
+        {"smart_recognition_", "smart_"}
+    };
+
+    for (const auto &replacement : replacements) {
+        name.replace(replacement.first, replacement.second);
+    }
+
+    return name;
+}
+
+class TelemetryTreeBuilder {
+public:
+    explicit TelemetryTreeBuilder(QTreeWidget *tree)
+        : tree_(tree)
+    {
+    }
+
+    void addRow(QLabel *sectionLabel)
+    {
+        currentSection_ = new QTreeWidgetItem(tree_);
+        currentSection_->setText(0, telemetrySectionText(sectionLabel));
+        QFont font = currentSection_->font(0);
+        font.setBold(true);
+        currentSection_->setFont(0, font);
+        currentSection_->setFirstColumnSpanned(true);
+        currentSection_->setExpanded(true);
+    }
+
+    void addRow(const QString &name, QLabel *valueLabel)
+    {
+        auto *item = new QTreeWidgetItem(currentSection_ ? currentSection_ : tree_->invisibleRootItem());
+        const QString fullName = name.endsWith(':') ? name.left(name.size() - 1) : name;
+        item->setText(0, compactTelemetryName(name));
+        item->setToolTip(0, fullName);
+        if (valueLabel) {
+            valueLabel->setMinimumWidth(0);
+            valueLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+            tree_->setItemWidget(item, 1, valueLabel);
+        }
+    }
+
+private:
+    QTreeWidget *tree_ = nullptr;
+    QTreeWidgetItem *currentSection_ = nullptr;
+};
 
 QString sequenceStepText(TestSequenceStep step)
 {
@@ -1249,15 +1374,25 @@ void MainWindow::initializeFloorSensors()
 void MainWindow::createTelemetryPanel()
 {
     auto *dock = new QDockWidget("Telemetry", this);
-    auto *panel = new QWidget(dock);
-    auto *layout = new QFormLayout(panel);
-    auto *scrollArea = new QScrollArea(dock);
-    dock->setMinimumWidth(260);
-    dock->setMaximumWidth(260);
-    panel->setMinimumWidth(460);
-    layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    auto *tree = new QTreeWidget(dock);
+    auto *panel = tree;
+    TelemetryTreeBuilder telemetryLayout(tree);
+    auto *layout = &telemetryLayout;
+    telemetryPinnedRows.clear();
+
+    dock->setMinimumWidth(340);
+    tree->setColumnCount(2);
+    tree->setHeaderLabels({"Name", "Value"});
+    tree->setRootIsDecorated(true);
+    tree->setAlternatingRowColors(true);
+    tree->setUniformRowHeights(true);
+    tree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tree->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    tree->setTextElideMode(Qt::ElideRight);
+    tree->header()->setStretchLastSection(true);
+    tree->header()->setSectionResizeMode(0, QHeaderView::Interactive);
+    tree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    tree->header()->resizeSection(0, 145);
 
     auto *poseTitle = new QLabel("<b>Pose</b>", panel);
     auto *mazeTitle = new QLabel("<b>Maze</b>", panel);
@@ -1366,6 +1501,16 @@ void MainWindow::createTelemetryPanel()
     turnDebugSpecialIgnoreRearValueLabel = new QLabel(panel);
     turnDebugSpecialStartedOnRearLineValueLabel = new QLabel(panel);
     turnDebugSpecialEnabledForMotionValueLabel = new QLabel(panel);
+    turnDebugSpecialDetectionContextValueLabel = new QLabel(panel);
+    turnDebugSpecialAuxEnabledValueLabel = new QLabel(panel);
+    turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel = new QLabel(panel);
+    turnDebugInitialSpecialSnapshotPendingValueLabel = new QLabel(panel);
+    turnDebugInitialSpecialSnapshotDoneValueLabel = new QLabel(panel);
+    turnDebugRearLineTrustedValueLabel = new QLabel(panel);
+    turnDebugRearLineTrustSourceValueLabel = new QLabel(panel);
+    turnDebugSpecialMarkTargetCellValueLabel = new QLabel(panel);
+    turnDebugSpecialMarkTargetSourceValueLabel = new QLabel(panel);
+    turnDebugLastSpecialMarkActionValueLabel = new QLabel(panel);
     turnDebugAdvanceElapsedSinceLeaveValueLabel = new QLabel(panel);
     turnDebugSpecialDetectMinValueLabel = new QLabel(panel);
     turnDebugSpecialDetectMaxValueLabel = new QLabel(panel);
@@ -1592,6 +1737,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugSpecialIgnoreRearValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialStartedOnRearLineValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialEnabledForMotionValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialDetectionContextValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialAuxEnabledValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel);
+    configureTelemetryValueLabel(turnDebugInitialSpecialSnapshotPendingValueLabel);
+    configureTelemetryValueLabel(turnDebugInitialSpecialSnapshotDoneValueLabel);
+    configureTelemetryValueLabel(turnDebugRearLineTrustedValueLabel);
+    configureTelemetryValueLabel(turnDebugRearLineTrustSourceValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialMarkTargetCellValueLabel);
+    configureTelemetryValueLabel(turnDebugSpecialMarkTargetSourceValueLabel);
+    configureTelemetryValueLabel(turnDebugLastSpecialMarkActionValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceElapsedSinceLeaveValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialDetectMinValueLabel);
     configureTelemetryValueLabel(turnDebugSpecialDetectMaxValueLabel);
@@ -1828,6 +1983,19 @@ void MainWindow::createTelemetryPanel()
                    turnDebugSpecialStartedOnRearLineValueLabel);
     layout->addRow("special_detection_enabled_for_current_motion:",
                    turnDebugSpecialEnabledForMotionValueLabel);
+    layout->addRow("special_detection_context:", turnDebugSpecialDetectionContextValueLabel);
+    layout->addRow("special_aux_detection_enabled:", turnDebugSpecialAuxEnabledValueLabel);
+    layout->addRow("special_aux_started_after_rear_line_left:",
+                   turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel);
+    layout->addRow("initial_special_snapshot_pending:",
+                   turnDebugInitialSpecialSnapshotPendingValueLabel);
+    layout->addRow("initial_special_snapshot_done:",
+                   turnDebugInitialSpecialSnapshotDoneValueLabel);
+    layout->addRow("rear_line_trusted_for_decision:", turnDebugRearLineTrustedValueLabel);
+    layout->addRow("rear_line_trust_source:", turnDebugRearLineTrustSourceValueLabel);
+    layout->addRow("special_mark_target_cell:", turnDebugSpecialMarkTargetCellValueLabel);
+    layout->addRow("special_mark_target_source:", turnDebugSpecialMarkTargetSourceValueLabel);
+    layout->addRow("last_special_mark_action:", turnDebugLastSpecialMarkActionValueLabel);
     layout->addRow("advance_elapsed_since_leave_start_line_ms:",
                    turnDebugAdvanceElapsedSinceLeaveValueLabel);
     layout->addRow("special_detect_min_ms:", turnDebugSpecialDetectMinValueLabel);
@@ -2033,10 +2201,57 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("test_left_pwm:", motorTestLeftValueLabel);
     layout->addRow("test_right_pwm:", motorTestRightValueLabel);
 
-    panel->setLayout(layout);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setWidget(panel);
-    dock->setWidget(scrollArea);
+    auto *pinnedTitle = new QTreeWidgetItem();
+    pinnedTitle->setText(0, "Pinned debug");
+    QFont pinnedFont = pinnedTitle->font(0);
+    pinnedFont.setBold(true);
+    pinnedTitle->setFont(0, pinnedFont);
+    pinnedTitle->setFirstColumnSpanned(true);
+    pinnedTitle->setExpanded(true);
+
+    auto addPinnedRow = [this, pinnedTitle](const QString &name, QLabel *sourceLabel) {
+        auto *item = new QTreeWidgetItem(pinnedTitle);
+        item->setText(0, compactTelemetryName(name));
+        item->setToolTip(0, name);
+        item->setText(1, sourceLabel ? sourceLabel->text() : QString());
+        item->setToolTip(1, item->text(1));
+        telemetryPinnedRows.push_back({item, sourceLabel});
+    };
+
+    addPinnedRow("special_candidate", turnDebugSpecialCandidateValueLabel);
+    addPinnedRow("special_confirmed", turnDebugSpecialConfirmedValueLabel);
+    addPinnedRow("special_mark_target_cell", turnDebugSpecialMarkTargetCellValueLabel);
+    addPinnedRow("special_mark_target_source", turnDebugSpecialMarkTargetSourceValueLabel);
+    addPinnedRow("last_special_mark_action", turnDebugLastSpecialMarkActionValueLabel);
+    addPinnedRow("special_ignore_rear_until_white", turnDebugSpecialIgnoreRearValueLabel);
+    addPinnedRow("special_detection_started_on_rear_line",
+                 turnDebugSpecialStartedOnRearLineValueLabel);
+    addPinnedRow("special_detection_enabled_for_current_motion",
+                 turnDebugSpecialEnabledForMotionValueLabel);
+    addPinnedRow("special_detection_context", turnDebugSpecialDetectionContextValueLabel);
+    addPinnedRow("special_aux_detection_enabled", turnDebugSpecialAuxEnabledValueLabel);
+    addPinnedRow("special_aux_started_after_rear_line_left",
+                 turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel);
+    addPinnedRow("initial_special_snapshot_pending",
+                 turnDebugInitialSpecialSnapshotPendingValueLabel);
+    addPinnedRow("initial_special_snapshot_done",
+                 turnDebugInitialSpecialSnapshotDoneValueLabel);
+    addPinnedRow("rear_line_trusted_for_decision", turnDebugRearLineTrustedValueLabel);
+    addPinnedRow("rear_line_trust_source", turnDebugRearLineTrustSourceValueLabel);
+    addPinnedRow("current_cell_special", mapCurrentCellSpecialValueLabel);
+    addPinnedRow("special_cells_found_count", mapSpecialCellsFoundCountValueLabel);
+    addPinnedRow("logical_cell_x", mapCellXValueLabel);
+    addPinnedRow("logical_cell_y", mapCellYValueLabel);
+    addPinnedRow("logical_dir", mapDirValueLabel);
+    addPinnedRow("nav_action", navActionValueLabel);
+    addPinnedRow("smooth_phase", turnDebugSmoothPhaseValueLabel);
+    addPinnedRow("smooth_done_reason", turnDebugSmoothDoneReasonValueLabel);
+    addPinnedRow("plan_current_action", planCurrentActionValueLabel);
+    addPinnedRow("plan_next_action", planNextActionValueLabel);
+    addPinnedRow("smart_recognition_state", smartRecognitionStateValueLabel);
+    tree->insertTopLevelItem(0, pinnedTitle);
+
+    dock->setWidget(tree);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
     updateTelemetryPanel();
@@ -2268,6 +2483,53 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugSpecialEnabledForMotionValueLabel) {
         turnDebugSpecialEnabledForMotionValueLabel->setText(
             turnDebug.special_detection_enabled_for_current_motion ? "true" : "false");
+    }
+    if (turnDebugSpecialDetectionContextValueLabel) {
+        turnDebugSpecialDetectionContextValueLabel->setText(
+            specialDetectionContextText(turnDebug.special_detection_context));
+    }
+    if (turnDebugSpecialAuxEnabledValueLabel) {
+        turnDebugSpecialAuxEnabledValueLabel->setText(
+            turnDebug.special_aux_detection_enabled ? "true" : "false");
+    }
+    if (turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel) {
+        turnDebugSpecialAuxStartedAfterRearLineLeftValueLabel->setText(
+            turnDebug.special_aux_started_after_rear_line_left ? "true" : "false");
+    }
+    if (turnDebugInitialSpecialSnapshotPendingValueLabel) {
+        turnDebugInitialSpecialSnapshotPendingValueLabel->setText(
+            turnDebug.initial_special_snapshot_pending ? "true" : "false");
+    }
+    if (turnDebugInitialSpecialSnapshotDoneValueLabel) {
+        turnDebugInitialSpecialSnapshotDoneValueLabel->setText(
+            turnDebug.initial_special_snapshot_done ? "true" : "false");
+    }
+    if (turnDebugRearLineTrustedValueLabel) {
+        turnDebugRearLineTrustedValueLabel->setText(
+            turnDebug.rear_line_trusted_for_decision ? "true" : "false");
+    }
+    if (turnDebugRearLineTrustSourceValueLabel) {
+        turnDebugRearLineTrustSourceValueLabel->setText(
+            rearLineTrustSourceText(turnDebug.rear_line_trust_source));
+    }
+    if (turnDebugSpecialMarkTargetCellValueLabel) {
+        if (turnDebug.special_mark_target_cell_x >= 0
+            && turnDebug.special_mark_target_cell_y >= 0) {
+            turnDebugSpecialMarkTargetCellValueLabel->setText(
+                QString("(%1,%2)")
+                    .arg(turnDebug.special_mark_target_cell_x)
+                    .arg(turnDebug.special_mark_target_cell_y));
+        } else {
+            turnDebugSpecialMarkTargetCellValueLabel->setText("(-,-)");
+        }
+    }
+    if (turnDebugSpecialMarkTargetSourceValueLabel) {
+        turnDebugSpecialMarkTargetSourceValueLabel->setText(
+            specialMarkTargetSourceText(turnDebug.special_mark_target_source));
+    }
+    if (turnDebugLastSpecialMarkActionValueLabel) {
+        turnDebugLastSpecialMarkActionValueLabel->setText(
+            navActionText(turnDebug.last_special_mark_action));
     }
     if (turnDebugAdvanceElapsedSinceLeaveValueLabel) {
         turnDebugAdvanceElapsedSinceLeaveValueLabel->setText(
@@ -2969,6 +3231,18 @@ void MainWindow::updateTelemetryPanel()
     if (motorTestRightValueLabel) {
         motorTestRightValueLabel->setText(QString::number(motorTestCommand.right_motor_pwm));
     }
+    syncPinnedTelemetryRows();
+}
+
+void MainWindow::syncPinnedTelemetryRows()
+{
+    for (TelemetryPinnedRow &row : telemetryPinnedRows) {
+        if (!row.item || !row.source_label) {
+            continue;
+        }
+        row.item->setText(1, row.source_label->text());
+        row.item->setToolTip(1, row.source_label->text());
+    }
 }
 
 void MainWindow::toggleTestSequence()
@@ -3267,7 +3541,10 @@ void MainWindow::executeLoadedRouteIfSafe()
         && routeDebug.loaded_into_plan_queue
         && planDebug.count > 0;
     routeStartFloorRearBlack = buildRobotSensorsSnapshot().floor_rear_black;
-    routeStartPhysicalValid = routePlanReadyToExecute && routeStartFloorRearBlack;
+    routeStartPhysicalValid =
+        routePlanReadyToExecute
+        && routeStartFloorRearBlack
+        && nav_core_rear_line_trusted_for_decision();
 
     if (!routePlanReadyToExecute) {
         routeExecuteStatus = RouteExecuteStatus::NoRouteLoaded;
@@ -3282,7 +3559,7 @@ void MainWindow::executeLoadedRouteIfSafe()
         return;
     }
 
-    if (!routeStartFloorRearBlack) {
+    if (!routeStartFloorRearBlack || !nav_core_rear_line_trusted_for_decision()) {
         routeExecuteStatus = RouteExecuteStatus::StartNotOnRearLine;
         return;
     }
@@ -3567,7 +3844,8 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     basicNavDecisionWallRight = perception.wall_right;
 
     RobotSensors sensors = buildRobotSensorsSnapshot();
-    basicNavDecisionPointValid = sensors.floor_rear_black;
+    const bool rearLineTrusted = nav_core_rear_line_trusted_for_decision();
+    basicNavDecisionPointValid = sensors.floor_rear_black && rearLineTrusted;
     basicNavRecommendedAction = nav_core_recommend_basic_action(&sensors);
     smartLocalAction = basicNavRecommendedAction;
 
@@ -3627,7 +3905,11 @@ void MainWindow::startBasicNavRecommendedAction(NavRecommendedAction action,
     resetNavigationYawReference();
     switch (action) {
     case NAV_RECOMMENDED_ACQUIRE_REAR_LINE:
-        nav_core_start_advance_until_rear_black();
+        if (sensors.floor_rear_black && !nav_core_rear_line_trusted_for_decision()) {
+            nav_core_start_advance_until_rear_black_from_centered_pose();
+        } else {
+            nav_core_start_advance_until_rear_black();
+        }
         break;
     case NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED:
         nav_core_start_pivot_turn_180(&sensors);
