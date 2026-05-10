@@ -110,10 +110,27 @@ typedef enum NavAdvanceCorrectionSource {
     NAV_ADVANCE_CORRECTION_WALL_LEFT,
     NAV_ADVANCE_CORRECTION_WALL_RIGHT,
     NAV_ADVANCE_CORRECTION_WALL_CENTER,
+    NAV_ADVANCE_CORRECTION_WALL_LEFT_CAUTION,
+    NAV_ADVANCE_CORRECTION_WALL_RIGHT_CAUTION,
     NAV_ADVANCE_CORRECTION_DIAG_LEFT,
     NAV_ADVANCE_CORRECTION_DIAG_RIGHT,
     NAV_ADVANCE_CORRECTION_DIAG_CENTER
 } NavAdvanceCorrectionSource;
+
+typedef enum NavWallCautionConfidence {
+    NAV_WALL_CAUTION_CONFIDENCE_LOST = 0,
+    NAV_WALL_CAUTION_CONFIDENCE_CONFIRMED,
+    NAV_WALL_CAUTION_CONFIDENCE_CAUTION
+} NavWallCautionConfidence;
+
+typedef enum NavWallCautionLossReason {
+    NAV_WALL_CAUTION_LOSS_NONE = 0,
+    NAV_WALL_CAUTION_LOSS_DISABLED,
+    NAV_WALL_CAUTION_LOSS_LATERAL_LOST,
+    NAV_WALL_CAUTION_LOSS_DELTA_MAX,
+    NAV_WALL_CAUTION_LOSS_TIMEOUT,
+    NAV_WALL_CAUTION_LOSS_ACTION_END
+} NavWallCautionLossReason;
 
 typedef enum NavAdvanceFrontDiagSource {
     NAV_ADVANCE_FRONT_DIAG_NONE = 0,
@@ -127,12 +144,30 @@ typedef enum NavSmoothFinalGuidanceSource {
     NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER,
     NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT,
     NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT,
+    NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER_HOLD,
+    NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT_HOLD,
+    NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT_HOLD,
     NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD,
     NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD,
     NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD,
     NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY,
     NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK
 } NavSmoothFinalGuidanceSource;
+
+typedef enum NavSmoothFinalDiagonalMode {
+    NAV_SMOOTH_FINAL_DIAG_MODE_HOLD_RELATIVE = 0,
+    NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT = 1
+} NavSmoothFinalDiagonalMode;
+
+typedef enum NavSmoothYawCarryRejectedReason {
+    NAV_SMOOTH_YAW_CARRY_REJECT_NONE = 0,
+    NAV_SMOOTH_YAW_CARRY_REJECT_DISABLED,
+    NAV_SMOOTH_YAW_CARRY_REJECT_NOT_NEXT_SMOOTH,
+    NAV_SMOOTH_YAW_CARRY_REJECT_NOT_SETPOINT,
+    NAV_SMOOTH_YAW_CARRY_REJECT_NO_DIAG_USED,
+    NAV_SMOOTH_YAW_CARRY_REJECT_OFFSET_TOO_SMALL,
+    NAV_SMOOTH_YAW_CARRY_REJECT_OFFSET_TOO_LARGE
+} NavSmoothYawCarryRejectedReason;
 
 typedef enum NavRecommendedAction {
     NAV_RECOMMENDED_NONE = 0,
@@ -240,6 +275,35 @@ typedef struct NavAdvanceWallConfig {
     int16_t target_right_mm;
 } NavAdvanceWallConfig;
 
+typedef struct NavDiagonalGuidanceConfig {
+    int16_t kp_pwm_per_mm;
+    int16_t kd_pwm_per_mm_per_tick;
+    int16_t correction_limit_pwm;
+    int16_t error_scale_num;
+    int16_t error_scale_den;
+    int16_t target_mm;
+    NavSmoothFinalDiagonalMode smooth_final_mode;
+} NavDiagonalGuidanceConfig;
+
+typedef struct NavWallCautionConfig {
+    bool enabled;
+    uint16_t timeout_ms;
+    int16_t delta_max_mm;
+    int16_t kp_pwm_per_mm;
+    int16_t kd_pwm_per_mm_per_tick;
+    int16_t correction_limit_pwm;
+} NavWallCautionConfig;
+
+typedef struct NavSmoothYawCarryConfig {
+    bool enabled;
+    bool only_setpoint;
+    bool require_diag;
+    q16_16_t min_abs_deg_q16;
+    q16_16_t max_abs_deg_q16;
+    int16_t offset_scale_num;
+    int16_t offset_scale_den;
+} NavSmoothYawCarryConfig;
+
 typedef struct NavTurnPidConfig {
     int32_t kp_q16;
     int32_t ki_q16;
@@ -329,10 +393,30 @@ typedef struct NavTurnDebug {
     q16_16_t smooth_final_diag_right_mm_q16;
     q16_16_t smooth_final_diag_target_mm_q16;
     q16_16_t smooth_final_diag_error_scale_q16;
+    NavSmoothFinalDiagonalMode smooth_final_diag_mode;
+    bool smooth_final_diag_hold_initialized;
+    q16_16_t smooth_final_diag_left_hold_mm_q16;
+    q16_16_t smooth_final_diag_right_hold_mm_q16;
+    q16_16_t smooth_final_diag_center_diff_hold_mm_q16;
+    uint16_t smooth_final_diag_hold_recapture_count;
     q16_16_t smooth_final_diag_raw_error_mm_q16;
     q16_16_t smooth_final_diag_error_mm_q16;
     bool smooth_final_follow_left_valid;
     bool smooth_final_follow_right_valid;
+    bool smooth_yaw_carry_enabled;
+    bool smooth_yaw_carry_pending;
+    bool smooth_yaw_carry_used;
+    q16_16_t smooth_yaw_carry_offset_deg_q16;
+    q16_16_t smooth_yaw_carry_entry_yaw_deg_q16;
+    q16_16_t smooth_yaw_carry_exit_yaw_deg_q16;
+    bool smooth_yaw_carry_diag_used;
+    NavSmoothYawCarryRejectedReason smooth_yaw_carry_rejected_reason;
+    bool smooth_yaw_carry_only_setpoint;
+    bool smooth_yaw_carry_require_diag;
+    q16_16_t smooth_yaw_carry_min_abs_deg_q16;
+    q16_16_t smooth_yaw_carry_max_abs_deg_q16;
+    int16_t smooth_yaw_carry_offset_scale_num;
+    int16_t smooth_yaw_carry_offset_scale_den;
     NavAdvancePhase advance_phase;
     NavAdvanceDoneReason advance_done_reason;
     bool rear_black_for_line;
@@ -411,6 +495,17 @@ typedef struct NavTurnDebug {
     bool advance_diag_right_valid;
     bool advance_follow_left_valid;
     bool advance_follow_right_valid;
+    bool wall_caution_enabled;
+    NavWallCautionConfidence wall_left_confidence;
+    NavWallCautionConfidence wall_right_confidence;
+    uint16_t wall_left_caution_elapsed_ms;
+    uint16_t wall_right_caution_elapsed_ms;
+    q16_16_t wall_left_caution_hold_mm_q16;
+    q16_16_t wall_right_caution_hold_mm_q16;
+    q16_16_t wall_left_caution_delta_mm_q16;
+    q16_16_t wall_right_caution_delta_mm_q16;
+    int16_t wall_caution_correction_pwm;
+    NavWallCautionLossReason wall_caution_loss_reason;
     q16_16_t advance_wall_left_mm_q16;
     q16_16_t advance_wall_right_mm_q16;
     q16_16_t advance_wall_raw_error_mm_q16;
@@ -423,6 +518,16 @@ typedef struct NavTurnDebug {
     int32_t advance_wall_raw_correction_pwm;
     int16_t advance_wall_limited_correction_pwm;
     int16_t advance_wall_correction_pwm;
+    int16_t diag_guidance_kp_pwm_per_mm;
+    int16_t diag_guidance_kd_pwm_per_mm_per_tick;
+    int16_t diag_guidance_correction_limit_pwm;
+    int16_t diag_guidance_error_scale_num;
+    int16_t diag_guidance_error_scale_den;
+    int16_t diag_guidance_target_mm;
+    NavSmoothFinalDiagonalMode diag_guidance_smooth_final_mode;
+    int32_t diag_guidance_p_term_pwm;
+    int32_t diag_guidance_d_term_pwm;
+    int16_t diag_guidance_correction_pwm;
     int16_t wall_kp_pwm_per_mm;
     int16_t wall_kd_pwm_per_mm_per_tick;
     q16_16_t wall_error_deadband_mm_q16;
@@ -461,6 +566,18 @@ NavAdvanceGuidanceMode nav_core_get_advance_guidance_mode(void);
 void nav_core_set_advance_wall_config(const NavAdvanceWallConfig *config);
 void nav_core_get_advance_wall_config(NavAdvanceWallConfig *config);
 void nav_core_reset_advance_wall_defaults(void);
+void nav_core_set_diagonal_guidance_config(const NavDiagonalGuidanceConfig *config);
+void nav_core_get_diagonal_guidance_config(NavDiagonalGuidanceConfig *config);
+void nav_core_reset_diagonal_guidance_defaults(void);
+void nav_core_set_wall_caution_config(const NavWallCautionConfig *config);
+void nav_core_get_wall_caution_config(NavWallCautionConfig *config);
+void nav_core_reset_wall_caution_defaults(void);
+void nav_core_set_smooth_yaw_carry_config(const NavSmoothYawCarryConfig *config);
+void nav_core_get_smooth_yaw_carry_config(NavSmoothYawCarryConfig *config);
+void nav_core_reset_smooth_yaw_carry_defaults(void);
+bool nav_core_prepare_smooth_yaw_carry_for_next_action(bool next_action_is_smooth);
+bool nav_core_has_smooth_yaw_carry_pending(void);
+q16_16_t nav_core_consume_smooth_yaw_carry_offset_q16(void);
 void nav_core_get_turn_pid_config(NavTurnPidConfig *config);
 void nav_core_set_turn_pid_config(const NavTurnPidConfig *config);
 void nav_core_reset_turn_pid_defaults(void);

@@ -1,0 +1,25 @@
+{
+  "name": "test_right_hand_loop",
+  "cells": {
+    "width": 5,
+    "height": 5,
+    "cell_size_mm": 200
+  },
+  "start": {
+    "x_mm": 100,
+    "y_mm": 100,
+    "yaw_deg": 0
+  },
+  "walls": [
+    { "cell_x": 1, "cell_y": 1, "dir": "N" },
+    { "cell_x": 1, "cell_y": 1, "dir": "W" },
+    { "cell_x": 2, "cell_y": 1, "dir": "N" },
+    { "cell_x": 3, "cell_y": 1, "dir": "E" },
+    { "cell_x": 3, "cell_y": 2, "dir": "E" },
+    { "cell_x": 3, "cell_y": 3, "dir": "S" },
+    { "cell_x": 2, "cell_y": 3, "dir": "S" },
+    { "cell_x": 1, "cell_y": 3, "dir": "W" },
+    { "cell_x": 2, "cell_y": 2, "dir": "N" },
+    { "cell_x": 2, "cell_y": 2, "dir": "S" }
+  ]
+}
