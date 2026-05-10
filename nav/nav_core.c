@@ -20,8 +20,11 @@ enum {
     NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM = 2800,
     NAV_SMOOTH_POST_YAW_TIMEOUT_MS = 800,
     NAV_DIAG_GUIDANCE_TARGET_MM_DEFAULT = 99,
-    NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT = 20,
+    NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT = 1,
     NAV_DIAG_GUIDANCE_ERROR_SCALE_DEN_DEFAULT = 1,
+    NAV_DIAG_GUIDANCE_KP_PWM_PER_MM_DEFAULT = 30,
+    NAV_DIAG_GUIDANCE_KD_PWM_PER_MM_DEFAULT = 0,
+    NAV_DIAG_GUIDANCE_OUTPUT_LIMIT_PWM_DEFAULT = 1000,
     NAV_SMOOTH_TARGET_YAW_RATE_DEFAULT_DEG_S = 120,
     NAV_SMOOTH_TARGET_YAW_RATE_MIN_DEG_S = 60,
     NAV_SMOOTH_TARGET_YAW_RATE_MAX_DEG_S = 120,
@@ -57,8 +60,11 @@ enum {
     NAV_WALL_CAUTION_TIMEOUT_MS_DEFAULT = 400,
     NAV_WALL_CAUTION_TIMEOUT_MS_MAX = 1000,
     NAV_WALL_CAUTION_DELTA_MAX_MM_DEFAULT = 10,
-    NAV_WALL_CAUTION_OUTPUT_LIMIT_PWM_DEFAULT = 4000,
-    NAV_SMOOTH_YAW_CARRY_MAX_ABS_DEG_DEFAULT = 8,
+    NAV_WALL_CAUTION_OUTPUT_LIMIT_PWM_DEFAULT = 1000,
+    NAV_WALL_CAUTION_KP_PWM_PER_MM_DEFAULT = 12,
+    NAV_WALL_CAUTION_KD_PWM_PER_MM_PER_TICK_DEFAULT = 600,
+    NAV_SMOOTH_YAW_CARRY_MAX_ABS_DEG_DEFAULT = 15,
+    NAV_SMOOTH_YAW_CARRY_MIN_ABS_DEG_DEFAULT = 3,
     NAV_SMOOTH_YAW_CARRY_SCALE_NUM_DEFAULT = 1,
     NAV_SMOOTH_YAW_CARRY_SCALE_DEN_DEFAULT = 1,
     NAV_SPECIAL_DETECT_MIN_MS = 100,
@@ -188,13 +194,13 @@ static NavAdvanceWallConfig advance_wall_config = {
 static q16_16_t advance_wall_previous_error_q16 = 0;
 static bool advance_wall_has_previous_error = false;
 static NavDiagonalGuidanceConfig diagonal_guidance_config = {
-    NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT,
-    0,
-    NAV_ADVANCE_WALL_OUTPUT_LIMIT_PWM_DEFAULT,
+    NAV_DIAG_GUIDANCE_KP_PWM_PER_MM_DEFAULT,
+    NAV_DIAG_GUIDANCE_KD_PWM_PER_MM_DEFAULT,
+    NAV_DIAG_GUIDANCE_OUTPUT_LIMIT_PWM_DEFAULT,
     NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT,
     NAV_DIAG_GUIDANCE_ERROR_SCALE_DEN_DEFAULT,
     NAV_DIAG_GUIDANCE_TARGET_MM_DEFAULT,
-    NAV_SMOOTH_FINAL_DIAG_MODE_HOLD_RELATIVE
+    NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT
 };
 static q16_16_t diagonal_guidance_previous_error_q16 = 0;
 static bool diagonal_guidance_has_previous_error = false;
@@ -202,8 +208,8 @@ static NavWallCautionConfig wall_caution_config = {
     true,
     NAV_WALL_CAUTION_TIMEOUT_MS_DEFAULT,
     NAV_WALL_CAUTION_DELTA_MAX_MM_DEFAULT,
-    NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT,
-    0,
+    NAV_WALL_CAUTION_KP_PWM_PER_MM_DEFAULT,
+    NAV_WALL_CAUTION_KD_PWM_PER_MM_PER_TICK_DEFAULT,
     NAV_WALL_CAUTION_OUTPUT_LIMIT_PWM_DEFAULT
 };
 static NavWallCautionConfidence wall_left_confidence = NAV_WALL_CAUTION_CONFIDENCE_LOST;
@@ -615,13 +621,13 @@ static void reset_advance_wall_config(void)
 
 static void reset_diagonal_guidance_config(void)
 {
-    diagonal_guidance_config.kp_pwm_per_mm = NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT;
-    diagonal_guidance_config.kd_pwm_per_mm_per_tick = 0;
-    diagonal_guidance_config.correction_limit_pwm = NAV_ADVANCE_WALL_OUTPUT_LIMIT_PWM_DEFAULT;
+    diagonal_guidance_config.kp_pwm_per_mm = NAV_DIAG_GUIDANCE_KP_PWM_PER_MM_DEFAULT;
+    diagonal_guidance_config.kd_pwm_per_mm_per_tick = NAV_DIAG_GUIDANCE_KD_PWM_PER_MM_DEFAULT;
+    diagonal_guidance_config.correction_limit_pwm = NAV_DIAG_GUIDANCE_OUTPUT_LIMIT_PWM_DEFAULT;
     diagonal_guidance_config.error_scale_num = NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT;
     diagonal_guidance_config.error_scale_den = NAV_DIAG_GUIDANCE_ERROR_SCALE_DEN_DEFAULT;
     diagonal_guidance_config.target_mm = NAV_DIAG_GUIDANCE_TARGET_MM_DEFAULT;
-    diagonal_guidance_config.smooth_final_mode = NAV_SMOOTH_FINAL_DIAG_MODE_HOLD_RELATIVE;
+    diagonal_guidance_config.smooth_final_mode = NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT;
 }
 
 static void reset_wall_caution_config(void)
@@ -629,17 +635,17 @@ static void reset_wall_caution_config(void)
     wall_caution_config.enabled = true;
     wall_caution_config.timeout_ms = NAV_WALL_CAUTION_TIMEOUT_MS_DEFAULT;
     wall_caution_config.delta_max_mm = NAV_WALL_CAUTION_DELTA_MAX_MM_DEFAULT;
-    wall_caution_config.kp_pwm_per_mm = NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT;
-    wall_caution_config.kd_pwm_per_mm_per_tick = 0;
+    wall_caution_config.kp_pwm_per_mm = NAV_WALL_CAUTION_KP_PWM_PER_MM_DEFAULT;
+    wall_caution_config.kd_pwm_per_mm_per_tick = NAV_WALL_CAUTION_KD_PWM_PER_MM_PER_TICK_DEFAULT;
     wall_caution_config.correction_limit_pwm = NAV_WALL_CAUTION_OUTPUT_LIMIT_PWM_DEFAULT;
 }
 
 static void reset_smooth_yaw_carry_config(void)
 {
-    smooth_yaw_carry_config.enabled = false;
+    smooth_yaw_carry_config.enabled = true;
     smooth_yaw_carry_config.only_setpoint = true;
     smooth_yaw_carry_config.require_diag = true;
-    smooth_yaw_carry_config.min_abs_deg_q16 = 0;
+    smooth_yaw_carry_config.min_abs_deg_q16 = NAV_SMOOTH_YAW_CARRY_MIN_ABS_DEG_DEFAULT << 16;
     smooth_yaw_carry_config.max_abs_deg_q16 =
         NAV_SMOOTH_YAW_CARRY_MAX_ABS_DEG_DEFAULT << 16;
     smooth_yaw_carry_config.offset_scale_num = NAV_SMOOTH_YAW_CARRY_SCALE_NUM_DEFAULT;
