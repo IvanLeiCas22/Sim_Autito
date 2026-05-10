@@ -11,8 +11,8 @@
     "yaw_deg": 0
   },
   "special_cells": [
-    { "cell_x": 2, "cell_y": 2, "size_mm": 120 },
     { "cell_x": 3, "cell_y": 2, "size_mm": 120 },
+    { "cell_x": 2, "cell_y": 2, "size_mm": 120 },
     { "cell_x": 5, "cell_y": 4, "size_mm": 120 }
   ],
   "walls": [

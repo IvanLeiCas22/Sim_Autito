@@ -305,6 +305,14 @@ private:
     QLabel *turnDebugAdvanceBaseRightValueLabel = nullptr;
     QLabel *turnDebugAdvanceGuidanceModeValueLabel = nullptr;
     QLabel *turnDebugAdvanceCorrectionSourceValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagPreviewArmedValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagPreviewLatchedValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagPreviewActiveValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagSourceValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagRawErrorValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagErrorValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagLeftValidValueLabel = nullptr;
+    QLabel *turnDebugAdvanceFrontDiagRightValidValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallLeftValidValueLabel = nullptr;
     QLabel *turnDebugAdvanceWallRightValidValueLabel = nullptr;
     QLabel *turnDebugAdvanceDiagLeftValidValueLabel = nullptr;

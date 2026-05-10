@@ -382,6 +382,28 @@ QString advanceCorrectionSourceText(NavAdvanceCorrectionSource source)
         return "WALL_RIGHT";
     case NAV_ADVANCE_CORRECTION_WALL_CENTER:
         return "WALL_CENTER";
+    case NAV_ADVANCE_CORRECTION_DIAG_LEFT:
+        return "DIAG_LEFT";
+    case NAV_ADVANCE_CORRECTION_DIAG_RIGHT:
+        return "DIAG_RIGHT";
+    case NAV_ADVANCE_CORRECTION_DIAG_CENTER:
+        return "DIAG_CENTER";
+    }
+
+    return "UNKNOWN";
+}
+
+QString advanceFrontDiagSourceText(NavAdvanceFrontDiagSource source)
+{
+    switch (source) {
+    case NAV_ADVANCE_FRONT_DIAG_NONE:
+        return "NONE";
+    case NAV_ADVANCE_FRONT_DIAG_LEFT:
+        return "DIAG_LEFT";
+    case NAV_ADVANCE_FRONT_DIAG_RIGHT:
+        return "DIAG_RIGHT";
+    case NAV_ADVANCE_FRONT_DIAG_CENTER:
+        return "DIAG_CENTER";
     }
 
     return "UNKNOWN";
@@ -1603,6 +1625,14 @@ void MainWindow::createTelemetryPanel()
     turnDebugAdvanceBaseRightValueLabel = new QLabel(panel);
     turnDebugAdvanceGuidanceModeValueLabel = new QLabel(panel);
     turnDebugAdvanceCorrectionSourceValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagPreviewArmedValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagPreviewLatchedValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagPreviewActiveValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagSourceValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagRawErrorValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagErrorValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagLeftValidValueLabel = new QLabel(panel);
+    turnDebugAdvanceFrontDiagRightValidValueLabel = new QLabel(panel);
     turnDebugAdvanceWallLeftValidValueLabel = new QLabel(panel);
     turnDebugAdvanceWallRightValidValueLabel = new QLabel(panel);
     turnDebugAdvanceDiagLeftValidValueLabel = new QLabel(panel);
@@ -1869,6 +1899,14 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugAdvanceBaseRightValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceGuidanceModeValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceCorrectionSourceValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagPreviewArmedValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagPreviewLatchedValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagPreviewActiveValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagSourceValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagRawErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagLeftValidValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceFrontDiagRightValidValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallLeftValidValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceWallRightValidValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceDiagLeftValidValueLabel);
@@ -2166,6 +2204,20 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("advance_base_right_pwm:", turnDebugAdvanceBaseRightValueLabel);
     layout->addRow("advance_guidance_mode:", turnDebugAdvanceGuidanceModeValueLabel);
     layout->addRow("advance_final_correction_source:", turnDebugAdvanceCorrectionSourceValueLabel);
+    layout->addRow("advance_front_diag_preview_armed:",
+                   turnDebugAdvanceFrontDiagPreviewArmedValueLabel);
+    layout->addRow("advance_front_diag_preview_latched:",
+                   turnDebugAdvanceFrontDiagPreviewLatchedValueLabel);
+    layout->addRow("advance_front_diag_preview_active:",
+                   turnDebugAdvanceFrontDiagPreviewActiveValueLabel);
+    layout->addRow("advance_front_diag_source:", turnDebugAdvanceFrontDiagSourceValueLabel);
+    layout->addRow("advance_front_diag_raw_error_mm:",
+                   turnDebugAdvanceFrontDiagRawErrorValueLabel);
+    layout->addRow("advance_front_diag_error_mm:", turnDebugAdvanceFrontDiagErrorValueLabel);
+    layout->addRow("advance_front_diag_left_valid:",
+                   turnDebugAdvanceFrontDiagLeftValidValueLabel);
+    layout->addRow("advance_front_diag_right_valid:",
+                   turnDebugAdvanceFrontDiagRightValidValueLabel);
     layout->addRow("advance_wall_left_valid:", turnDebugAdvanceWallLeftValidValueLabel);
     layout->addRow("advance_wall_right_valid:", turnDebugAdvanceWallRightValidValueLabel);
     layout->addRow("advance_diag_left_valid:", turnDebugAdvanceDiagLeftValidValueLabel);
@@ -2386,6 +2438,14 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("smooth_final_applied_correction_pwm",
                  turnDebugSmoothFinalAppliedCorrectionValueLabel);
     addPinnedRow("advance_final_correction_source", turnDebugAdvanceCorrectionSourceValueLabel);
+    addPinnedRow("advance_front_diag_preview_armed",
+                 turnDebugAdvanceFrontDiagPreviewArmedValueLabel);
+    addPinnedRow("advance_front_diag_preview_latched",
+                 turnDebugAdvanceFrontDiagPreviewLatchedValueLabel);
+    addPinnedRow("advance_front_diag_preview_active",
+                 turnDebugAdvanceFrontDiagPreviewActiveValueLabel);
+    addPinnedRow("advance_front_diag_source", turnDebugAdvanceFrontDiagSourceValueLabel);
+    addPinnedRow("advance_front_diag_error_mm", turnDebugAdvanceFrontDiagErrorValueLabel);
     addPinnedRow("advance_yaw_hold_deg", turnDebugAdvanceYawHoldValueLabel);
     addPinnedRow("advance_yaw_hold_error_deg", turnDebugAdvanceYawHoldErrorValueLabel);
     addPinnedRow("plan_current_action", planCurrentActionValueLabel);
@@ -2936,6 +2996,39 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugAdvanceCorrectionSourceValueLabel) {
         turnDebugAdvanceCorrectionSourceValueLabel->setText(
             advanceCorrectionSourceText(turnDebug.advance_final_correction_source));
+    }
+    if (turnDebugAdvanceFrontDiagPreviewArmedValueLabel) {
+        turnDebugAdvanceFrontDiagPreviewArmedValueLabel->setText(
+            turnDebug.advance_front_diag_preview_armed ? "true" : "false");
+    }
+    if (turnDebugAdvanceFrontDiagPreviewLatchedValueLabel) {
+        turnDebugAdvanceFrontDiagPreviewLatchedValueLabel->setText(
+            turnDebug.advance_front_diag_preview_latched ? "true" : "false");
+    }
+    if (turnDebugAdvanceFrontDiagPreviewActiveValueLabel) {
+        turnDebugAdvanceFrontDiagPreviewActiveValueLabel->setText(
+            turnDebug.advance_front_diag_preview_active ? "true" : "false");
+    }
+    if (turnDebugAdvanceFrontDiagSourceValueLabel) {
+        turnDebugAdvanceFrontDiagSourceValueLabel->setText(
+            advanceFrontDiagSourceText(turnDebug.advance_front_diag_source));
+    }
+    if (turnDebugAdvanceFrontDiagRawErrorValueLabel) {
+        turnDebugAdvanceFrontDiagRawErrorValueLabel->setText(
+            QString("%1 mm")
+                .arg(fromQ16(turnDebug.advance_front_diag_raw_error_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugAdvanceFrontDiagErrorValueLabel) {
+        turnDebugAdvanceFrontDiagErrorValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.advance_front_diag_error_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugAdvanceFrontDiagLeftValidValueLabel) {
+        turnDebugAdvanceFrontDiagLeftValidValueLabel->setText(
+            turnDebug.advance_front_diag_left_valid ? "true" : "false");
+    }
+    if (turnDebugAdvanceFrontDiagRightValidValueLabel) {
+        turnDebugAdvanceFrontDiagRightValidValueLabel->setText(
+            turnDebug.advance_front_diag_right_valid ? "true" : "false");
     }
     if (turnDebugAdvanceWallLeftValidValueLabel) {
         turnDebugAdvanceWallLeftValidValueLabel->setText(

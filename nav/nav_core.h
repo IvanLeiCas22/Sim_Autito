@@ -109,8 +109,18 @@ typedef enum NavAdvanceCorrectionSource {
     NAV_ADVANCE_CORRECTION_YAW_PD = 0,
     NAV_ADVANCE_CORRECTION_WALL_LEFT,
     NAV_ADVANCE_CORRECTION_WALL_RIGHT,
-    NAV_ADVANCE_CORRECTION_WALL_CENTER
+    NAV_ADVANCE_CORRECTION_WALL_CENTER,
+    NAV_ADVANCE_CORRECTION_DIAG_LEFT,
+    NAV_ADVANCE_CORRECTION_DIAG_RIGHT,
+    NAV_ADVANCE_CORRECTION_DIAG_CENTER
 } NavAdvanceCorrectionSource;
+
+typedef enum NavAdvanceFrontDiagSource {
+    NAV_ADVANCE_FRONT_DIAG_NONE = 0,
+    NAV_ADVANCE_FRONT_DIAG_LEFT,
+    NAV_ADVANCE_FRONT_DIAG_RIGHT,
+    NAV_ADVANCE_FRONT_DIAG_CENTER
+} NavAdvanceFrontDiagSource;
 
 typedef enum NavSmoothFinalGuidanceSource {
     NAV_SMOOTH_FINAL_GUIDANCE_NONE = 0,
@@ -387,6 +397,14 @@ typedef struct NavTurnDebug {
     int16_t advance_base_right_pwm;
     NavAdvanceGuidanceMode advance_guidance_mode;
     NavAdvanceCorrectionSource advance_final_correction_source;
+    bool advance_front_diag_preview_armed;
+    bool advance_front_diag_preview_latched;
+    bool advance_front_diag_preview_active;
+    NavAdvanceFrontDiagSource advance_front_diag_source;
+    q16_16_t advance_front_diag_raw_error_mm_q16;
+    q16_16_t advance_front_diag_error_mm_q16;
+    bool advance_front_diag_left_valid;
+    bool advance_front_diag_right_valid;
     bool advance_wall_left_valid;
     bool advance_wall_right_valid;
     bool advance_diag_left_valid;
