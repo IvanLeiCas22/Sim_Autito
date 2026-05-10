@@ -112,6 +112,18 @@ typedef enum NavAdvanceCorrectionSource {
     NAV_ADVANCE_CORRECTION_WALL_CENTER
 } NavAdvanceCorrectionSource;
 
+typedef enum NavSmoothFinalGuidanceSource {
+    NAV_SMOOTH_FINAL_GUIDANCE_NONE = 0,
+    NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER,
+    NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT,
+    NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT,
+    NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD,
+    NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD,
+    NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD,
+    NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY,
+    NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK
+} NavSmoothFinalGuidanceSource;
+
 typedef enum NavRecommendedAction {
     NAV_RECOMMENDED_NONE = 0,
     NAV_RECOMMENDED_ACQUIRE_REAR_LINE,
@@ -286,6 +298,31 @@ typedef struct NavTurnDebug {
     NavSmoothPhase smooth_phase;
     NavSmoothDoneReason smooth_done_reason;
     uint16_t smooth_post_yaw_elapsed_ms;
+    NavSmoothFinalGuidanceSource smooth_final_guidance_source;
+    bool smooth_final_hold_initialized;
+    NavSmoothFinalGuidanceSource smooth_final_hold_source;
+    uint16_t smooth_final_hold_recapture_count;
+    q16_16_t smooth_final_left_hold_mm_q16;
+    q16_16_t smooth_final_right_hold_mm_q16;
+    q16_16_t smooth_final_center_diff_hold_mm_q16;
+    q16_16_t smooth_final_wall_error_mm_q16;
+    int16_t smooth_final_wall_correction_pwm;
+    int16_t smooth_final_yaw_correction_pwm;
+    q16_16_t smooth_final_yaw_hold_deg_q16;
+    bool smooth_final_yaw_hold_initialized;
+    uint16_t smooth_final_yaw_hold_recapture_count;
+    q16_16_t smooth_final_yaw_error_deg_q16;
+    int16_t smooth_final_applied_correction_pwm;
+    bool smooth_final_diag_left_valid;
+    bool smooth_final_diag_right_valid;
+    q16_16_t smooth_final_diag_left_mm_q16;
+    q16_16_t smooth_final_diag_right_mm_q16;
+    q16_16_t smooth_final_diag_target_mm_q16;
+    q16_16_t smooth_final_diag_error_scale_q16;
+    q16_16_t smooth_final_diag_raw_error_mm_q16;
+    q16_16_t smooth_final_diag_error_mm_q16;
+    bool smooth_final_follow_left_valid;
+    bool smooth_final_follow_right_valid;
     NavAdvancePhase advance_phase;
     NavAdvanceDoneReason advance_done_reason;
     bool rear_black_for_line;
@@ -337,6 +374,11 @@ typedef struct NavTurnDebug {
     q16_16_t advance_yaw_error_deg_q16;
     q16_16_t advance_yaw_pid_output_q16;
     int16_t advance_yaw_correction_pwm;
+    q16_16_t advance_yaw_hold_deg_q16;
+    bool advance_yaw_hold_initialized;
+    uint16_t advance_yaw_hold_recapture_count;
+    q16_16_t advance_yaw_hold_error_deg_q16;
+    NavAdvanceCorrectionSource advance_guidance_last_source;
     q16_16_t advance_yaw_kp_q16;
     q16_16_t advance_yaw_ki_q16;
     q16_16_t advance_yaw_kd_q16;

@@ -429,6 +429,32 @@ QString mapActionText(NavMapAction action)
     return "UNKNOWN";
 }
 
+QString smoothFinalGuidanceSourceText(NavSmoothFinalGuidanceSource source)
+{
+    switch (source) {
+    case NAV_SMOOTH_FINAL_GUIDANCE_NONE:
+        return "NONE";
+    case NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER:
+        return "DIAG_CENTER";
+    case NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT:
+        return "DIAG_LEFT";
+    case NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT:
+        return "DIAG_RIGHT";
+    case NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD:
+        return "WALL_CENTER_HOLD";
+    case NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD:
+        return "WALL_LEFT_HOLD";
+    case NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD:
+        return "WALL_RIGHT_HOLD";
+    case NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY:
+        return "YAW_ONLY";
+    case NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK:
+        return "YAW_ONLY_FALLBACK";
+    }
+
+    return "UNKNOWN";
+}
+
 QString wallMaskText(uint8_t mask)
 {
     QStringList parts;
@@ -1489,6 +1515,31 @@ void MainWindow::createTelemetryPanel()
     turnDebugSmoothPhaseValueLabel = new QLabel(panel);
     turnDebugSmoothDoneReasonValueLabel = new QLabel(panel);
     turnDebugSmoothPostYawElapsedValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalGuidanceSourceValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalHoldInitializedValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalHoldSourceValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalHoldRecaptureCountValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalLeftHoldValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalRightHoldValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalCenterDiffHoldValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalWallErrorValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalWallCorrectionValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalYawCorrectionValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalYawHoldValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalYawHoldInitializedValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalYawHoldRecaptureCountValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalYawErrorValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalAppliedCorrectionValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagLeftValidValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagRightValidValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagLeftValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagRightValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagTargetValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagErrorScaleValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagRawErrorValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalDiagErrorValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalFollowLeftValidValueLabel = new QLabel(panel);
+    turnDebugSmoothFinalFollowRightValidValueLabel = new QLabel(panel);
     turnDebugAdvancePhaseValueLabel = new QLabel(panel);
     turnDebugAdvanceDoneReasonValueLabel = new QLabel(panel);
     turnDebugRearBlackForLineValueLabel = new QLabel(panel);
@@ -1539,6 +1590,11 @@ void MainWindow::createTelemetryPanel()
     turnDebugAdvanceYawErrorValueLabel = new QLabel(panel);
     turnDebugAdvanceYawOutputValueLabel = new QLabel(panel);
     turnDebugAdvanceYawCorrectionValueLabel = new QLabel(panel);
+    turnDebugAdvanceYawHoldValueLabel = new QLabel(panel);
+    turnDebugAdvanceYawHoldInitializedValueLabel = new QLabel(panel);
+    turnDebugAdvanceYawHoldRecaptureCountValueLabel = new QLabel(panel);
+    turnDebugAdvanceYawHoldErrorValueLabel = new QLabel(panel);
+    turnDebugAdvanceGuidanceLastSourceValueLabel = new QLabel(panel);
     turnDebugAdvanceYawKpValueLabel = new QLabel(panel);
     turnDebugAdvanceYawKiValueLabel = new QLabel(panel);
     turnDebugAdvanceYawKdValueLabel = new QLabel(panel);
@@ -1725,6 +1781,31 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugSmoothPhaseValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothDoneReasonValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothPostYawElapsedValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalGuidanceSourceValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalHoldInitializedValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalHoldSourceValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalHoldRecaptureCountValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalLeftHoldValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalRightHoldValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalCenterDiffHoldValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalWallErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalWallCorrectionValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalYawCorrectionValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalYawHoldValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalYawHoldInitializedValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalYawHoldRecaptureCountValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalYawErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalAppliedCorrectionValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagLeftValidValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagRightValidValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagLeftValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagRightValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagTargetValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagErrorScaleValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagRawErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalDiagErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalFollowLeftValidValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothFinalFollowRightValidValueLabel);
     configureTelemetryValueLabel(turnDebugAdvancePhaseValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceDoneReasonValueLabel);
     configureTelemetryValueLabel(turnDebugRearBlackForLineValueLabel);
@@ -1775,6 +1856,11 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugAdvanceYawErrorValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawOutputValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawCorrectionValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceYawHoldValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceYawHoldInitializedValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceYawHoldRecaptureCountValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceYawHoldErrorValueLabel);
+    configureTelemetryValueLabel(turnDebugAdvanceGuidanceLastSourceValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawKpValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawKiValueLabel);
     configureTelemetryValueLabel(turnDebugAdvanceYawKdValueLabel);
@@ -1967,6 +2053,45 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("smooth_phase:", turnDebugSmoothPhaseValueLabel);
     layout->addRow("smooth_done_reason:", turnDebugSmoothDoneReasonValueLabel);
     layout->addRow("smooth_post_yaw_elapsed_ms:", turnDebugSmoothPostYawElapsedValueLabel);
+    layout->addRow("smooth_final_guidance_source:", turnDebugSmoothFinalGuidanceSourceValueLabel);
+    layout->addRow("smooth_final_hold_initialized:",
+                   turnDebugSmoothFinalHoldInitializedValueLabel);
+    layout->addRow("smooth_final_hold_source:", turnDebugSmoothFinalHoldSourceValueLabel);
+    layout->addRow("smooth_final_hold_recapture_count:",
+                   turnDebugSmoothFinalHoldRecaptureCountValueLabel);
+    layout->addRow("smooth_final_left_hold_mm:", turnDebugSmoothFinalLeftHoldValueLabel);
+    layout->addRow("smooth_final_right_hold_mm:", turnDebugSmoothFinalRightHoldValueLabel);
+    layout->addRow("smooth_final_center_diff_hold_mm:",
+                   turnDebugSmoothFinalCenterDiffHoldValueLabel);
+    layout->addRow("smooth_final_wall_error_mm:", turnDebugSmoothFinalWallErrorValueLabel);
+    layout->addRow("smooth_final_wall_correction_pwm:",
+                   turnDebugSmoothFinalWallCorrectionValueLabel);
+    layout->addRow("smooth_final_yaw_correction_pwm:",
+                   turnDebugSmoothFinalYawCorrectionValueLabel);
+    layout->addRow("smooth_final_yaw_hold_deg:", turnDebugSmoothFinalYawHoldValueLabel);
+    layout->addRow("smooth_final_yaw_hold_initialized:",
+                   turnDebugSmoothFinalYawHoldInitializedValueLabel);
+    layout->addRow("smooth_final_yaw_hold_recapture_count:",
+                   turnDebugSmoothFinalYawHoldRecaptureCountValueLabel);
+    layout->addRow("smooth_final_yaw_error_deg:", turnDebugSmoothFinalYawErrorValueLabel);
+    layout->addRow("smooth_final_applied_correction_pwm:",
+                   turnDebugSmoothFinalAppliedCorrectionValueLabel);
+    layout->addRow("smooth_final_diag_left_valid:",
+                   turnDebugSmoothFinalDiagLeftValidValueLabel);
+    layout->addRow("smooth_final_diag_right_valid:",
+                   turnDebugSmoothFinalDiagRightValidValueLabel);
+    layout->addRow("smooth_final_diag_left_mm:", turnDebugSmoothFinalDiagLeftValueLabel);
+    layout->addRow("smooth_final_diag_right_mm:", turnDebugSmoothFinalDiagRightValueLabel);
+    layout->addRow("smooth_final_diag_target_mm:", turnDebugSmoothFinalDiagTargetValueLabel);
+    layout->addRow("smooth_final_diag_error_scale:",
+                   turnDebugSmoothFinalDiagErrorScaleValueLabel);
+    layout->addRow("smooth_final_diag_raw_error_mm:",
+                   turnDebugSmoothFinalDiagRawErrorValueLabel);
+    layout->addRow("smooth_final_diag_error_mm:", turnDebugSmoothFinalDiagErrorValueLabel);
+    layout->addRow("smooth_final_follow_left_valid:",
+                   turnDebugSmoothFinalFollowLeftValidValueLabel);
+    layout->addRow("smooth_final_follow_right_valid:",
+                   turnDebugSmoothFinalFollowRightValidValueLabel);
     layout->addRow("advance_phase:", turnDebugAdvancePhaseValueLabel);
     layout->addRow("advance_done_reason:", turnDebugAdvanceDoneReasonValueLabel);
     layout->addRow("rear_black_for_line:", turnDebugRearBlackForLineValueLabel);
@@ -2025,6 +2150,14 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("advance_yaw_error:", turnDebugAdvanceYawErrorValueLabel);
     layout->addRow("advance_yaw_pid_output:", turnDebugAdvanceYawOutputValueLabel);
     layout->addRow("advance_yaw_correction:", turnDebugAdvanceYawCorrectionValueLabel);
+    layout->addRow("advance_yaw_hold_deg:", turnDebugAdvanceYawHoldValueLabel);
+    layout->addRow("advance_yaw_hold_initialized:",
+                   turnDebugAdvanceYawHoldInitializedValueLabel);
+    layout->addRow("advance_yaw_hold_recapture_count:",
+                   turnDebugAdvanceYawHoldRecaptureCountValueLabel);
+    layout->addRow("advance_yaw_hold_error_deg:", turnDebugAdvanceYawHoldErrorValueLabel);
+    layout->addRow("advance_guidance_last_source:",
+                   turnDebugAdvanceGuidanceLastSourceValueLabel);
     layout->addRow("advance_yaw_kp:", turnDebugAdvanceYawKpValueLabel);
     layout->addRow("advance_yaw_ki:", turnDebugAdvanceYawKiValueLabel);
     layout->addRow("advance_yaw_kd:", turnDebugAdvanceYawKdValueLabel);
@@ -2246,6 +2379,15 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("nav_action", navActionValueLabel);
     addPinnedRow("smooth_phase", turnDebugSmoothPhaseValueLabel);
     addPinnedRow("smooth_done_reason", turnDebugSmoothDoneReasonValueLabel);
+    addPinnedRow("smooth_final_guidance_source", turnDebugSmoothFinalGuidanceSourceValueLabel);
+    addPinnedRow("smooth_final_diag_error_mm", turnDebugSmoothFinalDiagErrorValueLabel);
+    addPinnedRow("smooth_final_yaw_hold_deg", turnDebugSmoothFinalYawHoldValueLabel);
+    addPinnedRow("smooth_final_yaw_error_deg", turnDebugSmoothFinalYawErrorValueLabel);
+    addPinnedRow("smooth_final_applied_correction_pwm",
+                 turnDebugSmoothFinalAppliedCorrectionValueLabel);
+    addPinnedRow("advance_final_correction_source", turnDebugAdvanceCorrectionSourceValueLabel);
+    addPinnedRow("advance_yaw_hold_deg", turnDebugAdvanceYawHoldValueLabel);
+    addPinnedRow("advance_yaw_hold_error_deg", turnDebugAdvanceYawHoldErrorValueLabel);
     addPinnedRow("plan_current_action", planCurrentActionValueLabel);
     addPinnedRow("plan_next_action", planNextActionValueLabel);
     addPinnedRow("smart_recognition_state", smartRecognitionStateValueLabel);
@@ -2438,6 +2580,108 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugSmoothPostYawElapsedValueLabel) {
         turnDebugSmoothPostYawElapsedValueLabel->setText(
             QString::number(turnDebug.smooth_post_yaw_elapsed_ms));
+    }
+    if (turnDebugSmoothFinalGuidanceSourceValueLabel) {
+        turnDebugSmoothFinalGuidanceSourceValueLabel->setText(
+            smoothFinalGuidanceSourceText(turnDebug.smooth_final_guidance_source));
+    }
+    if (turnDebugSmoothFinalHoldInitializedValueLabel) {
+        turnDebugSmoothFinalHoldInitializedValueLabel->setText(
+            turnDebug.smooth_final_hold_initialized ? "true" : "false");
+    }
+    if (turnDebugSmoothFinalHoldSourceValueLabel) {
+        turnDebugSmoothFinalHoldSourceValueLabel->setText(
+            smoothFinalGuidanceSourceText(turnDebug.smooth_final_hold_source));
+    }
+    if (turnDebugSmoothFinalHoldRecaptureCountValueLabel) {
+        turnDebugSmoothFinalHoldRecaptureCountValueLabel->setText(
+            QString::number(turnDebug.smooth_final_hold_recapture_count));
+    }
+    if (turnDebugSmoothFinalLeftHoldValueLabel) {
+        turnDebugSmoothFinalLeftHoldValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_left_hold_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalRightHoldValueLabel) {
+        turnDebugSmoothFinalRightHoldValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_right_hold_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalCenterDiffHoldValueLabel) {
+        turnDebugSmoothFinalCenterDiffHoldValueLabel->setText(
+            QString("%1 mm")
+                .arg(fromQ16(turnDebug.smooth_final_center_diff_hold_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalWallErrorValueLabel) {
+        turnDebugSmoothFinalWallErrorValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_wall_error_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalWallCorrectionValueLabel) {
+        turnDebugSmoothFinalWallCorrectionValueLabel->setText(
+            QString::number(turnDebug.smooth_final_wall_correction_pwm));
+    }
+    if (turnDebugSmoothFinalYawCorrectionValueLabel) {
+        turnDebugSmoothFinalYawCorrectionValueLabel->setText(
+            QString::number(turnDebug.smooth_final_yaw_correction_pwm));
+    }
+    if (turnDebugSmoothFinalYawHoldValueLabel) {
+        turnDebugSmoothFinalYawHoldValueLabel->setText(
+            QString("%1 deg").arg(fromQ16(turnDebug.smooth_final_yaw_hold_deg_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalYawHoldInitializedValueLabel) {
+        turnDebugSmoothFinalYawHoldInitializedValueLabel->setText(
+            turnDebug.smooth_final_yaw_hold_initialized ? "true" : "false");
+    }
+    if (turnDebugSmoothFinalYawHoldRecaptureCountValueLabel) {
+        turnDebugSmoothFinalYawHoldRecaptureCountValueLabel->setText(
+            QString::number(turnDebug.smooth_final_yaw_hold_recapture_count));
+    }
+    if (turnDebugSmoothFinalYawErrorValueLabel) {
+        turnDebugSmoothFinalYawErrorValueLabel->setText(
+            QString("%1 deg").arg(fromQ16(turnDebug.smooth_final_yaw_error_deg_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalAppliedCorrectionValueLabel) {
+        turnDebugSmoothFinalAppliedCorrectionValueLabel->setText(
+            QString::number(turnDebug.smooth_final_applied_correction_pwm));
+    }
+    if (turnDebugSmoothFinalDiagLeftValidValueLabel) {
+        turnDebugSmoothFinalDiagLeftValidValueLabel->setText(
+            turnDebug.smooth_final_diag_left_valid ? "true" : "false");
+    }
+    if (turnDebugSmoothFinalDiagRightValidValueLabel) {
+        turnDebugSmoothFinalDiagRightValidValueLabel->setText(
+            turnDebug.smooth_final_diag_right_valid ? "true" : "false");
+    }
+    if (turnDebugSmoothFinalDiagLeftValueLabel) {
+        turnDebugSmoothFinalDiagLeftValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_diag_left_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalDiagRightValueLabel) {
+        turnDebugSmoothFinalDiagRightValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_diag_right_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalDiagTargetValueLabel) {
+        turnDebugSmoothFinalDiagTargetValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_diag_target_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalDiagErrorScaleValueLabel) {
+        turnDebugSmoothFinalDiagErrorScaleValueLabel->setText(
+            QString("%1").arg(fromQ16(turnDebug.smooth_final_diag_error_scale_q16), 0, 'f', 2));
+    }
+    if (turnDebugSmoothFinalDiagRawErrorValueLabel) {
+        turnDebugSmoothFinalDiagRawErrorValueLabel->setText(
+            QString("%1 mm")
+                .arg(fromQ16(turnDebug.smooth_final_diag_raw_error_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalDiagErrorValueLabel) {
+        turnDebugSmoothFinalDiagErrorValueLabel->setText(
+            QString("%1 mm").arg(fromQ16(turnDebug.smooth_final_diag_error_mm_q16), 0, 'f', 1));
+    }
+    if (turnDebugSmoothFinalFollowLeftValidValueLabel) {
+        turnDebugSmoothFinalFollowLeftValidValueLabel->setText(
+            turnDebug.smooth_final_follow_left_valid ? "true" : "false");
+    }
+    if (turnDebugSmoothFinalFollowRightValidValueLabel) {
+        turnDebugSmoothFinalFollowRightValidValueLabel->setText(
+            turnDebug.smooth_final_follow_right_valid ? "true" : "false");
     }
     if (turnDebugAdvancePhaseValueLabel) {
         turnDebugAdvancePhaseValueLabel->setText(advancePhaseText(turnDebug.advance_phase));
@@ -2640,6 +2884,26 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugAdvanceYawCorrectionValueLabel) {
         turnDebugAdvanceYawCorrectionValueLabel->setText(
             QString::number(turnDebug.advance_yaw_correction_pwm));
+    }
+    if (turnDebugAdvanceYawHoldValueLabel) {
+        turnDebugAdvanceYawHoldValueLabel->setText(
+            QString("%1 deg").arg(fromQ16(turnDebug.advance_yaw_hold_deg_q16), 0, 'f', 1));
+    }
+    if (turnDebugAdvanceYawHoldInitializedValueLabel) {
+        turnDebugAdvanceYawHoldInitializedValueLabel->setText(
+            turnDebug.advance_yaw_hold_initialized ? "true" : "false");
+    }
+    if (turnDebugAdvanceYawHoldRecaptureCountValueLabel) {
+        turnDebugAdvanceYawHoldRecaptureCountValueLabel->setText(
+            QString::number(turnDebug.advance_yaw_hold_recapture_count));
+    }
+    if (turnDebugAdvanceYawHoldErrorValueLabel) {
+        turnDebugAdvanceYawHoldErrorValueLabel->setText(
+            QString("%1 deg").arg(fromQ16(turnDebug.advance_yaw_hold_error_deg_q16), 0, 'f', 1));
+    }
+    if (turnDebugAdvanceGuidanceLastSourceValueLabel) {
+        turnDebugAdvanceGuidanceLastSourceValueLabel->setText(
+            advanceCorrectionSourceText(turnDebug.advance_guidance_last_source));
     }
     if (turnDebugAdvanceYawKpValueLabel) {
         turnDebugAdvanceYawKpValueLabel->setText(

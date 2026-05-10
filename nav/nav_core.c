@@ -19,6 +19,9 @@ enum {
     NAV_SMOOTH_POST_YAW_BASE_LEFT_PWM = 2500,
     NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM = 2800,
     NAV_SMOOTH_POST_YAW_TIMEOUT_MS = 800,
+    NAV_SMOOTH_FINAL_DIAG_TARGET_MM = 99,
+    NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_NUM = 1,
+    NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_DEN = 4,
     NAV_SMOOTH_TARGET_YAW_RATE_DEFAULT_DEG_S = 120,
     NAV_SMOOTH_TARGET_YAW_RATE_MIN_DEG_S = 60,
     NAV_SMOOTH_TARGET_YAW_RATE_MAX_DEG_S = 120,
@@ -70,6 +73,10 @@ static PID_Controller_t turn_yaw_rate_pid;
 static PID_Controller_t advance_yaw_pid;
 static NavTurnPidConfig turn_pid_config = {0};
 static NavAdvanceYawPidConfig advance_yaw_pid_config = {0};
+static NavAdvanceCorrectionSource forward_guidance_last_source = NAV_ADVANCE_CORRECTION_YAW_PD;
+static bool forward_guidance_yaw_hold_initialized = false;
+static q16_16_t forward_guidance_yaw_hold_deg_q16 = 0;
+static uint16_t forward_guidance_yaw_hold_recapture_count = 0;
 static NavSmoothPhase smooth_phase = NAV_SMOOTH_PHASE_NONE;
 static NavAdvancePhase advance_phase = NAV_ADVANCE_PHASE_NONE;
 static NavApproachFrontPhase approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
@@ -110,12 +117,33 @@ static uint8_t plan_head = 0;
 static uint8_t plan_count = 0;
 static bool plan_overflow = false;
 static NavRouteDebugSnapshot route_debug = {0};
+enum {
+    NAV_ROUTE_MAX_STATES = NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT * 4
+};
+typedef struct NavRouteWorkspace {
+    uint8_t visited[NAV_ROUTE_MAX_STATES];
+    int16_t parent[NAV_ROUTE_MAX_STATES];
+    NavPlanAction parent_action[NAV_ROUTE_MAX_STATES];
+    uint16_t queue[NAV_ROUTE_MAX_STATES];
+    NavPlanAction reverse_actions[NAV_PLAN_MAX_ACTIONS];
+} NavRouteWorkspace;
+/* Shared static planner workspace for STM32 portability. The route planner is not reentrant. */
+static NavRouteWorkspace route_workspace = {0};
 static bool map_walls_recorded_for_current_pose = false;
 static bool map_initial_wall_snapshot_pending = false;
 static bool initial_special_snapshot_pending = false;
 static bool initial_special_snapshot_done = false;
 static bool rear_line_trusted_for_decision = false;
 static NavRearLineTrustSource rear_line_trust_source = NAV_REAR_LINE_TRUST_NONE;
+static NavSmoothFinalGuidanceSource smooth_final_hold_source = NAV_SMOOTH_FINAL_GUIDANCE_NONE;
+static bool smooth_final_hold_initialized = false;
+static uint16_t smooth_final_hold_recapture_count = 0;
+static q16_16_t smooth_final_left_hold_mm_q16 = 0;
+static q16_16_t smooth_final_right_hold_mm_q16 = 0;
+static q16_16_t smooth_final_center_diff_hold_mm_q16 = 0;
+static q16_16_t smooth_final_yaw_hold_deg_q16 = 0;
+static bool smooth_final_yaw_hold_initialized = false;
+static uint16_t smooth_final_yaw_hold_recapture_count = 0;
 static NavAdvanceWallConfig advance_wall_config = {
     NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT,
     NAV_ADVANCE_WALL_KD_PWM_PER_MM_PER_TICK_DEFAULT,
@@ -192,6 +220,19 @@ static void clear_special_mark_debug(void)
     last_special_mark_action = NAV_ACTION_NONE;
 }
 
+static void reset_smooth_final_hold(void)
+{
+    smooth_final_hold_source = NAV_SMOOTH_FINAL_GUIDANCE_NONE;
+    smooth_final_hold_initialized = false;
+    smooth_final_hold_recapture_count = 0;
+    smooth_final_left_hold_mm_q16 = 0;
+    smooth_final_right_hold_mm_q16 = 0;
+    smooth_final_center_diff_hold_mm_q16 = 0;
+    smooth_final_yaw_hold_deg_q16 = 0;
+    smooth_final_yaw_hold_initialized = false;
+    smooth_final_yaw_hold_recapture_count = 0;
+}
+
 static void sync_special_mark_debug(void)
 {
     turn_debug.special_mark_target_cell_x = special_mark_target_cell_x;
@@ -266,6 +307,12 @@ static q16_16_t mm_to_q16(int16_t mm)
     return (q16_16_t)mm << 16;
 }
 
+static q16_16_t smooth_final_scale_diag_error(q16_16_t error_q16)
+{
+    return (error_q16 * NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_NUM)
+        / NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_DEN;
+}
+
 static q16_16_t apply_wall_deadband(q16_16_t error_q16)
 {
     const q16_16_t deadband_q16 = mm_to_q16(advance_wall_config.error_deadband_mm);
@@ -285,6 +332,25 @@ static void reset_advance_wall_pd(void)
 {
     advance_wall_previous_error_q16 = 0;
     advance_wall_has_previous_error = false;
+}
+
+static void reset_forward_guidance_yaw_hold(void)
+{
+    forward_guidance_last_source = NAV_ADVANCE_CORRECTION_YAW_PD;
+    forward_guidance_yaw_hold_initialized = false;
+    forward_guidance_yaw_hold_deg_q16 = 0;
+    forward_guidance_yaw_hold_recapture_count = 0;
+}
+
+static void capture_forward_guidance_yaw_hold(q16_16_t yaw_deg_q16)
+{
+    forward_guidance_yaw_hold_initialized = true;
+    forward_guidance_yaw_hold_deg_q16 = yaw_deg_q16;
+    if (forward_guidance_yaw_hold_recapture_count < UINT16_MAX) {
+        ++forward_guidance_yaw_hold_recapture_count;
+    }
+    PID_Reset(&advance_yaw_pid);
+    PID_Set_Setpoint_Fixed(&advance_yaw_pid, forward_guidance_yaw_hold_deg_q16);
 }
 
 static void reset_advance_wall_config(void)
@@ -580,6 +646,33 @@ static void clear_live_turn_debug(void)
     turn_debug.smooth_phase = NAV_SMOOTH_PHASE_NONE;
     turn_debug.smooth_done_reason = NAV_SMOOTH_DONE_NONE;
     turn_debug.smooth_post_yaw_elapsed_ms = 0;
+    turn_debug.smooth_final_guidance_source = NAV_SMOOTH_FINAL_GUIDANCE_NONE;
+    turn_debug.smooth_final_hold_initialized = smooth_final_hold_initialized;
+    turn_debug.smooth_final_hold_source = smooth_final_hold_source;
+    turn_debug.smooth_final_hold_recapture_count = smooth_final_hold_recapture_count;
+    turn_debug.smooth_final_left_hold_mm_q16 = smooth_final_left_hold_mm_q16;
+    turn_debug.smooth_final_right_hold_mm_q16 = smooth_final_right_hold_mm_q16;
+    turn_debug.smooth_final_center_diff_hold_mm_q16 = smooth_final_center_diff_hold_mm_q16;
+    turn_debug.smooth_final_wall_error_mm_q16 = 0;
+    turn_debug.smooth_final_wall_correction_pwm = 0;
+    turn_debug.smooth_final_yaw_correction_pwm = 0;
+    turn_debug.smooth_final_yaw_hold_deg_q16 = smooth_final_yaw_hold_deg_q16;
+    turn_debug.smooth_final_yaw_hold_initialized = smooth_final_yaw_hold_initialized;
+    turn_debug.smooth_final_yaw_hold_recapture_count = smooth_final_yaw_hold_recapture_count;
+    turn_debug.smooth_final_yaw_error_deg_q16 = 0;
+    turn_debug.smooth_final_applied_correction_pwm = 0;
+    turn_debug.smooth_final_diag_left_valid = false;
+    turn_debug.smooth_final_diag_right_valid = false;
+    turn_debug.smooth_final_diag_left_mm_q16 = 0;
+    turn_debug.smooth_final_diag_right_mm_q16 = 0;
+    turn_debug.smooth_final_diag_target_mm_q16 = mm_to_q16(NAV_SMOOTH_FINAL_DIAG_TARGET_MM);
+    turn_debug.smooth_final_diag_error_scale_q16 =
+        INT_TO_FIXED(NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_NUM)
+        / NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_DEN;
+    turn_debug.smooth_final_diag_raw_error_mm_q16 = 0;
+    turn_debug.smooth_final_diag_error_mm_q16 = 0;
+    turn_debug.smooth_final_follow_left_valid = false;
+    turn_debug.smooth_final_follow_right_valid = false;
     turn_debug.advance_phase = NAV_ADVANCE_PHASE_NONE;
     turn_debug.advance_done_reason = NAV_ADVANCE_DONE_NONE;
     turn_debug.rear_black_for_line = false;
@@ -633,6 +726,11 @@ static void clear_live_turn_debug(void)
     turn_debug.advance_yaw_error_deg_q16 = 0;
     turn_debug.advance_yaw_pid_output_q16 = 0;
     turn_debug.advance_yaw_correction_pwm = 0;
+    turn_debug.advance_yaw_hold_deg_q16 = forward_guidance_yaw_hold_deg_q16;
+    turn_debug.advance_yaw_hold_initialized = forward_guidance_yaw_hold_initialized;
+    turn_debug.advance_yaw_hold_recapture_count = forward_guidance_yaw_hold_recapture_count;
+    turn_debug.advance_yaw_hold_error_deg_q16 = 0;
+    turn_debug.advance_guidance_last_source = forward_guidance_last_source;
     turn_debug.advance_yaw_kp_q16 = advance_yaw_pid_config.kp_q16;
     turn_debug.advance_yaw_ki_q16 = advance_yaw_pid_config.ki_q16;
     turn_debug.advance_yaw_kd_q16 = advance_yaw_pid_config.kd_q16;
@@ -1076,12 +1174,24 @@ static uint16_t route_count_visited_frontier_cells(const NavMapDebugSnapshot *ma
     return count;
 }
 
+static void route_workspace_reset(void)
+{
+    for (uint16_t i = 0; i < NAV_ROUTE_MAX_STATES; ++i) {
+        route_workspace.visited[i] = 0u;
+        route_workspace.parent[i] = -1;
+        route_workspace.parent_action[i] = NAV_PLAN_ACTION_NONE;
+        route_workspace.queue[i] = 0u;
+    }
+    for (uint8_t i = 0; i < NAV_PLAN_MAX_ACTIONS; ++i) {
+        route_workspace.reverse_actions[i] = NAV_PLAN_ACTION_NONE;
+    }
+}
+
 static NavRouteStatus route_load_plan_from_found_state(int16_t found_index,
                                                        uint16_t start_index,
                                                        const int16_t *parent,
                                                        const NavPlanAction *parent_action)
 {
-    NavPlanAction reverse_actions[NAV_PLAN_MAX_ACTIONS];
     uint8_t route_length = 0;
     int16_t cursor = found_index;
     while (cursor >= 0 && cursor != (int16_t)start_index) {
@@ -1091,12 +1201,12 @@ static NavRouteStatus route_load_plan_from_found_state(int16_t found_index,
             return route_debug.status;
         }
 
-        reverse_actions[route_length++] = parent_action[cursor];
+        route_workspace.reverse_actions[route_length++] = parent_action[cursor];
         cursor = parent[cursor];
     }
 
     for (uint8_t i = 0; i < route_length; ++i) {
-        const NavPlanAction action = reverse_actions[route_length - 1u - i];
+        const NavPlanAction action = route_workspace.reverse_actions[route_length - 1u - i];
         if (!nav_core_plan_push(action)) {
             route_debug.status = NAV_ROUTE_STATUS_QUEUE_OVERFLOW;
             route_debug.route_length = i;
@@ -1107,10 +1217,10 @@ static NavRouteStatus route_load_plan_from_found_state(int16_t found_index,
     route_debug.route_length = route_length;
     route_debug.loaded_into_plan_queue = route_length > 0;
     route_debug.first_action = route_length > 0
-        ? reverse_actions[route_length - 1u]
+        ? route_workspace.reverse_actions[route_length - 1u]
         : NAV_PLAN_ACTION_NONE;
     route_debug.last_action = route_length > 0
-        ? reverse_actions[0]
+        ? route_workspace.reverse_actions[0]
         : NAV_PLAN_ACTION_NONE;
     return NAV_ROUTE_STATUS_FOUND;
 }
@@ -1144,30 +1254,18 @@ NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target
         return route_debug.status;
     }
 
-    enum {
-        ROUTE_MAX_STATES = NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT * 4
-    };
-
-    bool visited[ROUTE_MAX_STATES] = {false};
-    int16_t parent[ROUTE_MAX_STATES];
-    NavPlanAction parent_action[ROUTE_MAX_STATES];
-    uint16_t queue[ROUTE_MAX_STATES];
-
-    for (uint16_t i = 0; i < ROUTE_MAX_STATES; ++i) {
-        parent[i] = -1;
-        parent_action[i] = NAV_PLAN_ACTION_NONE;
-    }
+    route_workspace_reset();
 
     const uint16_t start_index =
         route_state_index(map_debug.cell_x, map_debug.cell_y, map_debug.dir, map_debug.width);
-    visited[start_index] = true;
-    queue[0] = start_index;
+    route_workspace.visited[start_index] = 1u;
+    route_workspace.queue[0] = start_index;
     uint16_t queue_head = 0;
     uint16_t queue_tail = 1;
     int16_t found_index = -1;
 
     while (queue_head < queue_tail) {
-        const uint16_t current_index = queue[queue_head++];
+        const uint16_t current_index = route_workspace.queue[queue_head++];
         ++route_debug.expanded_states;
 
         int8_t cell_x = 0;
@@ -1187,7 +1285,7 @@ NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target
             NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
         };
         for (uint8_t i = 0; i < 4; ++i) {
-            if (parent_action[current_index] == NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
+            if (route_workspace.parent_action[current_index] == NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
                 && (actions[i] == NAV_PLAN_ACTION_SMOOTH_RIGHT
                     || actions[i] == NAV_PLAN_ACTION_SMOOTH_LEFT)) {
                 continue;
@@ -1209,14 +1307,14 @@ NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target
 
             const uint16_t next_index =
                 route_state_index(next_x, next_y, next_dir, map_debug.width);
-            if (visited[next_index]) {
+            if (route_workspace.visited[next_index] != 0u) {
                 continue;
             }
 
-            visited[next_index] = true;
-            parent[next_index] = (int16_t)current_index;
-            parent_action[next_index] = actions[i];
-            queue[queue_tail++] = next_index;
+            route_workspace.visited[next_index] = 1u;
+            route_workspace.parent[next_index] = (int16_t)current_index;
+            route_workspace.parent_action[next_index] = actions[i];
+            route_workspace.queue[queue_tail++] = next_index;
         }
     }
 
@@ -1226,7 +1324,10 @@ NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target
     }
 
     route_debug.status =
-        route_load_plan_from_found_state(found_index, start_index, parent, parent_action);
+        route_load_plan_from_found_state(found_index,
+                                         start_index,
+                                         route_workspace.parent,
+                                         route_workspace.parent_action);
     if (route_debug.status != NAV_ROUTE_STATUS_FOUND) {
         return route_debug.status;
     }
@@ -1258,30 +1359,18 @@ NavRouteStatus nav_core_route_plan_to_nearest_frontier(void)
         return route_debug.status;
     }
 
-    enum {
-        ROUTE_MAX_STATES = NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT * 4
-    };
-
-    bool visited[ROUTE_MAX_STATES] = {false};
-    int16_t parent[ROUTE_MAX_STATES];
-    NavPlanAction parent_action[ROUTE_MAX_STATES];
-    uint16_t queue[ROUTE_MAX_STATES];
-
-    for (uint16_t i = 0; i < ROUTE_MAX_STATES; ++i) {
-        parent[i] = -1;
-        parent_action[i] = NAV_PLAN_ACTION_NONE;
-    }
+    route_workspace_reset();
 
     const uint16_t start_index =
         route_state_index(map_debug.cell_x, map_debug.cell_y, map_debug.dir, map_debug.width);
-    visited[start_index] = true;
-    queue[0] = start_index;
+    route_workspace.visited[start_index] = 1u;
+    route_workspace.queue[0] = start_index;
     uint16_t queue_head = 0;
     uint16_t queue_tail = 1;
     int16_t found_index = -1;
 
     while (queue_head < queue_tail) {
-        const uint16_t current_index = queue[queue_head++];
+        const uint16_t current_index = route_workspace.queue[queue_head++];
         ++route_debug.expanded_states;
 
         int8_t cell_x = 0;
@@ -1321,7 +1410,7 @@ NavRouteStatus nav_core_route_plan_to_nearest_frontier(void)
             NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
         };
         for (uint8_t i = 0; i < 4; ++i) {
-            if (parent_action[current_index] == NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
+            if (route_workspace.parent_action[current_index] == NAV_PLAN_ACTION_CENTER_AND_PIVOT_180
                 && (actions[i] == NAV_PLAN_ACTION_SMOOTH_RIGHT
                     || actions[i] == NAV_PLAN_ACTION_SMOOTH_LEFT)) {
                 continue;
@@ -1343,14 +1432,14 @@ NavRouteStatus nav_core_route_plan_to_nearest_frontier(void)
 
             const uint16_t next_index =
                 route_state_index(next_x, next_y, next_dir, map_debug.width);
-            if (visited[next_index]) {
+            if (route_workspace.visited[next_index] != 0u) {
                 continue;
             }
 
-            visited[next_index] = true;
-            parent[next_index] = (int16_t)current_index;
-            parent_action[next_index] = actions[i];
-            queue[queue_tail++] = next_index;
+            route_workspace.visited[next_index] = 1u;
+            route_workspace.parent[next_index] = (int16_t)current_index;
+            route_workspace.parent_action[next_index] = actions[i];
+            route_workspace.queue[queue_tail++] = next_index;
         }
     }
 
@@ -1360,7 +1449,10 @@ NavRouteStatus nav_core_route_plan_to_nearest_frontier(void)
     }
 
     route_debug.status =
-        route_load_plan_from_found_state(found_index, start_index, parent, parent_action);
+        route_load_plan_from_found_state(found_index,
+                                         start_index,
+                                         route_workspace.parent,
+                                         route_workspace.parent_action);
     if (route_debug.status != NAV_ROUTE_STATUS_FOUND) {
         return route_debug.status;
     }
@@ -1480,6 +1572,7 @@ static void set_smooth_phase(NavSmoothPhase phase)
     if (phase != NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE) {
         smooth_post_yaw_elapsed_ms = 0;
         turn_debug.smooth_post_yaw_elapsed_ms = 0;
+        reset_smooth_final_hold();
     }
     if (phase == NAV_SMOOTH_PHASE_WAIT_LEAVE_START_LINE) {
         reset_special_detection_state();
@@ -1663,8 +1756,6 @@ static RobotCommand guided_forward_command(const RobotSensors *sensors,
                                            int16_t base_left_pwm,
                                            int16_t base_right_pwm)
 {
-    const int32_t pid_output_q16 = PID_Update_Fixed(&advance_yaw_pid, sensors->yaw_deg_q16, 10);
-    const int32_t yaw_correction_pwm = FIXED_TO_INT(pid_output_q16);
     const bool wall_left_valid = wall_perception.wall_left;
     const bool wall_right_valid = wall_perception.wall_right;
     const bool diag_left_valid = wall_perception.wall_diag_left;
@@ -1691,6 +1782,26 @@ static RobotCommand guided_forward_command(const RobotSensors *sensors,
             wall_error_q16 = wall_raw_error_q16 * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
             correction_source = NAV_ADVANCE_CORRECTION_WALL_RIGHT;
         }
+    }
+
+    if (correction_source == NAV_ADVANCE_CORRECTION_YAW_PD
+        && (!forward_guidance_yaw_hold_initialized
+            || forward_guidance_last_source != NAV_ADVANCE_CORRECTION_YAW_PD)) {
+        capture_forward_guidance_yaw_hold(sensors->yaw_deg_q16);
+    }
+    if (correction_source != NAV_ADVANCE_CORRECTION_YAW_PD) {
+        forward_guidance_last_source = correction_source;
+    }
+
+    const q16_16_t yaw_setpoint_q16 = forward_guidance_yaw_hold_initialized
+        ? forward_guidance_yaw_hold_deg_q16
+        : sensors->yaw_deg_q16;
+    PID_Set_Setpoint_Fixed(&advance_yaw_pid, yaw_setpoint_q16);
+    const int32_t pid_output_q16 = PID_Update_Fixed(&advance_yaw_pid, sensors->yaw_deg_q16, 10);
+    const int32_t yaw_correction_pwm = FIXED_TO_INT(pid_output_q16);
+    const q16_16_t yaw_error_q16 = yaw_setpoint_q16 - sensors->yaw_deg_q16;
+    if (correction_source == NAV_ADVANCE_CORRECTION_YAW_PD) {
+        forward_guidance_last_source = NAV_ADVANCE_CORRECTION_YAW_PD;
     }
 
     const q16_16_t wall_error_after_deadband_q16 = apply_wall_deadband(wall_error_q16);
@@ -1728,6 +1839,11 @@ static RobotCommand guided_forward_command(const RobotSensors *sensors,
     turn_debug.advance_yaw_error_deg_q16 = advance_yaw_pid.setpoint - sensors->yaw_deg_q16;
     turn_debug.advance_yaw_pid_output_q16 = pid_output_q16;
     turn_debug.advance_yaw_correction_pwm = clamp_pwm(yaw_correction_pwm);
+    turn_debug.advance_yaw_hold_deg_q16 = forward_guidance_yaw_hold_deg_q16;
+    turn_debug.advance_yaw_hold_initialized = forward_guidance_yaw_hold_initialized;
+    turn_debug.advance_yaw_hold_recapture_count = forward_guidance_yaw_hold_recapture_count;
+    turn_debug.advance_yaw_hold_error_deg_q16 = yaw_error_q16;
+    turn_debug.advance_guidance_last_source = forward_guidance_last_source;
     turn_debug.advance_yaw_kp_q16 = advance_yaw_pid_config.kp_q16;
     turn_debug.advance_yaw_ki_q16 = advance_yaw_pid_config.ki_q16;
     turn_debug.advance_yaw_kd_q16 = advance_yaw_pid_config.kd_q16;
@@ -1769,6 +1885,79 @@ static RobotCommand guided_forward_command(const RobotSensors *sensors,
     return command;
 }
 
+static NavSmoothFinalGuidanceSource smooth_final_source_from_walls(bool follow_left_valid,
+                                                                   bool follow_right_valid)
+{
+    if (follow_left_valid && follow_right_valid) {
+        return NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD;
+    }
+    if (follow_left_valid) {
+        return NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD;
+    }
+    if (follow_right_valid) {
+        return NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD;
+    }
+    return NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY;
+}
+
+static NavSmoothFinalGuidanceSource smooth_final_source_from_sensors(bool diag_left_valid,
+                                                                     bool diag_right_valid,
+                                                                     bool follow_left_valid,
+                                                                     bool follow_right_valid)
+{
+    if (diag_left_valid && diag_right_valid) {
+        return NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER;
+    }
+    if (diag_left_valid) {
+        return NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT;
+    }
+    if (diag_right_valid) {
+        return NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT;
+    }
+    return smooth_final_source_from_walls(follow_left_valid, follow_right_valid);
+}
+
+static void capture_smooth_final_hold_snapshot(NavSmoothFinalGuidanceSource source)
+{
+    const bool follow_left_valid = wall_perception.wall_left && wall_perception.wall_diag_left;
+    const bool follow_right_valid = wall_perception.wall_right && wall_perception.wall_diag_right;
+    const bool recapturing =
+        !smooth_final_hold_initialized || source != smooth_final_hold_source;
+
+    smooth_final_hold_initialized = true;
+    smooth_final_hold_source = source;
+    if (source == NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD
+        && follow_left_valid
+        && follow_right_valid) {
+        smooth_final_left_hold_mm_q16 = wall_perception.left_mm_q16;
+        smooth_final_right_hold_mm_q16 = wall_perception.right_mm_q16;
+        smooth_final_center_diff_hold_mm_q16 =
+            wall_perception.right_mm_q16 - wall_perception.left_mm_q16;
+    } else if (source == NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD && follow_left_valid) {
+        smooth_final_left_hold_mm_q16 = wall_perception.left_mm_q16;
+    } else if (source == NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD && follow_right_valid) {
+        smooth_final_right_hold_mm_q16 = wall_perception.right_mm_q16;
+    }
+
+    if (smooth_final_hold_recapture_count < UINT16_MAX) {
+        ++smooth_final_hold_recapture_count;
+    }
+    if (recapturing) {
+        reset_advance_wall_pd();
+    }
+}
+
+static void capture_smooth_final_yaw_hold_snapshot(q16_16_t yaw_deg_q16)
+{
+    smooth_final_yaw_hold_initialized = true;
+    smooth_final_yaw_hold_deg_q16 = yaw_deg_q16;
+    if (smooth_final_yaw_hold_recapture_count < UINT16_MAX) {
+        ++smooth_final_yaw_hold_recapture_count;
+    }
+    PID_Reset(&advance_yaw_pid);
+    PID_Set_Setpoint_Fixed(&advance_yaw_pid, smooth_final_yaw_hold_deg_q16);
+}
+
 static RobotCommand advance_until_rear_black_command(const RobotSensors *sensors)
 {
     return guided_forward_command(sensors, NAV_ADVANCE_BASE_LEFT_PWM, NAV_ADVANCE_BASE_RIGHT_PWM);
@@ -1800,38 +1989,233 @@ static RobotCommand finish_smooth_turn(const RobotSensors *sensors, NavSmoothDon
     return command;
 }
 
-static void enter_smooth_post_yaw_seek(void)
+static void enter_smooth_post_yaw_seek(const RobotSensors *sensors)
 {
     smooth_phase = NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE;
     smooth_post_yaw_elapsed_ms = 0;
+    const bool diag_left_valid = wall_perception.wall_diag_left;
+    const bool diag_right_valid = wall_perception.wall_diag_right;
+    const bool follow_left_valid = wall_perception.wall_left && wall_perception.wall_diag_left;
+    const bool follow_right_valid = wall_perception.wall_right && wall_perception.wall_diag_right;
+    const NavSmoothFinalGuidanceSource initial_source =
+        smooth_final_source_from_sensors(diag_left_valid,
+                                         diag_right_valid,
+                                         follow_left_valid,
+                                         follow_right_valid);
+    capture_smooth_final_hold_snapshot(initial_source);
+    if (initial_source == NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY) {
+        capture_smooth_final_yaw_hold_snapshot(sensors->yaw_deg_q16);
+    }
     turn_debug.smooth_phase = smooth_phase;
     turn_debug.smooth_done_reason = NAV_SMOOTH_DONE_NONE;
     turn_debug.smooth_post_yaw_elapsed_ms = smooth_post_yaw_elapsed_ms;
-    PID_Reset(&advance_yaw_pid);
-    PID_Set_Setpoint_Fixed(&advance_yaw_pid, action_target_yaw_q16);
+    turn_debug.smooth_final_guidance_source = smooth_final_hold_source;
+    turn_debug.smooth_final_hold_initialized = smooth_final_hold_initialized;
+    turn_debug.smooth_final_hold_source = smooth_final_hold_source;
+    turn_debug.smooth_final_hold_recapture_count = smooth_final_hold_recapture_count;
+    turn_debug.smooth_final_left_hold_mm_q16 = smooth_final_left_hold_mm_q16;
+    turn_debug.smooth_final_right_hold_mm_q16 = smooth_final_right_hold_mm_q16;
+    turn_debug.smooth_final_center_diff_hold_mm_q16 = smooth_final_center_diff_hold_mm_q16;
+    turn_debug.smooth_final_yaw_hold_deg_q16 = smooth_final_yaw_hold_deg_q16;
+    turn_debug.smooth_final_yaw_hold_initialized = smooth_final_yaw_hold_initialized;
+    turn_debug.smooth_final_yaw_hold_recapture_count = smooth_final_yaw_hold_recapture_count;
+    turn_debug.smooth_final_yaw_error_deg_q16 = 0;
+    turn_debug.smooth_final_diag_left_valid = diag_left_valid;
+    turn_debug.smooth_final_diag_right_valid = diag_right_valid;
+    turn_debug.smooth_final_diag_left_mm_q16 = wall_perception.diag_left_mm_q16;
+    turn_debug.smooth_final_diag_right_mm_q16 = wall_perception.diag_right_mm_q16;
+    turn_debug.smooth_final_diag_target_mm_q16 = mm_to_q16(NAV_SMOOTH_FINAL_DIAG_TARGET_MM);
+    turn_debug.smooth_final_diag_error_scale_q16 =
+        INT_TO_FIXED(NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_NUM)
+        / NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_DEN;
+    turn_debug.smooth_final_diag_raw_error_mm_q16 = 0;
+    turn_debug.smooth_final_diag_error_mm_q16 = 0;
+    if (initial_source != NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY) {
+        PID_Reset(&advance_yaw_pid);
+        PID_Set_Setpoint_Fixed(&advance_yaw_pid, sensors->yaw_deg_q16);
+    }
+    reset_advance_wall_pd();
 }
 
 static RobotCommand smooth_post_yaw_seek_command(const RobotSensors *sensors)
 {
-    const int32_t pid_output_q16 = PID_Update_Fixed(&advance_yaw_pid, sensors->yaw_deg_q16, 10);
-    const int32_t correction_pwm = FIXED_TO_INT(pid_output_q16);
+    const bool diag_left_valid = wall_perception.wall_diag_left;
+    const bool diag_right_valid = wall_perception.wall_diag_right;
+    const bool follow_left_valid = wall_perception.wall_left && wall_perception.wall_diag_left;
+    const bool follow_right_valid = wall_perception.wall_right && wall_perception.wall_diag_right;
+    const NavSmoothFinalGuidanceSource requested_source =
+        smooth_final_source_from_sensors(diag_left_valid,
+                                         diag_right_valid,
+                                         follow_left_valid,
+                                         follow_right_valid);
+    NavSmoothFinalGuidanceSource active_source = requested_source;
+    q16_16_t wall_error_q16 = 0;
+    q16_16_t diag_raw_error_q16 = 0;
+    q16_16_t diag_error_q16 = 0;
 
-    turn_debug.yaw_rate_setpoint_deg_s_q16 = 0;
-    turn_debug.yaw_rate_measured_deg_s_q16 = sensors->yaw_rate_deg_s_q16;
-    turn_debug.yaw_rate_error_deg_s_q16 = 0;
-    turn_debug.pid_output_q16 = pid_output_q16;
-    turn_debug.correction_pwm = clamp_pwm(correction_pwm);
-    turn_debug.integral_q16 = advance_yaw_pid.integral;
-    turn_debug.smooth_left_base_pwm = NAV_SMOOTH_POST_YAW_BASE_LEFT_PWM;
-    turn_debug.smooth_right_base_pwm = NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM;
+    if (!smooth_final_hold_initialized || requested_source != smooth_final_hold_source) {
+        capture_smooth_final_hold_snapshot(requested_source);
+        if (requested_source == NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY) {
+            capture_smooth_final_yaw_hold_snapshot(sensors->yaw_deg_q16);
+        }
+    } else if (requested_source == NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY
+               && !smooth_final_yaw_hold_initialized) {
+        capture_smooth_final_yaw_hold_snapshot(sensors->yaw_deg_q16);
+    }
+
+    switch (requested_source) {
+    case NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER:
+        if (diag_left_valid && diag_right_valid) {
+            diag_raw_error_q16 =
+                wall_perception.diag_right_mm_q16 - wall_perception.diag_left_mm_q16;
+            diag_error_q16 = smooth_final_scale_diag_error(diag_raw_error_q16);
+            wall_error_q16 = diag_error_q16;
+        } else {
+            active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK;
+        }
+        break;
+    case NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT:
+        if (diag_left_valid) {
+            diag_raw_error_q16 =
+                mm_to_q16(NAV_SMOOTH_FINAL_DIAG_TARGET_MM) - wall_perception.diag_left_mm_q16;
+            diag_error_q16 = smooth_final_scale_diag_error(
+                diag_raw_error_q16 * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE);
+            wall_error_q16 = diag_error_q16;
+        } else {
+            active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK;
+        }
+        break;
+    case NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT:
+        if (diag_right_valid) {
+            diag_raw_error_q16 =
+                wall_perception.diag_right_mm_q16 - mm_to_q16(NAV_SMOOTH_FINAL_DIAG_TARGET_MM);
+            diag_error_q16 = smooth_final_scale_diag_error(
+                diag_raw_error_q16 * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE);
+            wall_error_q16 = diag_error_q16;
+        } else {
+            active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK;
+        }
+        break;
+    case NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD:
+        if (follow_left_valid && follow_right_valid) {
+            wall_error_q16 =
+                (wall_perception.right_mm_q16 - wall_perception.left_mm_q16)
+                - smooth_final_center_diff_hold_mm_q16;
+        } else {
+            active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK;
+        }
+        break;
+    case NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD:
+        if (follow_left_valid) {
+            wall_error_q16 =
+                (smooth_final_left_hold_mm_q16 - wall_perception.left_mm_q16)
+                * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
+        } else {
+            active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK;
+        }
+        break;
+    case NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD:
+        if (follow_right_valid) {
+            wall_error_q16 =
+                (wall_perception.right_mm_q16 - smooth_final_right_hold_mm_q16)
+                * NAV_ADVANCE_WALL_SINGLE_SIDE_ERROR_SCALE;
+        } else {
+            active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK;
+        }
+        break;
+    case NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY:
+    case NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY_FALLBACK:
+    case NAV_SMOOTH_FINAL_GUIDANCE_NONE:
+        active_source = NAV_SMOOTH_FINAL_GUIDANCE_YAW_ONLY;
+        break;
+    }
+
+    const q16_16_t yaw_setpoint_q16 = smooth_final_yaw_hold_initialized
+        ? smooth_final_yaw_hold_deg_q16
+        : sensors->yaw_deg_q16;
+    PID_Set_Setpoint_Fixed(&advance_yaw_pid, yaw_setpoint_q16);
+    const int32_t pid_output_q16 = PID_Update_Fixed(&advance_yaw_pid, sensors->yaw_deg_q16, 10);
+    const int32_t yaw_correction_pwm = FIXED_TO_INT(pid_output_q16);
+    const q16_16_t yaw_error_q16 = yaw_setpoint_q16 - sensors->yaw_deg_q16;
+
+    const q16_16_t wall_error_after_deadband_q16 = apply_wall_deadband(wall_error_q16);
+    q16_16_t wall_previous_error_q16 = 0;
+    q16_16_t wall_error_delta_q16 = 0;
+    int32_t wall_p_term_pwm = 0;
+    int32_t wall_d_term_pwm = 0;
+    int32_t wall_raw_correction_pwm = 0;
+    int16_t wall_correction_pwm = 0;
+    const bool use_wall_hold =
+        active_source == NAV_SMOOTH_FINAL_GUIDANCE_DIAG_CENTER
+        || active_source == NAV_SMOOTH_FINAL_GUIDANCE_DIAG_LEFT
+        || active_source == NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT
+        || active_source == NAV_SMOOTH_FINAL_GUIDANCE_WALL_CENTER_HOLD
+        || active_source == NAV_SMOOTH_FINAL_GUIDANCE_WALL_LEFT_HOLD
+        || active_source == NAV_SMOOTH_FINAL_GUIDANCE_WALL_RIGHT_HOLD;
+    if (use_wall_hold) {
+        wall_previous_error_q16 = advance_wall_has_previous_error ? advance_wall_previous_error_q16 : 0;
+        wall_error_delta_q16 = advance_wall_has_previous_error
+            ? wall_error_after_deadband_q16 - wall_previous_error_q16
+            : 0;
+        wall_p_term_pwm = q16_to_pwm(wall_error_after_deadband_q16,
+                                     advance_wall_config.kp_pwm_per_mm);
+        wall_d_term_pwm = q16_to_pwm(wall_error_delta_q16,
+                                     advance_wall_config.kd_pwm_per_mm_per_tick);
+        wall_raw_correction_pwm = wall_p_term_pwm + wall_d_term_pwm;
+        wall_correction_pwm = clamp_wall_correction(wall_raw_correction_pwm);
+        advance_wall_previous_error_q16 = wall_error_after_deadband_q16;
+        advance_wall_has_previous_error = true;
+    } else {
+        reset_advance_wall_pd();
+    }
+
+    const int32_t final_correction_pwm = use_wall_hold ? wall_correction_pwm : yaw_correction_pwm;
+    RobotCommand command = {
+        clamp_pwm(NAV_SMOOTH_POST_YAW_BASE_LEFT_PWM + final_correction_pwm),
+        clamp_pwm(NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM - final_correction_pwm)
+    };
+
+    turn_debug.advance_yaw_setpoint_deg_q16 = advance_yaw_pid.setpoint;
+    turn_debug.advance_yaw_measured_deg_q16 = sensors->yaw_deg_q16;
+    turn_debug.advance_yaw_error_deg_q16 = advance_yaw_pid.setpoint - sensors->yaw_deg_q16;
+    turn_debug.advance_yaw_pid_output_q16 = pid_output_q16;
+    turn_debug.advance_yaw_correction_pwm = clamp_pwm(yaw_correction_pwm);
+    turn_debug.advance_yaw_kp_q16 = advance_yaw_pid_config.kp_q16;
+    turn_debug.advance_yaw_ki_q16 = advance_yaw_pid_config.ki_q16;
+    turn_debug.advance_yaw_kd_q16 = advance_yaw_pid_config.kd_q16;
+    turn_debug.advance_yaw_output_limit_pwm = (int16_t)advance_yaw_pid_config.output_limit_pwm;
     turn_debug.smooth_phase = smooth_phase;
     turn_debug.smooth_done_reason = NAV_SMOOTH_DONE_NONE;
     turn_debug.smooth_post_yaw_elapsed_ms = smooth_post_yaw_elapsed_ms;
-
-    RobotCommand command = {
-        clamp_pwm(NAV_SMOOTH_POST_YAW_BASE_LEFT_PWM + correction_pwm),
-        clamp_pwm(NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM - correction_pwm)
-    };
+    turn_debug.smooth_left_base_pwm = NAV_SMOOTH_POST_YAW_BASE_LEFT_PWM;
+    turn_debug.smooth_right_base_pwm = NAV_SMOOTH_POST_YAW_BASE_RIGHT_PWM;
+    turn_debug.smooth_final_guidance_source = active_source;
+    turn_debug.smooth_final_hold_initialized = smooth_final_hold_initialized;
+    turn_debug.smooth_final_hold_source = smooth_final_hold_source;
+    turn_debug.smooth_final_hold_recapture_count = smooth_final_hold_recapture_count;
+    turn_debug.smooth_final_left_hold_mm_q16 = smooth_final_left_hold_mm_q16;
+    turn_debug.smooth_final_right_hold_mm_q16 = smooth_final_right_hold_mm_q16;
+    turn_debug.smooth_final_center_diff_hold_mm_q16 = smooth_final_center_diff_hold_mm_q16;
+    turn_debug.smooth_final_wall_error_mm_q16 = wall_error_q16;
+    turn_debug.smooth_final_wall_correction_pwm = wall_correction_pwm;
+    turn_debug.smooth_final_yaw_correction_pwm = clamp_pwm(yaw_correction_pwm);
+    turn_debug.smooth_final_yaw_hold_deg_q16 = smooth_final_yaw_hold_deg_q16;
+    turn_debug.smooth_final_yaw_hold_initialized = smooth_final_yaw_hold_initialized;
+    turn_debug.smooth_final_yaw_hold_recapture_count = smooth_final_yaw_hold_recapture_count;
+    turn_debug.smooth_final_yaw_error_deg_q16 = yaw_error_q16;
+    turn_debug.smooth_final_diag_left_valid = diag_left_valid;
+    turn_debug.smooth_final_diag_right_valid = diag_right_valid;
+    turn_debug.smooth_final_diag_left_mm_q16 = wall_perception.diag_left_mm_q16;
+    turn_debug.smooth_final_diag_right_mm_q16 = wall_perception.diag_right_mm_q16;
+    turn_debug.smooth_final_diag_target_mm_q16 = mm_to_q16(NAV_SMOOTH_FINAL_DIAG_TARGET_MM);
+    turn_debug.smooth_final_diag_error_scale_q16 =
+        INT_TO_FIXED(NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_NUM)
+        / NAV_SMOOTH_FINAL_DIAG_ERROR_SCALE_DEN;
+    turn_debug.smooth_final_diag_raw_error_mm_q16 = diag_raw_error_q16;
+    turn_debug.smooth_final_diag_error_mm_q16 = diag_error_q16;
+    turn_debug.smooth_final_follow_left_valid = follow_left_valid;
+    turn_debug.smooth_final_follow_right_valid = follow_right_valid;
+    turn_debug.smooth_final_applied_correction_pwm = clamp_pwm(final_correction_pwm);
     return command;
 }
 
@@ -1931,6 +2315,7 @@ void nav_core_init(void)
     nav_core_route_clear_debug();
     clear_wall_perception();
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     advance_guidance_mode = NAV_ADVANCE_GUIDANCE_WALL_ASSIST;
     reset_advance_wall_config();
     set_turn_pid_defaults();
@@ -1964,6 +2349,7 @@ void nav_core_start_advance_until_rear_black(void)
     reset_turn_debug();
     reset_special_detection_state();
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     PID_Reset(&advance_yaw_pid);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
 }
@@ -1996,6 +2382,7 @@ void nav_core_start_advance_until_rear_black_from_centered_pose(void)
     turn_debug.advance_from_centered_waiting_rear_white =
         advance_from_centered_waiting_rear_white;
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     PID_Reset(&advance_yaw_pid);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
 }
@@ -2016,6 +2403,7 @@ void nav_core_start_approach_front_wall_for_pivot(void)
     reset_special_detection_state();
     set_approach_front_phase(NAV_APPROACH_FRONT_PHASE_DRIVE);
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     PID_Reset(&advance_yaw_pid);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
     /* TODO: add front-wall alignment using front_left - front_right before pivot. */
@@ -2035,6 +2423,7 @@ void nav_core_start_center_in_cell_for_pivot_by_front_line(void)
     reset_special_detection_state();
     set_center_pivot_phase(NAV_CENTER_PIVOT_PHASE_INIT);
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     PID_Reset(&advance_yaw_pid);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
 }
@@ -2232,6 +2621,7 @@ void nav_core_stop(void)
     clear_special_mark_debug();
     reset_turn_debug();
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
 }
 
 void nav_core_set_smooth_target_yaw_rate_deg_s(int32_t target_yaw_rate_deg_s)
@@ -2274,6 +2664,7 @@ void nav_core_set_advance_guidance_mode(NavAdvanceGuidanceMode mode)
 
     advance_guidance_mode = mode;
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     turn_debug.advance_guidance_mode = advance_guidance_mode;
 }
 
@@ -2298,6 +2689,7 @@ void nav_core_set_advance_wall_config(const NavAdvanceWallConfig *config)
     advance_wall_config.target_left_mm = clamp_i16(config->target_left_mm, 1, 200);
     advance_wall_config.target_right_mm = clamp_i16(config->target_right_mm, 1, 200);
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     clear_live_turn_debug();
 }
 
@@ -2314,6 +2706,7 @@ void nav_core_reset_advance_wall_defaults(void)
 {
     reset_advance_wall_config();
     reset_advance_wall_pd();
+    reset_forward_guidance_yaw_hold();
     clear_live_turn_debug();
 }
 
@@ -2370,6 +2763,7 @@ void nav_core_set_advance_yaw_pid_config(const NavAdvanceYawPidConfig *config)
     advance_yaw_pid_config.output_limit_pwm = clamp_i32(config->output_limit_pwm, 0, NAV_PWM_MAX);
     apply_advance_yaw_pid_config(true);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
+    reset_forward_guidance_yaw_hold();
     clear_live_turn_debug();
 }
 
@@ -2378,6 +2772,7 @@ void nav_core_reset_advance_yaw_pid_defaults(void)
     set_advance_yaw_pid_defaults();
     apply_advance_yaw_pid_config(true);
     PID_Set_Setpoint_Fixed(&advance_yaw_pid, 0);
+    reset_forward_guidance_yaw_hold();
     clear_live_turn_debug();
 }
 
@@ -2861,7 +3256,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
         if (smooth_phase == NAV_SMOOTH_PHASE_SEEK_TARGET_LINE
             && sensors->yaw_deg_q16 >= action_target_yaw_q16 - Q16_TURN_TOLERANCE_DEG) {
-            enter_smooth_post_yaw_seek();
+            enter_smooth_post_yaw_seek(sensors);
             return smooth_post_yaw_seek_command(sensors);
         }
 
@@ -2905,7 +3300,7 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
 
         if (smooth_phase == NAV_SMOOTH_PHASE_SEEK_TARGET_LINE
             && sensors->yaw_deg_q16 <= action_target_yaw_q16 + Q16_TURN_TOLERANCE_DEG) {
-            enter_smooth_post_yaw_seek();
+            enter_smooth_post_yaw_seek(sensors);
             return smooth_post_yaw_seek_command(sensors);
         }
 
