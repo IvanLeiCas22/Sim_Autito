@@ -553,6 +553,19 @@ QString smoothYawCarryRejectedReasonText(NavSmoothYawCarryRejectedReason reason)
     return "UNKNOWN";
 }
 
+QString yawCarryCandidateSourceText(NavYawCarryCandidateSource source)
+{
+    switch (source) {
+    case NAV_YAW_CARRY_SOURCE_NONE:
+        return "NONE";
+    case NAV_YAW_CARRY_SOURCE_SMOOTH_FINAL_DIAG:
+        return "SMOOTH_FINAL_DIAG";
+    case NAV_YAW_CARRY_SOURCE_ADVANCE_FRONT_DIAG_PREVIEW:
+        return "ADVANCE_FRONT_DIAG_PREVIEW";
+    }
+    return "UNKNOWN";
+}
+
 QString wallMaskText(uint8_t mask)
 {
     QStringList parts;
@@ -1651,9 +1664,11 @@ void MainWindow::createTelemetryPanel()
     turnDebugSmoothYawCarryEntryYawValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryExitYawValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryDiagUsedValueLabel = new QLabel(panel);
+    turnDebugSmoothYawCarryCandidateSourceValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryRejectedReasonValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryOnlySetpointValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryRequireDiagValueLabel = new QLabel(panel);
+    turnDebugSmoothYawCarryAllowAdvancePreviewValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryMinAbsValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryMaxAbsValueLabel = new QLabel(panel);
     turnDebugSmoothYawCarryScaleValueLabel = new QLabel(panel);
@@ -1965,9 +1980,11 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(turnDebugSmoothYawCarryEntryYawValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryExitYawValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryDiagUsedValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothYawCarryCandidateSourceValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryRejectedReasonValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryOnlySetpointValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryRequireDiagValueLabel);
+    configureTelemetryValueLabel(turnDebugSmoothYawCarryAllowAdvancePreviewValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryMinAbsValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryMaxAbsValueLabel);
     configureTelemetryValueLabel(turnDebugSmoothYawCarryScaleValueLabel);
@@ -2306,12 +2323,16 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("smooth_yaw_carry_exit_yaw_deg:",
                    turnDebugSmoothYawCarryExitYawValueLabel);
     layout->addRow("smooth_yaw_carry_diag_used:", turnDebugSmoothYawCarryDiagUsedValueLabel);
+    layout->addRow("smooth_yaw_carry_candidate_source:",
+                   turnDebugSmoothYawCarryCandidateSourceValueLabel);
     layout->addRow("smooth_yaw_carry_rejected_reason:",
                    turnDebugSmoothYawCarryRejectedReasonValueLabel);
     layout->addRow("smooth_yaw_carry_only_setpoint:",
                    turnDebugSmoothYawCarryOnlySetpointValueLabel);
     layout->addRow("smooth_yaw_carry_require_diag:",
                    turnDebugSmoothYawCarryRequireDiagValueLabel);
+    layout->addRow("smooth_yaw_carry_allow_advance_preview:",
+                   turnDebugSmoothYawCarryAllowAdvancePreviewValueLabel);
     layout->addRow("smooth_yaw_carry_min_abs_deg:", turnDebugSmoothYawCarryMinAbsValueLabel);
     layout->addRow("smooth_yaw_carry_max_abs_deg:", turnDebugSmoothYawCarryMaxAbsValueLabel);
     layout->addRow("smooth_yaw_carry_offset_scale:", turnDebugSmoothYawCarryScaleValueLabel);
@@ -2656,6 +2677,8 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("smooth_yaw_carry_pending", turnDebugSmoothYawCarryPendingValueLabel);
     addPinnedRow("smooth_yaw_carry_used", turnDebugSmoothYawCarryUsedValueLabel);
     addPinnedRow("smooth_yaw_carry_offset_deg", turnDebugSmoothYawCarryOffsetValueLabel);
+    addPinnedRow("smooth_yaw_carry_candidate_source",
+                 turnDebugSmoothYawCarryCandidateSourceValueLabel);
     addPinnedRow("smooth_yaw_carry_rejected_reason",
                  turnDebugSmoothYawCarryRejectedReasonValueLabel);
     addPinnedRow("advance_final_correction_source", turnDebugAdvanceCorrectionSourceValueLabel);
@@ -3031,6 +3054,10 @@ void MainWindow::updateTelemetryPanel()
         turnDebugSmoothYawCarryDiagUsedValueLabel->setText(
             turnDebug.smooth_yaw_carry_diag_used ? "true" : "false");
     }
+    if (turnDebugSmoothYawCarryCandidateSourceValueLabel) {
+        turnDebugSmoothYawCarryCandidateSourceValueLabel->setText(
+            yawCarryCandidateSourceText(turnDebug.smooth_yaw_carry_candidate_source));
+    }
     if (turnDebugSmoothYawCarryRejectedReasonValueLabel) {
         turnDebugSmoothYawCarryRejectedReasonValueLabel->setText(
             smoothYawCarryRejectedReasonText(turnDebug.smooth_yaw_carry_rejected_reason));
@@ -3042,6 +3069,10 @@ void MainWindow::updateTelemetryPanel()
     if (turnDebugSmoothYawCarryRequireDiagValueLabel) {
         turnDebugSmoothYawCarryRequireDiagValueLabel->setText(
             turnDebug.smooth_yaw_carry_require_diag ? "true" : "false");
+    }
+    if (turnDebugSmoothYawCarryAllowAdvancePreviewValueLabel) {
+        turnDebugSmoothYawCarryAllowAdvancePreviewValueLabel->setText(
+            turnDebug.smooth_yaw_carry_allow_advance_preview ? "true" : "false");
     }
     if (turnDebugSmoothYawCarryMinAbsValueLabel) {
         turnDebugSmoothYawCarryMinAbsValueLabel->setText(
@@ -4864,6 +4895,7 @@ void MainWindow::showControlTuningDialog()
     auto *smoothYawCarryEnabledCheck = new QCheckBox(diagGroup);
     auto *smoothYawCarryOnlySetpointCheck = new QCheckBox(diagGroup);
     auto *smoothYawCarryRequireDiagCheck = new QCheckBox(diagGroup);
+    auto *smoothYawCarryAllowAdvancePreviewCheck = new QCheckBox(diagGroup);
     auto *smoothYawCarryMinAbsSpin = new QDoubleSpinBox(diagGroup);
     auto *smoothYawCarryMaxAbsSpin = new QDoubleSpinBox(diagGroup);
     auto *smoothYawCarryScaleNumSpin = new QSpinBox(diagGroup);
@@ -4954,6 +4986,8 @@ void MainWindow::showControlTuningDialog()
     diagLayout->addRow("smooth_yaw_carry_enabled:", smoothYawCarryEnabledCheck);
     diagLayout->addRow("smooth_yaw_carry_only_setpoint:", smoothYawCarryOnlySetpointCheck);
     diagLayout->addRow("smooth_yaw_carry_require_diag:", smoothYawCarryRequireDiagCheck);
+    diagLayout->addRow("smooth_yaw_carry_allow_advance_preview:",
+                       smoothYawCarryAllowAdvancePreviewCheck);
     diagLayout->addRow("smooth_yaw_carry_min_abs_deg:", smoothYawCarryMinAbsSpin);
     diagLayout->addRow("smooth_yaw_carry_max_abs_deg:", smoothYawCarryMaxAbsSpin);
     diagLayout->addRow("smooth_yaw_carry_offset_scale_num:", smoothYawCarryScaleNumSpin);
@@ -5018,6 +5052,7 @@ void MainWindow::showControlTuningDialog()
         smoothYawCarryEnabledCheck->setChecked(carryConfig.enabled);
         smoothYawCarryOnlySetpointCheck->setChecked(carryConfig.only_setpoint);
         smoothYawCarryRequireDiagCheck->setChecked(carryConfig.require_diag);
+        smoothYawCarryAllowAdvancePreviewCheck->setChecked(carryConfig.allow_advance_preview);
         smoothYawCarryMinAbsSpin->setValue(fromQ16(carryConfig.min_abs_deg_q16));
         smoothYawCarryMaxAbsSpin->setValue(fromQ16(carryConfig.max_abs_deg_q16));
         smoothYawCarryScaleNumSpin->setValue(carryConfig.offset_scale_num);
@@ -5076,6 +5111,7 @@ void MainWindow::showControlTuningDialog()
             smoothYawCarryEnabledCheck->isChecked(),
             smoothYawCarryOnlySetpointCheck->isChecked(),
             smoothYawCarryRequireDiagCheck->isChecked(),
+            smoothYawCarryAllowAdvancePreviewCheck->isChecked(),
             toQ16(smoothYawCarryMinAbsSpin->value()),
             toQ16(smoothYawCarryMaxAbsSpin->value()),
             static_cast<int16_t>(smoothYawCarryScaleNumSpin->value()),

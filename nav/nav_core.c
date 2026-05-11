@@ -168,6 +168,7 @@ static NavSmoothYawCarryConfig smooth_yaw_carry_config = {
     false,
     true,
     true,
+    true,
     0,
     NAV_SMOOTH_YAW_CARRY_MAX_ABS_DEG_DEFAULT << 16,
     NAV_SMOOTH_YAW_CARRY_SCALE_NUM_DEFAULT,
@@ -177,12 +178,19 @@ static q16_16_t smooth_final_entry_yaw_deg_q16 = 0;
 static q16_16_t smooth_final_exit_yaw_deg_q16 = 0;
 static q16_16_t smooth_final_exit_yaw_offset_deg_q16 = 0;
 static bool smooth_final_diag_used = false;
+static q16_16_t yaw_carry_candidate_entry_yaw_deg_q16 = 0;
+static q16_16_t yaw_carry_candidate_exit_yaw_deg_q16 = 0;
+static q16_16_t yaw_carry_candidate_offset_deg_q16 = 0;
+static bool yaw_carry_candidate_diag_used = false;
+static NavYawCarryCandidateSource yaw_carry_candidate_source = NAV_YAW_CARRY_SOURCE_NONE;
 static bool smooth_yaw_carry_candidate_available = false;
 static bool smooth_yaw_carry_pending = false;
 static bool smooth_yaw_carry_used = false;
 static q16_16_t smooth_yaw_carry_offset_deg_q16 = 0;
 static NavSmoothYawCarryRejectedReason smooth_yaw_carry_rejected_reason =
     NAV_SMOOTH_YAW_CARRY_REJECT_NONE;
+static q16_16_t advance_diag_preview_entry_yaw_deg_q16 = 0;
+static bool advance_front_diag_used_for_yaw_carry = false;
 static NavAdvanceWallConfig advance_wall_config = {
     NAV_ADVANCE_WALL_KP_PWM_PER_MM_DEFAULT,
     NAV_ADVANCE_WALL_KD_PWM_PER_MM_PER_TICK_DEFAULT,
@@ -313,12 +321,15 @@ static void sync_smooth_yaw_carry_debug(void)
     turn_debug.smooth_yaw_carry_pending = smooth_yaw_carry_pending;
     turn_debug.smooth_yaw_carry_used = smooth_yaw_carry_used;
     turn_debug.smooth_yaw_carry_offset_deg_q16 = smooth_yaw_carry_offset_deg_q16;
-    turn_debug.smooth_yaw_carry_entry_yaw_deg_q16 = smooth_final_entry_yaw_deg_q16;
-    turn_debug.smooth_yaw_carry_exit_yaw_deg_q16 = smooth_final_exit_yaw_deg_q16;
-    turn_debug.smooth_yaw_carry_diag_used = smooth_final_diag_used;
+    turn_debug.smooth_yaw_carry_entry_yaw_deg_q16 = yaw_carry_candidate_entry_yaw_deg_q16;
+    turn_debug.smooth_yaw_carry_exit_yaw_deg_q16 = yaw_carry_candidate_exit_yaw_deg_q16;
+    turn_debug.smooth_yaw_carry_diag_used = yaw_carry_candidate_diag_used;
+    turn_debug.smooth_yaw_carry_candidate_source = yaw_carry_candidate_source;
     turn_debug.smooth_yaw_carry_rejected_reason = smooth_yaw_carry_rejected_reason;
     turn_debug.smooth_yaw_carry_only_setpoint = smooth_yaw_carry_config.only_setpoint;
     turn_debug.smooth_yaw_carry_require_diag = smooth_yaw_carry_config.require_diag;
+    turn_debug.smooth_yaw_carry_allow_advance_preview =
+        smooth_yaw_carry_config.allow_advance_preview;
     turn_debug.smooth_yaw_carry_min_abs_deg_q16 = smooth_yaw_carry_config.min_abs_deg_q16;
     turn_debug.smooth_yaw_carry_max_abs_deg_q16 = smooth_yaw_carry_config.max_abs_deg_q16;
     turn_debug.smooth_yaw_carry_offset_scale_num =
@@ -333,6 +344,11 @@ static void reset_smooth_yaw_carry_runtime(void)
     smooth_final_exit_yaw_deg_q16 = 0;
     smooth_final_exit_yaw_offset_deg_q16 = 0;
     smooth_final_diag_used = false;
+    yaw_carry_candidate_entry_yaw_deg_q16 = 0;
+    yaw_carry_candidate_exit_yaw_deg_q16 = 0;
+    yaw_carry_candidate_offset_deg_q16 = 0;
+    yaw_carry_candidate_diag_used = false;
+    yaw_carry_candidate_source = NAV_YAW_CARRY_SOURCE_NONE;
     smooth_yaw_carry_candidate_available = false;
     smooth_yaw_carry_pending = false;
     smooth_yaw_carry_used = false;
@@ -645,6 +661,7 @@ static void reset_smooth_yaw_carry_config(void)
     smooth_yaw_carry_config.enabled = true;
     smooth_yaw_carry_config.only_setpoint = true;
     smooth_yaw_carry_config.require_diag = true;
+    smooth_yaw_carry_config.allow_advance_preview = true;
     smooth_yaw_carry_config.min_abs_deg_q16 = NAV_SMOOTH_YAW_CARRY_MIN_ABS_DEG_DEFAULT << 16;
     smooth_yaw_carry_config.max_abs_deg_q16 =
         NAV_SMOOTH_YAW_CARRY_MAX_ABS_DEG_DEFAULT << 16;
@@ -1118,6 +1135,10 @@ static void reset_turn_debug(void)
 static RobotCommand guided_forward_command(const RobotSensors *sensors,
                                            int16_t base_left_pwm,
                                            int16_t base_right_pwm);
+static void set_yaw_carry_candidate(NavYawCarryCandidateSource source,
+                                    q16_16_t entry_yaw_deg_q16,
+                                    q16_16_t exit_yaw_deg_q16,
+                                    bool diag_used);
 
 static void reset_special_detection_state(void)
 {
@@ -1963,9 +1984,15 @@ static RobotCommand finish_advance_until_rear_black(const RobotSensors *sensors)
     current_action = NAV_ACTION_NONE;
     action_start_yaw_q16 = 0;
     action_target_yaw_q16 = 0;
+    set_yaw_carry_candidate(NAV_YAW_CARRY_SOURCE_ADVANCE_FRONT_DIAG_PREVIEW,
+                            advance_diag_preview_entry_yaw_deg_q16,
+                            sensors->yaw_deg_q16,
+                            advance_front_diag_used_for_yaw_carry);
     advance_phase = NAV_ADVANCE_PHASE_NONE;
     advance_front_diag_preview_armed = false;
     advance_front_diag_preview_latched = false;
+    advance_diag_preview_entry_yaw_deg_q16 = 0;
+    advance_front_diag_used_for_yaw_carry = false;
     reset_wall_caution_state(NAV_WALL_CAUTION_LOSS_ACTION_END);
     reset_advance_wall_pd();
     clear_live_turn_debug();
@@ -2185,6 +2212,9 @@ static RobotCommand guided_forward_command(const RobotSensors *sensors,
             front_diag_source = NAV_ADVANCE_FRONT_DIAG_RIGHT;
             front_diag_preview_active = true;
         }
+    }
+    if (front_diag_preview_active) {
+        advance_front_diag_used_for_yaw_carry = true;
     }
 
     if (correction_source == NAV_ADVANCE_CORRECTION_YAW_PD
@@ -2494,6 +2524,24 @@ static bool smooth_source_is_setpoint_diag(NavSmoothFinalGuidanceSource source)
         || source == NAV_SMOOTH_FINAL_GUIDANCE_DIAG_RIGHT;
 }
 
+static void set_yaw_carry_candidate(NavYawCarryCandidateSource source,
+                                    q16_16_t entry_yaw_deg_q16,
+                                    q16_16_t exit_yaw_deg_q16,
+                                    bool diag_used)
+{
+    yaw_carry_candidate_source = source;
+    yaw_carry_candidate_entry_yaw_deg_q16 = entry_yaw_deg_q16;
+    yaw_carry_candidate_exit_yaw_deg_q16 = exit_yaw_deg_q16;
+    yaw_carry_candidate_offset_deg_q16 = exit_yaw_deg_q16 - entry_yaw_deg_q16;
+    yaw_carry_candidate_diag_used = diag_used;
+    smooth_yaw_carry_candidate_available = diag_used;
+    smooth_yaw_carry_pending = false;
+    smooth_yaw_carry_used = false;
+    smooth_yaw_carry_offset_deg_q16 = 0;
+    smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NONE;
+    sync_smooth_yaw_carry_debug();
+}
+
 static q16_16_t scale_smooth_yaw_carry_offset(q16_16_t offset_q16)
 {
     const int16_t den = smooth_yaw_carry_config.offset_scale_den <= 0
@@ -2524,20 +2572,28 @@ static bool evaluate_smooth_yaw_carry_candidate(bool next_action_is_smooth)
         return false;
     }
     if (smooth_yaw_carry_config.only_setpoint
+        && yaw_carry_candidate_source == NAV_YAW_CARRY_SOURCE_SMOOTH_FINAL_DIAG
         && diagonal_guidance_config.smooth_final_mode != NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT) {
         smooth_yaw_carry_candidate_available = false;
         smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NOT_SETPOINT;
         sync_smooth_yaw_carry_debug();
         return false;
     }
-    if (smooth_yaw_carry_config.require_diag && !smooth_final_diag_used) {
+    if (yaw_carry_candidate_source == NAV_YAW_CARRY_SOURCE_ADVANCE_FRONT_DIAG_PREVIEW
+        && !smooth_yaw_carry_config.allow_advance_preview) {
+        smooth_yaw_carry_candidate_available = false;
+        smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NO_DIAG_USED;
+        sync_smooth_yaw_carry_debug();
+        return false;
+    }
+    if (smooth_yaw_carry_config.require_diag && !yaw_carry_candidate_diag_used) {
         smooth_yaw_carry_candidate_available = false;
         smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NO_DIAG_USED;
         sync_smooth_yaw_carry_debug();
         return false;
     }
 
-    const q16_16_t abs_offset_q16 = abs_q16(smooth_final_exit_yaw_offset_deg_q16);
+    const q16_16_t abs_offset_q16 = abs_q16(yaw_carry_candidate_offset_deg_q16);
     if (abs_offset_q16 < smooth_yaw_carry_config.min_abs_deg_q16) {
         smooth_yaw_carry_candidate_available = false;
         smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_OFFSET_TOO_SMALL;
@@ -2552,7 +2608,7 @@ static bool evaluate_smooth_yaw_carry_candidate(bool next_action_is_smooth)
     }
 
     smooth_yaw_carry_offset_deg_q16 =
-        scale_smooth_yaw_carry_offset(smooth_final_exit_yaw_offset_deg_q16);
+        scale_smooth_yaw_carry_offset(yaw_carry_candidate_offset_deg_q16);
     smooth_yaw_carry_pending = true;
     smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NONE;
     sync_smooth_yaw_carry_debug();
@@ -2584,13 +2640,13 @@ static RobotCommand finish_smooth_turn(const RobotSensors *sensors, NavSmoothDon
     smooth_final_exit_yaw_deg_q16 = sensors->yaw_deg_q16;
     smooth_final_exit_yaw_offset_deg_q16 =
         smooth_final_exit_yaw_deg_q16 - smooth_final_entry_yaw_deg_q16;
-    smooth_yaw_carry_candidate_available =
-        reason == NAV_SMOOTH_DONE_REAR_SENSOR_TARGET_LINE;
-    smooth_yaw_carry_pending = false;
-    smooth_yaw_carry_used = false;
-    smooth_yaw_carry_offset_deg_q16 = 0;
-    smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NONE;
-    if (!smooth_yaw_carry_candidate_available) {
+    set_yaw_carry_candidate(NAV_YAW_CARRY_SOURCE_SMOOTH_FINAL_DIAG,
+                            smooth_final_entry_yaw_deg_q16,
+                            smooth_final_exit_yaw_deg_q16,
+                            reason == NAV_SMOOTH_DONE_REAR_SENSOR_TARGET_LINE
+                                && smooth_final_diag_used);
+    if (reason != NAV_SMOOTH_DONE_REAR_SENSOR_TARGET_LINE) {
+        smooth_yaw_carry_candidate_available = false;
         smooth_yaw_carry_rejected_reason = NAV_SMOOTH_YAW_CARRY_REJECT_NOT_NEXT_SMOOTH;
     }
     sync_smooth_yaw_carry_debug();
@@ -3007,6 +3063,10 @@ void nav_core_init(void)
     advance_phase = NAV_ADVANCE_PHASE_NONE;
     advance_front_diag_preview_armed = false;
     advance_front_diag_preview_latched = false;
+    advance_diag_preview_entry_yaw_deg_q16 = 0;
+    advance_front_diag_used_for_yaw_carry = false;
+    advance_diag_preview_entry_yaw_deg_q16 = 0;
+    advance_front_diag_used_for_yaw_carry = false;
     approach_front_phase = NAV_APPROACH_FRONT_PHASE_NONE;
     center_pivot_phase = NAV_CENTER_PIVOT_PHASE_NONE;
     smooth_post_yaw_elapsed_ms = 0;
@@ -3539,6 +3599,7 @@ void nav_core_set_smooth_yaw_carry_config(const NavSmoothYawCarryConfig *config)
     smooth_yaw_carry_config.enabled = config->enabled;
     smooth_yaw_carry_config.only_setpoint = config->only_setpoint;
     smooth_yaw_carry_config.require_diag = config->require_diag;
+    smooth_yaw_carry_config.allow_advance_preview = config->allow_advance_preview;
     smooth_yaw_carry_config.min_abs_deg_q16 = abs_q16(config->min_abs_deg_q16);
     smooth_yaw_carry_config.max_abs_deg_q16 = abs_q16(config->max_abs_deg_q16);
     if (smooth_yaw_carry_config.max_abs_deg_q16 < smooth_yaw_carry_config.min_abs_deg_q16) {
@@ -3934,6 +3995,8 @@ RobotCommand nav_core_update(const RobotSensors *sensors)
                 advance_started_on_rear_line = sensors->floor_rear_black;
                 begin_special_detection_for_motion(sensors->floor_rear_black);
             }
+            advance_diag_preview_entry_yaw_deg_q16 = sensors->yaw_deg_q16;
+            advance_front_diag_used_for_yaw_carry = false;
             update_floor_line_debug(sensors);
         }
 

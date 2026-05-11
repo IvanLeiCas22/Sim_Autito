@@ -169,6 +169,12 @@ typedef enum NavSmoothYawCarryRejectedReason {
     NAV_SMOOTH_YAW_CARRY_REJECT_OFFSET_TOO_LARGE
 } NavSmoothYawCarryRejectedReason;
 
+typedef enum NavYawCarryCandidateSource {
+    NAV_YAW_CARRY_SOURCE_NONE = 0,
+    NAV_YAW_CARRY_SOURCE_SMOOTH_FINAL_DIAG,
+    NAV_YAW_CARRY_SOURCE_ADVANCE_FRONT_DIAG_PREVIEW
+} NavYawCarryCandidateSource;
+
 typedef enum NavRecommendedAction {
     NAV_RECOMMENDED_NONE = 0,
     NAV_RECOMMENDED_ACQUIRE_REAR_LINE,
@@ -298,6 +304,7 @@ typedef struct NavSmoothYawCarryConfig {
     bool enabled;
     bool only_setpoint;
     bool require_diag;
+    bool allow_advance_preview;
     q16_16_t min_abs_deg_q16;
     q16_16_t max_abs_deg_q16;
     int16_t offset_scale_num;
@@ -410,9 +417,11 @@ typedef struct NavTurnDebug {
     q16_16_t smooth_yaw_carry_entry_yaw_deg_q16;
     q16_16_t smooth_yaw_carry_exit_yaw_deg_q16;
     bool smooth_yaw_carry_diag_used;
+    NavYawCarryCandidateSource smooth_yaw_carry_candidate_source;
     NavSmoothYawCarryRejectedReason smooth_yaw_carry_rejected_reason;
     bool smooth_yaw_carry_only_setpoint;
     bool smooth_yaw_carry_require_diag;
+    bool smooth_yaw_carry_allow_advance_preview;
     q16_16_t smooth_yaw_carry_min_abs_deg_q16;
     q16_16_t smooth_yaw_carry_max_abs_deg_q16;
     int16_t smooth_yaw_carry_offset_scale_num;

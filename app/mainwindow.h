@@ -256,9 +256,11 @@ private:
     QLabel *turnDebugSmoothYawCarryEntryYawValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryExitYawValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryDiagUsedValueLabel = nullptr;
+    QLabel *turnDebugSmoothYawCarryCandidateSourceValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryRejectedReasonValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryOnlySetpointValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryRequireDiagValueLabel = nullptr;
+    QLabel *turnDebugSmoothYawCarryAllowAdvancePreviewValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryMinAbsValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryMaxAbsValueLabel = nullptr;
     QLabel *turnDebugSmoothYawCarryScaleValueLabel = nullptr;
