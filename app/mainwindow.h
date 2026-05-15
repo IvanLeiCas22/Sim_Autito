@@ -71,6 +71,17 @@ public:
         Error
     };
 
+    enum class SmartShadowCompareReason {
+        None,
+        MatchDecisionPoint,
+        MatchWaitNavReady,
+        MatchPlanExecution,
+        MatchBlockedByMission,
+        MismatchAction,
+        MismatchState,
+        MismatchPlanRequest
+    };
+
     enum class Mode1MissionState {
         Disabled,
         SearchSpecials,
@@ -185,6 +196,12 @@ private:
     void syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapshot &debug);
     void applyNavSupervisorOutput(const NavSupervisorOutput &output);
     bool advanceMode1MissionIfNeeded();
+    void updateSmartRecognitionShadow(NavRecommendedAction recommendedAction,
+                                      bool navReady,
+                                      bool missionBlocked,
+                                      NavRouteStatus frontierStatus,
+                                      bool frontierPlanLoaded);
+    bool smartShadowMatchesMainWindow();
     void resetRobotPoseToWorldStart();
     void initializeNavMapFromWorldStart();
     void createRobotItem();
@@ -533,6 +550,21 @@ private:
     QLabel *smartFrontierRoutesExecutedCountValueLabel = nullptr;
     QLabel *smartNoFrontierCountValueLabel = nullptr;
     QLabel *smartLocalActionValueLabel = nullptr;
+    QLabel *supervisorSmartStateValueLabel = nullptr;
+    QLabel *supervisorSmartDecisionReasonValueLabel = nullptr;
+    QLabel *supervisorRequestedActionValueLabel = nullptr;
+    QLabel *supervisorRequestPlanToFrontierValueLabel = nullptr;
+    QLabel *supervisorRequestExecutePlanValueLabel = nullptr;
+    QLabel *supervisorSmartFrontierStatusValueLabel = nullptr;
+    QLabel *supervisorSmartLocalActionValueLabel = nullptr;
+    QLabel *supervisorSmartBlockedByMissionValueLabel = nullptr;
+    QLabel *supervisorSmartNavReadyValueLabel = nullptr;
+    QLabel *supervisorSmartPlanExecutionEnabledValueLabel = nullptr;
+    QLabel *supervisorSmartActionInProgressValueLabel = nullptr;
+    QLabel *supervisorSmartCompareReasonValueLabel = nullptr;
+    QLabel *supervisorSmartShadowMatchesMainWindowValueLabel = nullptr;
+    QLabel *mainwindowSmartStateValueLabel = nullptr;
+    QLabel *mainwindowSmartLocalActionValueLabel = nullptr;
     QLabel *mode1MissionEnabledValueLabel = nullptr;
     QLabel *mode1MissionStateValueLabel = nullptr;
     QLabel *mode1RequiredSpecialCountValueLabel = nullptr;
@@ -662,6 +694,13 @@ private:
     uint16_t smartFrontierRoutesExecutedCount = 0;
     uint16_t smartNoFrontierCount = 0;
     NavRecommendedAction smartLocalAction = NAV_RECOMMENDED_NONE;
+    NavSupervisorSmartOutput supervisorSmartLastOutput = {};
+    bool supervisorSmartShadowMatchesMainWindow = true;
+    bool supervisorSmartLastNavReady = false;
+    bool supervisorSmartLastPlanExecutionEnabled = false;
+    bool supervisorSmartActionInProgress = false;
+    SmartShadowCompareReason supervisorSmartCompareReason =
+        SmartShadowCompareReason::None;
     bool mode1MissionEnabled = true;
     // Vista/cache de telemetria derivada de nav_supervisor; no es fuente de verdad.
     Mode1MissionState mode1MissionState = Mode1MissionState::Disabled;

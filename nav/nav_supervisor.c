@@ -27,6 +27,10 @@ typedef struct NavSupervisorStateData {
     bool clear_plan_requested;
     bool return_plan_requested;
     bool execute_return_requested;
+    NavSupervisorSmartOutput smart_output;
+    NavRecommendedAction smart_local_action;
+    NavRouteStatus smart_frontier_status;
+    bool smart_blocked_by_mission;
 } NavSupervisorStateData;
 
 static NavSupervisorStateData supervisor_state;
@@ -126,6 +130,16 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
     snapshot->safe_return_cost = supervisor_state.safe_return_cost;
     snapshot->flood_best_score = supervisor_state.flood_best_score;
     snapshot->return_strategy = supervisor_state.config.return_strategy;
+    snapshot->smart_state = supervisor_state.smart_output.smart_state;
+    snapshot->smart_decision_reason = supervisor_state.smart_output.decision_reason;
+    snapshot->smart_requested_action = supervisor_state.smart_output.requested_action;
+    snapshot->smart_request_plan_to_frontier =
+        supervisor_state.smart_output.request_plan_to_frontier;
+    snapshot->smart_request_execute_frontier_plan =
+        supervisor_state.smart_output.request_execute_frontier_plan;
+    snapshot->smart_blocked_by_mission = supervisor_state.smart_blocked_by_mission;
+    snapshot->smart_local_action = supervisor_state.smart_local_action;
+    snapshot->smart_frontier_status = supervisor_state.smart_frontier_status;
 }
 
 void nav_supervisor_cancel(void)
@@ -346,4 +360,172 @@ void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_l
 {
     supervisor_state.return_route_status = route_status;
     supervisor_state.return_plan_loaded = plan_loaded;
+}
+
+static void clear_smart_output(NavSupervisorSmartOutput *output)
+{
+    if (output != 0) {
+        *output = (NavSupervisorSmartOutput){0};
+    }
+}
+
+static NavSupervisorRequestedAction requested_action_from_recommended(
+    NavRecommendedAction action)
+{
+    switch (action) {
+    case NAV_RECOMMENDED_ACQUIRE_REAR_LINE:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_ACQUIRE_REAR_LINE;
+    case NAV_RECOMMENDED_ADVANCE_LINE:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_ADVANCE_LINE;
+    case NAV_RECOMMENDED_SMOOTH_LEFT:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_LEFT;
+    case NAV_RECOMMENDED_SMOOTH_RIGHT:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_RIGHT;
+    case NAV_RECOMMENDED_PIVOT_180:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_PIVOT_180;
+    case NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_RECOVERY_PIVOT_180_FRONT_BLOCKED;
+    case NAV_RECOMMENDED_NONE:
+    default:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_NONE;
+    }
+}
+
+static bool recommended_action_uses_unvisited_candidate(
+    const NavSupervisorSmartInput *input)
+{
+    if (input == 0) {
+        return false;
+    }
+
+    switch (input->recommended_action) {
+    case NAV_RECOMMENDED_SMOOTH_RIGHT:
+        return input->candidate_right_valid && !input->candidate_right_visited;
+    case NAV_RECOMMENDED_ADVANCE_LINE:
+        return input->candidate_front_valid && !input->candidate_front_visited;
+    case NAV_RECOMMENDED_SMOOTH_LEFT:
+        return input->candidate_left_valid && !input->candidate_left_visited;
+    default:
+        return false;
+    }
+}
+
+static bool recommended_action_is_local_for_smart(
+    const NavSupervisorSmartInput *input)
+{
+    if (input == 0 || input->recommended_action == NAV_RECOMMENDED_NONE) {
+        return false;
+    }
+
+    if (!input->decision_point_valid) {
+        return true;
+    }
+
+    if (input->recommended_action == NAV_RECOMMENDED_ACQUIRE_REAR_LINE
+        || input->recommended_action
+            == NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED) {
+        return true;
+    }
+
+    return recommended_action_uses_unvisited_candidate(input);
+}
+
+static void store_smart_output(const NavSupervisorSmartInput *input,
+                               const NavSupervisorSmartOutput *output)
+{
+    supervisor_state.smart_output = output != 0 ? *output : (NavSupervisorSmartOutput){0};
+    supervisor_state.smart_local_action =
+        input != 0 ? input->recommended_action : NAV_RECOMMENDED_NONE;
+    supervisor_state.smart_frontier_status =
+        input != 0 ? input->frontier_route_status : NAV_ROUTE_STATUS_IDLE;
+    supervisor_state.smart_blocked_by_mission =
+        input != 0 ? input->mission_block_smart_actions : false;
+}
+
+void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
+                                        NavSupervisorSmartOutput *output)
+{
+    clear_smart_output(output);
+    if (input == 0) {
+        store_smart_output(0, output);
+        return;
+    }
+
+    NavSupervisorSmartOutput local_output = {0};
+    if (!input->autonomy_enabled) {
+        local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_IDLE;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_AUTONOMY_DISABLED;
+    } else if (input->policy != NAV_POLICY_SMART_RECOGNITION) {
+        local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_IDLE;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_POLICY_NOT_SMART;
+    } else if (input->mission_block_smart_actions) {
+        local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_BLOCKED_BY_MISSION;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_BLOCKED_BY_MISSION;
+        local_output.block_new_actions = true;
+    } else if (input->plan_execution_enabled) {
+        local_output.smart_state =
+            NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_PLAN_EXECUTION_ACTIVE;
+        local_output.request_execute_frontier_plan = true;
+    } else if (!input->nav_ready) {
+        local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_NAV_NOT_READY;
+    } else if (recommended_action_is_local_for_smart(input)) {
+        local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_LOCAL_UNVISITED;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_LOCAL_ACTION_AVAILABLE;
+        local_output.request_start_action = true;
+        local_output.requested_action =
+            requested_action_from_recommended(input->recommended_action);
+    } else {
+        local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_PLAN_TO_FRONTIER;
+        local_output.decision_reason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_PLAN_FRONTIER_REQUESTED;
+        local_output.request_plan_to_frontier = true;
+
+        switch (input->frontier_route_status) {
+        case NAV_ROUTE_STATUS_FOUND:
+            if (input->frontier_plan_loaded) {
+                local_output.smart_state =
+                    NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
+                local_output.decision_reason =
+                    NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ROUTE_FOUND;
+                local_output.request_execute_frontier_plan = true;
+            } else {
+                local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_ERROR;
+                local_output.decision_reason =
+                    NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ERROR;
+            }
+            break;
+        case NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE:
+            local_output.smart_state =
+                NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE;
+            local_output.decision_reason =
+                NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ALREADY_HERE;
+            break;
+        case NAV_ROUTE_STATUS_NO_FRONTIER:
+            local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_NO_FRONTIER;
+            local_output.decision_reason =
+                NAV_SUPERVISOR_SMART_DECISION_REASON_NO_FRONTIER;
+            local_output.request_stop_autonomy = true;
+            break;
+        case NAV_ROUTE_STATUS_IDLE:
+            break;
+        default:
+            local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_ERROR;
+            local_output.decision_reason =
+                NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ERROR;
+            break;
+        }
+    }
+
+    if (output != 0) {
+        *output = local_output;
+    }
+    store_smart_output(input, &local_output);
 }

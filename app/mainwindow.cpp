@@ -949,6 +949,132 @@ QString smartRecognitionStateText(MainWindow::SmartRecognitionState state)
     return "UNKNOWN";
 }
 
+QString supervisorSmartStateText(NavSupervisorSmartState state)
+{
+    switch (state) {
+    case NAV_SUPERVISOR_SMART_STATE_IDLE:
+        return "IDLE";
+    case NAV_SUPERVISOR_SMART_STATE_LOCAL_UNVISITED:
+        return "LOCAL_UNVISITED";
+    case NAV_SUPERVISOR_SMART_STATE_PLAN_TO_FRONTIER:
+        return "PLAN_TO_FRONTIER";
+    case NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE:
+        return "EXECUTING_FRONTIER_ROUTE";
+    case NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE:
+        return "FRONTIER_ALREADY_HERE";
+    case NAV_SUPERVISOR_SMART_STATE_NO_FRONTIER:
+        return "NO_FRONTIER";
+    case NAV_SUPERVISOR_SMART_STATE_ERROR:
+        return "ERROR";
+    case NAV_SUPERVISOR_SMART_STATE_BLOCKED_BY_MISSION:
+        return "BLOCKED_BY_MISSION";
+    case NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY:
+        return "WAIT_NAV_READY";
+    }
+
+    return "UNKNOWN";
+}
+
+QString supervisorSmartDecisionReasonText(NavSupervisorSmartDecisionReason reason)
+{
+    switch (reason) {
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_AUTONOMY_DISABLED:
+        return "AUTONOMY_DISABLED";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_POLICY_NOT_SMART:
+        return "POLICY_NOT_SMART";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_BLOCKED_BY_MISSION:
+        return "BLOCKED_BY_MISSION";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_PLAN_EXECUTION_ACTIVE:
+        return "PLAN_EXECUTION_ACTIVE";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_NAV_NOT_READY:
+        return "NAV_NOT_READY";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_LOCAL_ACTION_AVAILABLE:
+        return "LOCAL_ACTION_AVAILABLE";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_PLAN_FRONTIER_REQUESTED:
+        return "PLAN_FRONTIER_REQUESTED";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ROUTE_FOUND:
+        return "FRONTIER_ROUTE_FOUND";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ALREADY_HERE:
+        return "FRONTIER_ALREADY_HERE";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_NO_FRONTIER:
+        return "NO_FRONTIER";
+    case NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ERROR:
+        return "FRONTIER_ERROR";
+    }
+
+    return "UNKNOWN";
+}
+
+QString supervisorRequestedActionText(NavSupervisorRequestedAction action)
+{
+    switch (action) {
+    case NAV_SUPERVISOR_REQUESTED_ACTION_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_REQUESTED_ACTION_ACQUIRE_REAR_LINE:
+        return "ACQUIRE_REAR_LINE";
+    case NAV_SUPERVISOR_REQUESTED_ACTION_ADVANCE_LINE:
+        return "ADVANCE_LINE";
+    case NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_LEFT:
+        return "SMOOTH_LEFT";
+    case NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_RIGHT:
+        return "SMOOTH_RIGHT";
+    case NAV_SUPERVISOR_REQUESTED_ACTION_PIVOT_180:
+        return "PIVOT_180";
+    case NAV_SUPERVISOR_REQUESTED_ACTION_RECOVERY_PIVOT_180_FRONT_BLOCKED:
+        return "RECOVERY_PIVOT_180_FRONT_BLOCKED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString smartShadowCompareReasonText(MainWindow::SmartShadowCompareReason reason)
+{
+    switch (reason) {
+    case MainWindow::SmartShadowCompareReason::None:
+        return "NONE";
+    case MainWindow::SmartShadowCompareReason::MatchDecisionPoint:
+        return "MATCH_DECISION_POINT";
+    case MainWindow::SmartShadowCompareReason::MatchWaitNavReady:
+        return "MATCH_WAIT_NAV_READY";
+    case MainWindow::SmartShadowCompareReason::MatchPlanExecution:
+        return "MATCH_PLAN_EXECUTION";
+    case MainWindow::SmartShadowCompareReason::MatchBlockedByMission:
+        return "MATCH_BLOCKED_BY_MISSION";
+    case MainWindow::SmartShadowCompareReason::MismatchAction:
+        return "MISMATCH_ACTION";
+    case MainWindow::SmartShadowCompareReason::MismatchState:
+        return "MISMATCH_STATE";
+    case MainWindow::SmartShadowCompareReason::MismatchPlanRequest:
+        return "MISMATCH_PLAN_REQUEST";
+    }
+
+    return "UNKNOWN";
+}
+
+NavSupervisorRequestedAction supervisorRequestedActionFromRecommended(
+    NavRecommendedAction action)
+{
+    switch (action) {
+    case NAV_RECOMMENDED_ACQUIRE_REAR_LINE:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_ACQUIRE_REAR_LINE;
+    case NAV_RECOMMENDED_ADVANCE_LINE:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_ADVANCE_LINE;
+    case NAV_RECOMMENDED_SMOOTH_LEFT:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_LEFT;
+    case NAV_RECOMMENDED_SMOOTH_RIGHT:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_RIGHT;
+    case NAV_RECOMMENDED_PIVOT_180:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_PIVOT_180;
+    case NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_RECOVERY_PIVOT_180_FRONT_BLOCKED;
+    case NAV_RECOMMENDED_NONE:
+    default:
+        return NAV_SUPERVISOR_REQUESTED_ACTION_NONE;
+    }
+}
+
 QString mode1MissionStateText(MainWindow::Mode1MissionState state)
 {
     switch (state) {
@@ -2262,6 +2388,21 @@ void MainWindow::createTelemetryPanel()
     smartFrontierRoutesExecutedCountValueLabel = new QLabel(panel);
     smartNoFrontierCountValueLabel = new QLabel(panel);
     smartLocalActionValueLabel = new QLabel(panel);
+    supervisorSmartStateValueLabel = new QLabel(panel);
+    supervisorSmartDecisionReasonValueLabel = new QLabel(panel);
+    supervisorRequestedActionValueLabel = new QLabel(panel);
+    supervisorRequestPlanToFrontierValueLabel = new QLabel(panel);
+    supervisorRequestExecutePlanValueLabel = new QLabel(panel);
+    supervisorSmartFrontierStatusValueLabel = new QLabel(panel);
+    supervisorSmartLocalActionValueLabel = new QLabel(panel);
+    supervisorSmartBlockedByMissionValueLabel = new QLabel(panel);
+    supervisorSmartNavReadyValueLabel = new QLabel(panel);
+    supervisorSmartPlanExecutionEnabledValueLabel = new QLabel(panel);
+    supervisorSmartActionInProgressValueLabel = new QLabel(panel);
+    supervisorSmartCompareReasonValueLabel = new QLabel(panel);
+    supervisorSmartShadowMatchesMainWindowValueLabel = new QLabel(panel);
+    mainwindowSmartStateValueLabel = new QLabel(panel);
+    mainwindowSmartLocalActionValueLabel = new QLabel(panel);
     mode1MissionEnabledValueLabel = new QLabel(panel);
     mode1MissionStateValueLabel = new QLabel(panel);
     mode1RequiredSpecialCountValueLabel = new QLabel(panel);
@@ -2641,6 +2782,21 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(smartFrontierRoutesExecutedCountValueLabel);
     configureTelemetryValueLabel(smartNoFrontierCountValueLabel);
     configureTelemetryValueLabel(smartLocalActionValueLabel);
+    configureTelemetryValueLabel(supervisorSmartStateValueLabel);
+    configureTelemetryValueLabel(supervisorSmartDecisionReasonValueLabel);
+    configureTelemetryValueLabel(supervisorRequestedActionValueLabel);
+    configureTelemetryValueLabel(supervisorRequestPlanToFrontierValueLabel);
+    configureTelemetryValueLabel(supervisorRequestExecutePlanValueLabel);
+    configureTelemetryValueLabel(supervisorSmartFrontierStatusValueLabel);
+    configureTelemetryValueLabel(supervisorSmartLocalActionValueLabel);
+    configureTelemetryValueLabel(supervisorSmartBlockedByMissionValueLabel);
+    configureTelemetryValueLabel(supervisorSmartNavReadyValueLabel);
+    configureTelemetryValueLabel(supervisorSmartPlanExecutionEnabledValueLabel);
+    configureTelemetryValueLabel(supervisorSmartActionInProgressValueLabel);
+    configureTelemetryValueLabel(supervisorSmartCompareReasonValueLabel);
+    configureTelemetryValueLabel(supervisorSmartShadowMatchesMainWindowValueLabel);
+    configureTelemetryValueLabel(mainwindowSmartStateValueLabel);
+    configureTelemetryValueLabel(mainwindowSmartLocalActionValueLabel);
     configureTelemetryValueLabel(mode1MissionEnabledValueLabel);
     configureTelemetryValueLabel(mode1MissionStateValueLabel);
     configureTelemetryValueLabel(mode1RequiredSpecialCountValueLabel);
@@ -3105,6 +3261,31 @@ void MainWindow::createTelemetryPanel()
                    smartFrontierRoutesExecutedCountValueLabel);
     layout->addRow("smart_no_frontier_count:", smartNoFrontierCountValueLabel);
     layout->addRow("smart_local_action:", smartLocalActionValueLabel);
+    layout->addRow("supervisor_smart_state:", supervisorSmartStateValueLabel);
+    layout->addRow("supervisor_smart_decision_reason:",
+                   supervisorSmartDecisionReasonValueLabel);
+    layout->addRow("supervisor_requested_action:", supervisorRequestedActionValueLabel);
+    layout->addRow("supervisor_request_plan_to_frontier:",
+                   supervisorRequestPlanToFrontierValueLabel);
+    layout->addRow("supervisor_request_execute_plan:",
+                   supervisorRequestExecutePlanValueLabel);
+    layout->addRow("supervisor_smart_frontier_status:",
+                   supervisorSmartFrontierStatusValueLabel);
+    layout->addRow("supervisor_smart_local_action:",
+                   supervisorSmartLocalActionValueLabel);
+    layout->addRow("supervisor_smart_blocked_by_mission:",
+                   supervisorSmartBlockedByMissionValueLabel);
+    layout->addRow("supervisor_smart_nav_ready:", supervisorSmartNavReadyValueLabel);
+    layout->addRow("supervisor_smart_plan_execution_enabled:",
+                   supervisorSmartPlanExecutionEnabledValueLabel);
+    layout->addRow("supervisor_smart_action_in_progress:",
+                   supervisorSmartActionInProgressValueLabel);
+    layout->addRow("supervisor_smart_compare_reason:",
+                   supervisorSmartCompareReasonValueLabel);
+    layout->addRow("supervisor_smart_shadow_matches_mainwindow:",
+                   supervisorSmartShadowMatchesMainWindowValueLabel);
+    layout->addRow("mainwindow_smart_state:", mainwindowSmartStateValueLabel);
+    layout->addRow("mainwindow_smart_local_action:", mainwindowSmartLocalActionValueLabel);
     layout->addRow("mode1_mission_enabled:", mode1MissionEnabledValueLabel);
     layout->addRow("mode1_mission_state:", mode1MissionStateValueLabel);
     layout->addRow("mode1_required_special_count:", mode1RequiredSpecialCountValueLabel);
@@ -3294,6 +3475,16 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("plan_current_action", planCurrentActionValueLabel);
     addPinnedRow("plan_next_action", planNextActionValueLabel);
     addPinnedRow("smart_recognition_state", smartRecognitionStateValueLabel);
+    addPinnedRow("supervisor_smart_state", supervisorSmartStateValueLabel);
+    addPinnedRow("supervisor_smart_shadow_matches_mainwindow",
+                 supervisorSmartShadowMatchesMainWindowValueLabel);
+    addPinnedRow("supervisor_requested_action", supervisorRequestedActionValueLabel);
+    addPinnedRow("supervisor_request_plan_to_frontier",
+                 supervisorRequestPlanToFrontierValueLabel);
+    addPinnedRow("supervisor_smart_decision_reason",
+                 supervisorSmartDecisionReasonValueLabel);
+    addPinnedRow("supervisor_smart_compare_reason",
+                 supervisorSmartCompareReasonValueLabel);
     addPinnedRow("mode1_mission_state", mode1MissionStateValueLabel);
     addPinnedRow("mode1_found_special_count", mode1FoundSpecialCountValueLabel);
     addPinnedRow("mode1_required_specials_reached",
@@ -4542,6 +4733,67 @@ void MainWindow::updateTelemetryPanel()
     if (smartLocalActionValueLabel) {
         smartLocalActionValueLabel->setText(recommendedActionText(smartLocalAction));
     }
+    NavSupervisorDebugSnapshot supervisorSmartDebug = {};
+    nav_supervisor_get_debug(&supervisorSmartDebug);
+    if (supervisorSmartStateValueLabel) {
+        supervisorSmartStateValueLabel->setText(
+            supervisorSmartStateText(supervisorSmartLastOutput.smart_state));
+    }
+    if (supervisorSmartDecisionReasonValueLabel) {
+        supervisorSmartDecisionReasonValueLabel->setText(
+            supervisorSmartDecisionReasonText(supervisorSmartLastOutput.decision_reason));
+    }
+    if (supervisorRequestedActionValueLabel) {
+        supervisorRequestedActionValueLabel->setText(
+            supervisorRequestedActionText(supervisorSmartLastOutput.requested_action));
+    }
+    if (supervisorRequestPlanToFrontierValueLabel) {
+        supervisorRequestPlanToFrontierValueLabel->setText(
+            supervisorSmartLastOutput.request_plan_to_frontier ? "true" : "false");
+    }
+    if (supervisorRequestExecutePlanValueLabel) {
+        supervisorRequestExecutePlanValueLabel->setText(
+            supervisorSmartLastOutput.request_execute_frontier_plan ? "true" : "false");
+    }
+    if (supervisorSmartFrontierStatusValueLabel) {
+        supervisorSmartFrontierStatusValueLabel->setText(
+            routeStatusText(supervisorSmartDebug.smart_frontier_status));
+    }
+    if (supervisorSmartLocalActionValueLabel) {
+        supervisorSmartLocalActionValueLabel->setText(
+            recommendedActionText(supervisorSmartDebug.smart_local_action));
+    }
+    if (supervisorSmartBlockedByMissionValueLabel) {
+        supervisorSmartBlockedByMissionValueLabel->setText(
+            supervisorSmartDebug.smart_blocked_by_mission ? "true" : "false");
+    }
+    if (supervisorSmartNavReadyValueLabel) {
+        supervisorSmartNavReadyValueLabel->setText(
+            supervisorSmartLastNavReady ? "true" : "false");
+    }
+    if (supervisorSmartPlanExecutionEnabledValueLabel) {
+        supervisorSmartPlanExecutionEnabledValueLabel->setText(
+            supervisorSmartLastPlanExecutionEnabled ? "true" : "false");
+    }
+    if (supervisorSmartActionInProgressValueLabel) {
+        supervisorSmartActionInProgressValueLabel->setText(
+            supervisorSmartActionInProgress ? "true" : "false");
+    }
+    if (supervisorSmartCompareReasonValueLabel) {
+        supervisorSmartCompareReasonValueLabel->setText(
+            smartShadowCompareReasonText(supervisorSmartCompareReason));
+    }
+    if (supervisorSmartShadowMatchesMainWindowValueLabel) {
+        supervisorSmartShadowMatchesMainWindowValueLabel->setText(
+            supervisorSmartShadowMatchesMainWindow ? "true" : "false");
+    }
+    if (mainwindowSmartStateValueLabel) {
+        mainwindowSmartStateValueLabel->setText(
+            smartRecognitionStateText(smartRecognitionState));
+    }
+    if (mainwindowSmartLocalActionValueLabel) {
+        mainwindowSmartLocalActionValueLabel->setText(recommendedActionText(smartLocalAction));
+    }
     NavMapDebugSnapshot mapDebug = {};
     nav_core_get_map_debug(&mapDebug);
     if (mapEnabledValueLabel) {
@@ -5397,6 +5649,168 @@ bool MainWindow::advanceMode1MissionIfNeeded()
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_CANCELLED;
 }
 
+void MainWindow::updateSmartRecognitionShadow(NavRecommendedAction recommendedAction,
+                                              bool navReady,
+                                              bool missionBlocked,
+                                              NavRouteStatus frontierStatus,
+                                              bool frontierPlanLoaded)
+{
+    RobotSensors sensors = buildRobotSensorsSnapshot();
+    NavWallPerception perception = {};
+    nav_core_get_wall_perception(&perception);
+    NavMapCandidateDebug candidateDebug = {};
+    nav_core_get_map_candidate_debug(&candidateDebug);
+    NavPlanDebugSnapshot planDebug = {};
+    nav_core_plan_debug_snapshot(&planDebug);
+
+    NavSupervisorSmartInput input = {};
+    input.autonomy_enabled = basicNavAutonomyEnabled;
+    input.policy = nav_core_get_policy();
+    input.nav_ready = navReady;
+    input.mission_block_smart_actions = missionBlocked;
+    input.plan_execution_enabled = planExecutionEnabled;
+    input.plan_queue_count = planDebug.count;
+    input.decision_point_valid = basicNavDecisionPointValid;
+    input.floor_rear_black = sensors.floor_rear_black;
+    input.rear_line_trusted_for_decision = nav_core_rear_line_trusted_for_decision();
+    input.wall_front = perception.wall_front;
+    input.wall_left = perception.wall_left;
+    input.wall_right = perception.wall_right;
+    input.recommended_action = recommendedAction;
+    input.candidate_right_valid = candidateDebug.right_cell_valid;
+    input.candidate_right_visited = candidateDebug.right_cell_visited;
+    input.candidate_front_valid = candidateDebug.front_cell_valid;
+    input.candidate_front_visited = candidateDebug.front_cell_visited;
+    input.candidate_left_valid = candidateDebug.left_cell_valid;
+    input.candidate_left_visited = candidateDebug.left_cell_visited;
+    input.frontier_route_status = frontierStatus;
+    input.frontier_plan_loaded = frontierPlanLoaded;
+
+    nav_supervisor_update_smart_shadow(&input, &supervisorSmartLastOutput);
+    supervisorSmartLastNavReady = navReady;
+    supervisorSmartLastPlanExecutionEnabled = planExecutionEnabled;
+    supervisorSmartActionInProgress =
+        !navReady
+        && (nav_core_action() != NAV_ACTION_NONE
+            || !(nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE));
+    supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
+}
+
+bool MainWindow::smartShadowMatchesMainWindow()
+{
+    if (supervisorSmartLastOutput.smart_state
+        == NAV_SUPERVISOR_SMART_STATE_BLOCKED_BY_MISSION) {
+        supervisorSmartCompareReason = supervisorSmartLastOutput.block_new_actions
+            ? SmartShadowCompareReason::MatchBlockedByMission
+            : SmartShadowCompareReason::MismatchState;
+        return supervisorSmartLastOutput.block_new_actions;
+    }
+
+    if (!basicNavAutonomyEnabled || nav_core_get_policy() != NAV_POLICY_SMART_RECOGNITION) {
+        const bool matches =
+            supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_IDLE;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+
+    if (!supervisorSmartLastNavReady
+        && supervisorSmartLastOutput.smart_state
+            == NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY
+        && supervisorSmartLastOutput.decision_reason
+            == NAV_SUPERVISOR_SMART_DECISION_REASON_NAV_NOT_READY) {
+        supervisorSmartCompareReason = SmartShadowCompareReason::MatchWaitNavReady;
+        return true;
+    }
+
+    if (supervisorSmartLastPlanExecutionEnabled
+        || smartRecognitionState == SmartRecognitionState::ExecutingFrontierRoute) {
+        const bool matches = supervisorSmartLastOutput.smart_state
+            == NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchPlanExecution
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+
+    switch (smartRecognitionState) {
+    case SmartRecognitionState::Idle:
+    {
+        const bool matches =
+            supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_IDLE
+            || supervisorSmartLastOutput.smart_state
+                == NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY
+            || (supervisorSmartLastOutput.request_start_action
+                && supervisorSmartLastOutput.requested_action
+                    == supervisorRequestedActionFromRecommended(smartLocalAction));
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+    case SmartRecognitionState::LocalUnvisited:
+    {
+        const bool matches = supervisorSmartLastOutput.request_start_action
+            && supervisorSmartLastOutput.requested_action
+                == supervisorRequestedActionFromRecommended(smartLocalAction);
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchAction;
+        return matches;
+    }
+    case SmartRecognitionState::PlanToFrontier:
+    {
+        const bool matches = supervisorSmartLastOutput.request_plan_to_frontier
+            || supervisorSmartLastOutput.smart_state
+                == NAV_SUPERVISOR_SMART_STATE_PLAN_TO_FRONTIER;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchPlanRequest;
+        return matches;
+    }
+    case SmartRecognitionState::ExecutingFrontierRoute:
+    {
+        const bool matches = supervisorSmartLastOutput.smart_state
+            == NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchPlanExecution
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+    case SmartRecognitionState::FrontierAlreadyHere:
+    {
+        const bool matches = supervisorSmartLastOutput.smart_state
+            == NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+    case SmartRecognitionState::NoFrontier:
+    {
+        const bool matches = supervisorSmartLastOutput.smart_state
+            == NAV_SUPERVISOR_SMART_STATE_NO_FRONTIER;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+    case SmartRecognitionState::Error:
+    {
+        const bool matches =
+            supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_ERROR;
+        supervisorSmartCompareReason = matches
+            ? SmartShadowCompareReason::MatchDecisionPoint
+            : SmartShadowCompareReason::MismatchState;
+        return matches;
+    }
+    }
+
+    supervisorSmartCompareReason = SmartShadowCompareReason::MismatchState;
+    return false;
+}
+
 void MainWindow::cancelPlanCompositeAction()
 {
     planCompositeActionPhase = CenterPivotSequencePhase::None;
@@ -5810,11 +6224,21 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     }
 
     if (advanceMode1MissionIfNeeded()) {
+        updateSmartRecognitionShadow(NAV_RECOMMENDED_NONE,
+                                     false,
+                                     supervisorLastOutput.block_smart_actions,
+                                     NAV_ROUTE_STATUS_IDLE,
+                                     false);
         return;
     }
 
     if (nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION && planExecutionEnabled) {
         smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
+        updateSmartRecognitionShadow(NAV_RECOMMENDED_NONE,
+                                     false,
+                                     false,
+                                     smartLastFrontierStatus,
+                                     true);
         return;
     }
 
@@ -5822,6 +6246,11 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         (nav_core_action() == NAV_ACTION_NONE)
         && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
     if (!navReady) {
+        updateSmartRecognitionShadow(NAV_RECOMMENDED_NONE,
+                                     false,
+                                     false,
+                                     NAV_ROUTE_STATUS_IDLE,
+                                     false);
         return;
     }
 
@@ -5836,6 +6265,11 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     basicNavDecisionPointValid = sensors.floor_rear_black && rearLineTrusted;
     basicNavRecommendedAction = nav_core_recommend_basic_action(&sensors);
     smartLocalAction = basicNavRecommendedAction;
+    updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                 true,
+                                 false,
+                                 NAV_ROUTE_STATUS_IDLE,
+                                 false);
 
     if (nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION) {
         NavMapCandidateDebug candidateDebug = {};
@@ -5847,6 +6281,11 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
             smartRecognitionState = candidateDebug.used_unvisited_preference
                 ? SmartRecognitionState::LocalUnvisited
                 : SmartRecognitionState::Idle;
+            updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                         true,
+                                         false,
+                                         NAV_ROUTE_STATUS_IDLE,
+                                         false);
             startBasicNavRecommendedAction(basicNavRecommendedAction, sensors);
             return;
         }
@@ -5857,16 +6296,28 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         smartLastFrontierStatus = frontierStatus;
         NavPlanDebugSnapshot planDebug = {};
         nav_core_plan_debug_snapshot(&planDebug);
+        const bool frontierPlanLoaded =
+            frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
         if (frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0) {
-            planExecutionEnabled = true;
             ++smartFrontierRoutesExecutedCount;
             smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
+            updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                         true,
+                                         false,
+                                         frontierStatus,
+                                         frontierPlanLoaded);
+            planExecutionEnabled = true;
             routeExecuteStatus = RouteExecuteStatus::Running;
             advancePlanExecutionIfNeeded();
             return;
         }
         if (frontierStatus == NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE) {
             smartRecognitionState = SmartRecognitionState::FrontierAlreadyHere;
+            updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                         true,
+                                         false,
+                                         frontierStatus,
+                                         frontierPlanLoaded);
             return;
         }
         if (frontierStatus == NAV_ROUTE_STATUS_NO_FRONTIER) {
@@ -5877,15 +6328,31 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
                 && supervisorDebug.state == NAV_SUPERVISOR_STATE_SEARCH_SPECIALS) {
                 updateNavSupervisor(true);
             }
+            smartRecognitionState = SmartRecognitionState::NoFrontier;
+            updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                         true,
+                                         false,
+                                         frontierStatus,
+                                         frontierPlanLoaded);
             setBasicNavAutonomyEnabled(false);
             smartRecognitionState = SmartRecognitionState::NoFrontier;
             return;
         }
 
         smartRecognitionState = SmartRecognitionState::Error;
+        updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                     true,
+                                     false,
+                                     frontierStatus,
+                                     frontierPlanLoaded);
         return;
     }
 
+    updateSmartRecognitionShadow(basicNavRecommendedAction,
+                                 true,
+                                 false,
+                                 NAV_ROUTE_STATUS_IDLE,
+                                 false);
     startBasicNavRecommendedAction(basicNavRecommendedAction, sensors);
 }
 
