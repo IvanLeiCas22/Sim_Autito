@@ -31,6 +31,10 @@ typedef struct NavSupervisorStateData {
     NavRecommendedAction smart_local_action;
     NavRouteStatus smart_frontier_status;
     bool smart_blocked_by_mission;
+    bool smart_frontier_plan_requested;
+    bool smart_frontier_plan_result_available;
+    bool smart_frontier_plan_loaded;
+    uint16_t smart_frontier_plan_request_pulse_count;
 } NavSupervisorStateData;
 
 static NavSupervisorStateData supervisor_state;
@@ -140,6 +144,11 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
     snapshot->smart_blocked_by_mission = supervisor_state.smart_blocked_by_mission;
     snapshot->smart_local_action = supervisor_state.smart_local_action;
     snapshot->smart_frontier_status = supervisor_state.smart_frontier_status;
+    snapshot->smart_frontier_plan_notified =
+        supervisor_state.smart_frontier_plan_result_available;
+    snapshot->smart_frontier_plan_loaded = supervisor_state.smart_frontier_plan_loaded;
+    snapshot->smart_frontier_plan_request_pulse_count =
+        supervisor_state.smart_frontier_plan_request_pulse_count;
 }
 
 void nav_supervisor_cancel(void)
@@ -362,6 +371,14 @@ void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_l
     supervisor_state.return_plan_loaded = plan_loaded;
 }
 
+void nav_supervisor_notify_frontier_route_status(NavRouteStatus status, bool plan_loaded)
+{
+    supervisor_state.smart_frontier_plan_requested = true;
+    supervisor_state.smart_frontier_plan_result_available = true;
+    supervisor_state.smart_frontier_status = status;
+    supervisor_state.smart_frontier_plan_loaded = plan_loaded;
+}
+
 static void clear_smart_output(NavSupervisorSmartOutput *output)
 {
     if (output != 0) {
@@ -430,16 +447,34 @@ static bool recommended_action_is_local_for_smart(
     return recommended_action_uses_unvisited_candidate(input);
 }
 
+static void clear_smart_frontier_plan_state(void)
+{
+    supervisor_state.smart_frontier_plan_requested = false;
+    supervisor_state.smart_frontier_plan_result_available = false;
+    supervisor_state.smart_frontier_plan_loaded = false;
+    supervisor_state.smart_frontier_status = NAV_ROUTE_STATUS_IDLE;
+}
+
 static void store_smart_output(const NavSupervisorSmartInput *input,
                                const NavSupervisorSmartOutput *output)
 {
     supervisor_state.smart_output = output != 0 ? *output : (NavSupervisorSmartOutput){0};
     supervisor_state.smart_local_action =
         input != 0 ? input->recommended_action : NAV_RECOMMENDED_NONE;
-    supervisor_state.smart_frontier_status =
-        input != 0 ? input->frontier_route_status : NAV_ROUTE_STATUS_IDLE;
     supervisor_state.smart_blocked_by_mission =
         input != 0 ? input->mission_block_smart_actions : false;
+}
+
+static void set_frontier_result_from_input_if_present(const NavSupervisorSmartInput *input)
+{
+    if (input == 0 || input->frontier_route_status == NAV_ROUTE_STATUS_IDLE) {
+        return;
+    }
+
+    supervisor_state.smart_frontier_plan_requested = true;
+    supervisor_state.smart_frontier_plan_result_available = true;
+    supervisor_state.smart_frontier_status = input->frontier_route_status;
+    supervisor_state.smart_frontier_plan_loaded = input->frontier_plan_loaded;
 }
 
 void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
@@ -447,25 +482,33 @@ void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
 {
     clear_smart_output(output);
     if (input == 0) {
+        clear_smart_frontier_plan_state();
         store_smart_output(0, output);
         return;
     }
 
+    set_frontier_result_from_input_if_present(input);
+
     NavSupervisorSmartOutput local_output = {0};
     if (!input->autonomy_enabled) {
+        clear_smart_frontier_plan_state();
         local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_IDLE;
         local_output.decision_reason =
             NAV_SUPERVISOR_SMART_DECISION_REASON_AUTONOMY_DISABLED;
     } else if (input->policy != NAV_POLICY_SMART_RECOGNITION) {
+        clear_smart_frontier_plan_state();
         local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_IDLE;
         local_output.decision_reason =
             NAV_SUPERVISOR_SMART_DECISION_REASON_POLICY_NOT_SMART;
     } else if (input->mission_block_smart_actions) {
+        clear_smart_frontier_plan_state();
         local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_BLOCKED_BY_MISSION;
         local_output.decision_reason =
             NAV_SUPERVISOR_SMART_DECISION_REASON_BLOCKED_BY_MISSION;
         local_output.block_new_actions = true;
     } else if (input->plan_execution_enabled) {
+        supervisor_state.smart_frontier_plan_requested = false;
+        supervisor_state.smart_frontier_plan_result_available = false;
         local_output.smart_state =
             NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
         local_output.decision_reason =
@@ -476,6 +519,7 @@ void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
         local_output.decision_reason =
             NAV_SUPERVISOR_SMART_DECISION_REASON_NAV_NOT_READY;
     } else if (recommended_action_is_local_for_smart(input)) {
+        clear_smart_frontier_plan_state();
         local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_LOCAL_UNVISITED;
         local_output.decision_reason =
             NAV_SUPERVISOR_SMART_DECISION_REASON_LOCAL_ACTION_AVAILABLE;
@@ -486,11 +530,24 @@ void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
         local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_PLAN_TO_FRONTIER;
         local_output.decision_reason =
             NAV_SUPERVISOR_SMART_DECISION_REASON_PLAN_FRONTIER_REQUESTED;
-        local_output.request_plan_to_frontier = true;
 
-        switch (input->frontier_route_status) {
+        if (!supervisor_state.smart_frontier_plan_requested) {
+            supervisor_state.smart_frontier_plan_requested = true;
+            ++supervisor_state.smart_frontier_plan_request_pulse_count;
+            local_output.request_plan_to_frontier = true;
+        }
+
+        if (!supervisor_state.smart_frontier_plan_result_available) {
+            if (output != 0) {
+                *output = local_output;
+            }
+            store_smart_output(input, &local_output);
+            return;
+        }
+
+        switch (supervisor_state.smart_frontier_status) {
         case NAV_ROUTE_STATUS_FOUND:
-            if (input->frontier_plan_loaded) {
+            if (supervisor_state.smart_frontier_plan_loaded) {
                 local_output.smart_state =
                     NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
                 local_output.decision_reason =
@@ -500,6 +557,7 @@ void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
                 local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_ERROR;
                 local_output.decision_reason =
                     NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ERROR;
+                local_output.request_stop_autonomy = true;
             }
             break;
         case NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE:
@@ -520,6 +578,7 @@ void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
             local_output.smart_state = NAV_SUPERVISOR_SMART_STATE_ERROR;
             local_output.decision_reason =
                 NAV_SUPERVISOR_SMART_DECISION_REASON_FRONTIER_ERROR;
+            local_output.request_stop_autonomy = true;
             break;
         }
     }

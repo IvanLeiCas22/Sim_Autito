@@ -2436,6 +2436,9 @@ void MainWindow::createTelemetryPanel()
     supervisorSmartLocalControlActionValueLabel = new QLabel(panel);
     supervisorSmartLocalControlMapOkValueLabel = new QLabel(panel);
     supervisorSmartLocalControlFallbackLegacyValueLabel = new QLabel(panel);
+    supervisorFrontierPlanNotifiedValueLabel = new QLabel(panel);
+    supervisorFrontierPlanLoadedValueLabel = new QLabel(panel);
+    supervisorFrontierPlanRequestPulseCountValueLabel = new QLabel(panel);
     mainwindowSmartStateValueLabel = new QLabel(panel);
     mainwindowSmartLocalActionValueLabel = new QLabel(panel);
     mode1MissionEnabledValueLabel = new QLabel(panel);
@@ -2835,6 +2838,9 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(supervisorSmartLocalControlActionValueLabel);
     configureTelemetryValueLabel(supervisorSmartLocalControlMapOkValueLabel);
     configureTelemetryValueLabel(supervisorSmartLocalControlFallbackLegacyValueLabel);
+    configureTelemetryValueLabel(supervisorFrontierPlanNotifiedValueLabel);
+    configureTelemetryValueLabel(supervisorFrontierPlanLoadedValueLabel);
+    configureTelemetryValueLabel(supervisorFrontierPlanRequestPulseCountValueLabel);
     configureTelemetryValueLabel(mainwindowSmartStateValueLabel);
     configureTelemetryValueLabel(mainwindowSmartLocalActionValueLabel);
     configureTelemetryValueLabel(mode1MissionEnabledValueLabel);
@@ -3334,6 +3340,12 @@ void MainWindow::createTelemetryPanel()
                    supervisorSmartLocalControlMapOkValueLabel);
     layout->addRow("supervisor_smart_local_control_fallback_legacy:",
                    supervisorSmartLocalControlFallbackLegacyValueLabel);
+    layout->addRow("supervisor_frontier_plan_notified:",
+                   supervisorFrontierPlanNotifiedValueLabel);
+    layout->addRow("supervisor_frontier_plan_loaded:",
+                   supervisorFrontierPlanLoadedValueLabel);
+    layout->addRow("supervisor_frontier_plan_request_pulse_count:",
+                   supervisorFrontierPlanRequestPulseCountValueLabel);
     layout->addRow("mainwindow_smart_state:", mainwindowSmartStateValueLabel);
     layout->addRow("mainwindow_smart_local_action:", mainwindowSmartLocalActionValueLabel);
     layout->addRow("mode1_mission_enabled:", mode1MissionEnabledValueLabel);
@@ -3529,12 +3541,16 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("supervisor_smart_shadow_matches_mainwindow",
                  supervisorSmartShadowMatchesMainWindowValueLabel);
     addPinnedRow("supervisor_requested_action", supervisorRequestedActionValueLabel);
-    addPinnedRow("supervisor_request_plan_to_frontier",
-                 supervisorRequestPlanToFrontierValueLabel);
     addPinnedRow("supervisor_smart_decision_reason",
                  supervisorSmartDecisionReasonValueLabel);
     addPinnedRow("supervisor_smart_compare_reason",
                  supervisorSmartCompareReasonValueLabel);
+    addPinnedRow("supervisor_request_plan_to_frontier",
+                 supervisorRequestPlanToFrontierValueLabel);
+    addPinnedRow("supervisor_request_execute_plan",
+                 supervisorRequestExecutePlanValueLabel);
+    addPinnedRow("supervisor_smart_frontier_status",
+                 supervisorSmartFrontierStatusValueLabel);
     addPinnedRow("supervisor_smart_local_control_enabled",
                  supervisorSmartLocalControlEnabledValueLabel);
     addPinnedRow("supervisor_smart_local_control_applied",
@@ -4862,6 +4878,18 @@ void MainWindow::updateTelemetryPanel()
     if (supervisorSmartLocalControlFallbackLegacyValueLabel) {
         supervisorSmartLocalControlFallbackLegacyValueLabel->setText(
             supervisorSmartLocalControlFallbackLegacy ? "true" : "false");
+    }
+    if (supervisorFrontierPlanNotifiedValueLabel) {
+        supervisorFrontierPlanNotifiedValueLabel->setText(
+            supervisorSmartDebug.smart_frontier_plan_notified ? "true" : "false");
+    }
+    if (supervisorFrontierPlanLoadedValueLabel) {
+        supervisorFrontierPlanLoadedValueLabel->setText(
+            supervisorSmartDebug.smart_frontier_plan_loaded ? "true" : "false");
+    }
+    if (supervisorFrontierPlanRequestPulseCountValueLabel) {
+        supervisorFrontierPlanRequestPulseCountValueLabel->setText(
+            QString::number(supervisorSmartDebug.smart_frontier_plan_request_pulse_count));
     }
     if (mainwindowSmartStateValueLabel) {
         mainwindowSmartStateValueLabel->setText(
@@ -6400,37 +6428,41 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
             return;
         }
 
-        ++smartFrontierPlanRequestedCount;
         smartRecognitionState = SmartRecognitionState::PlanToFrontier;
-        const NavRouteStatus frontierStatus = nav_core_route_plan_to_nearest_frontier();
-        smartLastFrontierStatus = frontierStatus;
-        NavPlanDebugSnapshot planDebug = {};
-        nav_core_plan_debug_snapshot(&planDebug);
-        const bool frontierPlanLoaded =
-            frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
-        if (frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0) {
-            ++smartFrontierRoutesExecutedCount;
-            smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
+        if (supervisorSmartLastOutput.request_plan_to_frontier) {
+            ++smartFrontierPlanRequestedCount;
+            const NavRouteStatus frontierStatus = nav_core_route_plan_to_nearest_frontier();
+            smartLastFrontierStatus = frontierStatus;
+            NavPlanDebugSnapshot planDebug = {};
+            nav_core_plan_debug_snapshot(&planDebug);
+            const bool frontierPlanLoaded =
+                frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
+            nav_supervisor_notify_frontier_route_status(frontierStatus, frontierPlanLoaded);
             updateSmartRecognitionShadow(basicNavRecommendedAction,
                                          true,
                                          false,
-                                         frontierStatus,
-                                         frontierPlanLoaded);
+                                         NAV_ROUTE_STATUS_IDLE,
+                                         false);
+        }
+
+        if (supervisorSmartLastOutput.request_execute_frontier_plan) {
+            ++smartFrontierRoutesExecutedCount;
+            smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
+            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             planExecutionEnabled = true;
             routeExecuteStatus = RouteExecuteStatus::Running;
             advancePlanExecutionIfNeeded();
             return;
         }
-        if (frontierStatus == NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE) {
+
+        if (supervisorSmartLastOutput.smart_state
+            == NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE) {
             smartRecognitionState = SmartRecognitionState::FrontierAlreadyHere;
-            updateSmartRecognitionShadow(basicNavRecommendedAction,
-                                         true,
-                                         false,
-                                         frontierStatus,
-                                         frontierPlanLoaded);
+            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             return;
         }
-        if (frontierStatus == NAV_ROUTE_STATUS_NO_FRONTIER) {
+
+        if (supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_NO_FRONTIER) {
             ++smartNoFrontierCount;
             NavSupervisorDebugSnapshot supervisorDebug = {};
             nav_supervisor_get_debug(&supervisorDebug);
@@ -6439,22 +6471,25 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
                 updateNavSupervisor(true);
             }
             smartRecognitionState = SmartRecognitionState::NoFrontier;
-            updateSmartRecognitionShadow(basicNavRecommendedAction,
-                                         true,
-                                         false,
-                                         frontierStatus,
-                                         frontierPlanLoaded);
-            setBasicNavAutonomyEnabled(false);
+            if (supervisorSmartLastOutput.request_stop_autonomy) {
+                setBasicNavAutonomyEnabled(false);
+            }
             smartRecognitionState = SmartRecognitionState::NoFrontier;
+            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             return;
         }
 
-        smartRecognitionState = SmartRecognitionState::Error;
-        updateSmartRecognitionShadow(basicNavRecommendedAction,
-                                     true,
-                                     false,
-                                     frontierStatus,
-                                     frontierPlanLoaded);
+        if (supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_ERROR) {
+            smartRecognitionState = SmartRecognitionState::Error;
+            if (supervisorSmartLastOutput.request_stop_autonomy) {
+                setBasicNavAutonomyEnabled(false);
+                smartRecognitionState = SmartRecognitionState::Error;
+            }
+            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
+            return;
+        }
+
+        supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
         return;
     }
 

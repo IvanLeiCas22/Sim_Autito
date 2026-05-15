@@ -568,6 +568,9 @@ private:
     QLabel *supervisorSmartLocalControlActionValueLabel = nullptr;
     QLabel *supervisorSmartLocalControlMapOkValueLabel = nullptr;
     QLabel *supervisorSmartLocalControlFallbackLegacyValueLabel = nullptr;
+    QLabel *supervisorFrontierPlanNotifiedValueLabel = nullptr;
+    QLabel *supervisorFrontierPlanLoadedValueLabel = nullptr;
+    QLabel *supervisorFrontierPlanRequestPulseCountValueLabel = nullptr;
     QLabel *mainwindowSmartStateValueLabel = nullptr;
     QLabel *mainwindowSmartLocalActionValueLabel = nullptr;
     QLabel *mode1MissionEnabledValueLabel = nullptr;

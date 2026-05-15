@@ -114,6 +114,9 @@ typedef struct NavSupervisorDebugSnapshot {
     bool smart_blocked_by_mission;
     NavRecommendedAction smart_local_action;
     NavRouteStatus smart_frontier_status;
+    bool smart_frontier_plan_notified;
+    bool smart_frontier_plan_loaded;
+    uint16_t smart_frontier_plan_request_pulse_count;
 } NavSupervisorDebugSnapshot;
 
 typedef struct NavSupervisorInput {
@@ -190,6 +193,7 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
 void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_loaded);
 void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
                                         NavSupervisorSmartOutput *output);
+void nav_supervisor_notify_frontier_route_status(NavRouteStatus status, bool plan_loaded);
 
 #ifdef __cplusplus
 }
