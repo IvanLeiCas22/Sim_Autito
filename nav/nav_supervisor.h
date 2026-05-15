@@ -69,6 +69,34 @@ typedef struct NavSupervisorDebugSnapshot {
     NavSupervisorReturnStrategy return_strategy;
 } NavSupervisorDebugSnapshot;
 
+typedef struct NavSupervisorInput {
+    bool mission_enabled;
+    uint8_t found_special_count;
+    bool nav_ready;
+    bool at_start_cell;
+    bool plan_execution_enabled;
+    uint8_t plan_queue_count;
+    bool smart_no_frontier;
+    bool return_plan_loaded;
+    int16_t return_route_status;
+    int8_t current_cell_x;
+    int8_t current_cell_y;
+    int8_t current_dir;
+    bool start_cell_valid;
+    int8_t start_cell_x;
+    int8_t start_cell_y;
+    int8_t start_dir;
+} NavSupervisorInput;
+
+typedef struct NavSupervisorOutput {
+    bool block_smart_actions;
+    bool request_clear_exploration_plan;
+    bool request_plan_return_to_start;
+    bool request_execute_return_plan;
+    bool request_stop_autonomy;
+    bool request_stop_motors;
+} NavSupervisorOutput;
+
 void nav_supervisor_init(void);
 void nav_supervisor_reset(void);
 void nav_supervisor_set_config(const NavSupervisorConfig *config);
@@ -76,6 +104,8 @@ NavSupervisorConfig nav_supervisor_get_config(void);
 void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot);
 void nav_supervisor_cancel(void);
 void nav_supervisor_set_start_cell(int8_t x, int8_t y, int8_t dir);
+void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput *output);
+void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_loaded);
 
 #ifdef __cplusplus
 }

@@ -995,6 +995,62 @@ QString mode1MissionDoneReasonText(MainWindow::Mode1MissionDoneReason reason)
     return "UNKNOWN";
 }
 
+QString supervisorStateText(NavSupervisorState state)
+{
+    switch (state) {
+    case NAV_SUPERVISOR_STATE_IDLE:
+        return "IDLE";
+    case NAV_SUPERVISOR_STATE_SEARCH_SPECIALS:
+        return "SEARCH_SPECIALS";
+    case NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE:
+        return "FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE";
+    case NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN:
+        return "RETURN_SAFE_PLAN";
+    case NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE:
+        return "RETURN_SAFE_EXECUTE";
+    case NAV_SUPERVISOR_STATE_RETURN_SMART_DECIDE:
+        return "RETURN_SMART_DECIDE";
+    case NAV_SUPERVISOR_STATE_RETURN_FRONTIER_PLAN:
+        return "RETURN_FRONTIER_PLAN";
+    case NAV_SUPERVISOR_STATE_RETURN_FRONTIER_EXECUTE:
+        return "RETURN_FRONTIER_EXECUTE";
+    case NAV_SUPERVISOR_STATE_RETURN_FRONTIER_ENTER:
+        return "RETURN_FRONTIER_ENTER";
+    case NAV_SUPERVISOR_STATE_DONE:
+        return "DONE";
+    case NAV_SUPERVISOR_STATE_ERROR:
+        return "ERROR";
+    case NAV_SUPERVISOR_STATE_CANCELLED:
+        return "CANCELLED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString supervisorDoneReasonText(NavSupervisorDoneReason reason)
+{
+    switch (reason) {
+    case NAV_SUPERVISOR_DONE_REASON_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED:
+        return "FOUND_REQUIRED_SPECIALS_AND_RETURNED";
+    case NAV_SUPERVISOR_DONE_REASON_NO_RETURN_ROUTE:
+        return "NO_RETURN_ROUTE";
+    case NAV_SUPERVISOR_DONE_REASON_RETURN_ROUTE_TOO_LONG:
+        return "RETURN_ROUTE_TOO_LONG";
+    case NAV_SUPERVISOR_DONE_REASON_RETURN_QUEUE_OVERFLOW:
+        return "RETURN_QUEUE_OVERFLOW";
+    case NAV_SUPERVISOR_DONE_REASON_START_CELL_INVALID:
+        return "START_CELL_INVALID";
+    case NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS:
+        return "NO_FRONTIER_BEFORE_REQUIRED_SPECIALS";
+    case NAV_SUPERVISOR_DONE_REASON_CANCELLED:
+        return "CANCELLED";
+    }
+
+    return "UNKNOWN";
+}
+
 QString floodFrontierDecisionText(MainWindow::FloodFrontierDecision decision)
 {
     switch (decision) {
@@ -1139,6 +1195,8 @@ MainWindow::MainWindow(QWidget *parent)
     setFocusPolicy(Qt::StrongFocus);
 
     nav_core_init();
+    nav_supervisor_init();
+    syncNavSupervisorConfig();
     simulationTimer = new QTimer(this);
     simulationTimer->setInterval(kSimulationIntervalMs);
     connect(simulationTimer, &QTimer::timeout, this, &MainWindow::simulationStep);
@@ -2222,6 +2280,16 @@ void MainWindow::createTelemetryPanel()
     mode1ReturnToStartActiveValueLabel = new QLabel(panel);
     mode1AtStartCellValueLabel = new QLabel(panel);
     mode1DoneReasonValueLabel = new QLabel(panel);
+    supervisorStateValueLabel = new QLabel(panel);
+    supervisorDoneReasonValueLabel = new QLabel(panel);
+    supervisorRequiredSpecialsReachedValueLabel = new QLabel(panel);
+    supervisorReturnRequestedValueLabel = new QLabel(panel);
+    supervisorWaitingActionDoneValueLabel = new QLabel(panel);
+    supervisorRequestClearPlanValueLabel = new QLabel(panel);
+    supervisorRequestPlanReturnValueLabel = new QLabel(panel);
+    supervisorRequestExecuteReturnValueLabel = new QLabel(panel);
+    supervisorBlockSmartActionsValueLabel = new QLabel(panel);
+    supervisorShadowMatchesMainWindowValueLabel = new QLabel(panel);
     floodStatusValueLabel = new QLabel(panel);
     floodValidValueLabel = new QLabel(panel);
     floodGoalCellValueLabel = new QLabel(panel);
@@ -2591,6 +2659,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mode1ReturnToStartActiveValueLabel);
     configureTelemetryValueLabel(mode1AtStartCellValueLabel);
     configureTelemetryValueLabel(mode1DoneReasonValueLabel);
+    configureTelemetryValueLabel(supervisorStateValueLabel);
+    configureTelemetryValueLabel(supervisorDoneReasonValueLabel);
+    configureTelemetryValueLabel(supervisorRequiredSpecialsReachedValueLabel);
+    configureTelemetryValueLabel(supervisorReturnRequestedValueLabel);
+    configureTelemetryValueLabel(supervisorWaitingActionDoneValueLabel);
+    configureTelemetryValueLabel(supervisorRequestClearPlanValueLabel);
+    configureTelemetryValueLabel(supervisorRequestPlanReturnValueLabel);
+    configureTelemetryValueLabel(supervisorRequestExecuteReturnValueLabel);
+    configureTelemetryValueLabel(supervisorBlockSmartActionsValueLabel);
+    configureTelemetryValueLabel(supervisorShadowMatchesMainWindowValueLabel);
     configureTelemetryValueLabel(floodStatusValueLabel);
     configureTelemetryValueLabel(floodValidValueLabel);
     configureTelemetryValueLabel(floodGoalCellValueLabel);
@@ -3050,6 +3128,19 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("mode1_return_to_start_active:", mode1ReturnToStartActiveValueLabel);
     layout->addRow("mode1_at_start_cell:", mode1AtStartCellValueLabel);
     layout->addRow("mode1_done_reason:", mode1DoneReasonValueLabel);
+    layout->addRow("supervisor_state:", supervisorStateValueLabel);
+    layout->addRow("supervisor_done_reason:", supervisorDoneReasonValueLabel);
+    layout->addRow("supervisor_required_specials_reached:",
+                   supervisorRequiredSpecialsReachedValueLabel);
+    layout->addRow("supervisor_return_requested:", supervisorReturnRequestedValueLabel);
+    layout->addRow("supervisor_waiting_action_done:", supervisorWaitingActionDoneValueLabel);
+    layout->addRow("supervisor_request_clear_plan:", supervisorRequestClearPlanValueLabel);
+    layout->addRow("supervisor_request_plan_return:", supervisorRequestPlanReturnValueLabel);
+    layout->addRow("supervisor_request_execute_return:",
+                   supervisorRequestExecuteReturnValueLabel);
+    layout->addRow("supervisor_block_smart_actions:", supervisorBlockSmartActionsValueLabel);
+    layout->addRow("supervisor_shadow_matches_mainwindow:",
+                   supervisorShadowMatchesMainWindowValueLabel);
     layout->addRow("flood_status:", floodStatusValueLabel);
     layout->addRow("flood_valid:", floodValidValueLabel);
     layout->addRow("flood_goal_cell:", floodGoalCellValueLabel);
@@ -3217,6 +3308,11 @@ void MainWindow::createTelemetryPanel()
                  mode1PlanQueueCountWhenRequiredFoundValueLabel);
     addPinnedRow("mode1_return_route_status", mode1ReturnRouteStatusValueLabel);
     addPinnedRow("mode1_done_reason", mode1DoneReasonValueLabel);
+    addPinnedRow("supervisor_state", supervisorStateValueLabel);
+    addPinnedRow("supervisor_shadow_matches_mainwindow",
+                 supervisorShadowMatchesMainWindowValueLabel);
+    addPinnedRow("supervisor_request_plan_return", supervisorRequestPlanReturnValueLabel);
+    addPinnedRow("supervisor_done_reason", supervisorDoneReasonValueLabel);
     addPinnedRow("flood_status", floodStatusValueLabel);
     addPinnedRow("flood_current_cell_cost", floodCurrentCellCostValueLabel);
     addPinnedRow("flood_fr_candidate_edge_count", floodFrontierCandidateEdgeCountValueLabel);
@@ -4593,6 +4689,47 @@ void MainWindow::updateTelemetryPanel()
         mode1DoneReasonValueLabel->setText(
             mode1MissionDoneReasonText(mode1MissionDoneReason));
     }
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    if (supervisorStateValueLabel) {
+        supervisorStateValueLabel->setText(supervisorStateText(supervisorDebug.state));
+    }
+    if (supervisorDoneReasonValueLabel) {
+        supervisorDoneReasonValueLabel->setText(
+            supervisorDoneReasonText(supervisorDebug.done_reason));
+    }
+    if (supervisorRequiredSpecialsReachedValueLabel) {
+        supervisorRequiredSpecialsReachedValueLabel->setText(
+            supervisorDebug.required_specials_reached ? "true" : "false");
+    }
+    if (supervisorReturnRequestedValueLabel) {
+        supervisorReturnRequestedValueLabel->setText(
+            supervisorDebug.return_requested ? "true" : "false");
+    }
+    if (supervisorWaitingActionDoneValueLabel) {
+        supervisorWaitingActionDoneValueLabel->setText(
+            supervisorDebug.waiting_action_done ? "true" : "false");
+    }
+    if (supervisorRequestClearPlanValueLabel) {
+        supervisorRequestClearPlanValueLabel->setText(
+            supervisorShadowOutput.request_clear_exploration_plan ? "true" : "false");
+    }
+    if (supervisorRequestPlanReturnValueLabel) {
+        supervisorRequestPlanReturnValueLabel->setText(
+            supervisorShadowOutput.request_plan_return_to_start ? "true" : "false");
+    }
+    if (supervisorRequestExecuteReturnValueLabel) {
+        supervisorRequestExecuteReturnValueLabel->setText(
+            supervisorShadowOutput.request_execute_return_plan ? "true" : "false");
+    }
+    if (supervisorBlockSmartActionsValueLabel) {
+        supervisorBlockSmartActionsValueLabel->setText(
+            supervisorShadowOutput.block_smart_actions ? "true" : "false");
+    }
+    if (supervisorShadowMatchesMainWindowValueLabel) {
+        supervisorShadowMatchesMainWindowValueLabel->setText(
+            supervisorShadowMatchesMainWindow ? "true" : "false");
+    }
     NavFloodDebugSnapshot floodDebug = {};
     nav_core_flood_get_debug(&floodDebug);
     if (floodStatusValueLabel) {
@@ -5003,6 +5140,7 @@ void MainWindow::cancelPlanExecution()
 void MainWindow::setMode1MissionEnabled(bool enabled)
 {
     mode1MissionEnabled = enabled;
+    syncNavSupervisorConfig();
     mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     mode1ReturnPlanLoaded = false;
     if (mode1MissionEnabled) {
@@ -5029,6 +5167,8 @@ void MainWindow::setMode1MissionEnabled(bool enabled)
 void MainWindow::cancelMode1Mission(Mode1MissionDoneReason reason)
 {
     mode1MissionEnabled = false;
+    syncNavSupervisorConfig();
+    nav_supervisor_cancel();
     mode1MissionState = Mode1MissionState::Disabled;
     mode1MissionDoneReason = reason;
     mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
@@ -5045,8 +5185,116 @@ bool MainWindow::mode1MissionAtStartCell(const NavMapDebugSnapshot &mapDebug) co
         && mapDebug.cell_y == mode1StartCellY;
 }
 
+void MainWindow::syncNavSupervisorConfig()
+{
+    NavSupervisorConfig config = {};
+    config.mission_enabled = mode1MissionEnabled;
+    config.required_special_count = static_cast<uint8_t>(
+        std::clamp<uint16_t>(mode1RequiredSpecialCount,
+                             1,
+                             NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_MAX));
+    config.return_strategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+    nav_supervisor_set_config(&config);
+}
+
+bool MainWindow::navSupervisorShadowMatchesMainWindow(
+    const NavSupervisorDebugSnapshot &supervisorDebug) const
+{
+    bool stateMatches = false;
+    switch (mode1MissionState) {
+    case Mode1MissionState::Disabled:
+        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_IDLE
+            || supervisorDebug.state == NAV_SUPERVISOR_STATE_CANCELLED;
+        break;
+    case Mode1MissionState::SearchSpecials:
+        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_SEARCH_SPECIALS;
+        break;
+    case Mode1MissionState::FoundRequiredSpecialsWaitActionDone:
+        stateMatches = supervisorDebug.state
+            == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE;
+        break;
+    case Mode1MissionState::ReturnToStartPlan:
+        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN;
+        break;
+    case Mode1MissionState::ReturnToStartExecute:
+        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE;
+        break;
+    case Mode1MissionState::Done:
+        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_DONE;
+        break;
+    case Mode1MissionState::Error:
+        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_ERROR;
+        break;
+    }
+
+    bool doneReasonMatches = true;
+    if (mode1MissionDoneReason == Mode1MissionDoneReason::Cancelled) {
+        doneReasonMatches =
+            supervisorDebug.done_reason == NAV_SUPERVISOR_DONE_REASON_CANCELLED;
+    } else if (mode1MissionDoneReason == Mode1MissionDoneReason::FoundRequiredSpecialsAndReturned) {
+        doneReasonMatches = supervisorDebug.done_reason
+            == NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED;
+    } else if (mode1MissionDoneReason == Mode1MissionDoneReason::NoFrontierBeforeRequiredSpecials) {
+        doneReasonMatches = supervisorDebug.done_reason
+            == NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS;
+    } else if (mode1MissionDoneReason == Mode1MissionDoneReason::None) {
+        doneReasonMatches =
+            supervisorDebug.done_reason == NAV_SUPERVISOR_DONE_REASON_NONE;
+    }
+
+    return stateMatches
+        && doneReasonMatches
+        && supervisorDebug.found_special_count == mode1FoundSpecialCount
+        && supervisorDebug.required_specials_reached == mode1RequiredSpecialsReached
+        && supervisorDebug.return_requested == mode1ReturnRequested;
+}
+
+void MainWindow::updateNavSupervisorShadow(bool smartNoFrontier)
+{
+    syncNavSupervisorConfig();
+
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
+    mode1FoundSpecialCount = mapDebug.special_cells_found_count;
+
+    const bool navReady =
+        (nav_core_action() == NAV_ACTION_NONE)
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    const bool atStartCell = mode1MissionAtStartCell(mapDebug);
+    NavPlanDebugSnapshot planDebug = {};
+    nav_core_plan_debug_snapshot(&planDebug);
+
+    NavSupervisorInput input = {};
+    input.mission_enabled = mode1MissionEnabled;
+    input.found_special_count = static_cast<uint8_t>(
+        std::min<uint16_t>(mode1FoundSpecialCount,
+                           std::numeric_limits<uint8_t>::max()));
+    input.nav_ready = navReady;
+    input.at_start_cell = atStartCell;
+    input.plan_execution_enabled = planExecutionEnabled;
+    input.plan_queue_count = static_cast<uint8_t>(
+        std::min<uint16_t>(planDebug.count, std::numeric_limits<uint8_t>::max()));
+    input.smart_no_frontier = smartNoFrontier;
+    input.return_plan_loaded = mode1ReturnPlanLoaded;
+    input.return_route_status = static_cast<int16_t>(mode1ReturnRouteStatus);
+    input.current_cell_x = mapDebug.cell_x;
+    input.current_cell_y = mapDebug.cell_y;
+    input.current_dir = static_cast<int8_t>(mapDebug.dir);
+    input.start_cell_valid = mode1StartCellValid;
+    input.start_cell_x = mode1StartCellX;
+    input.start_cell_y = mode1StartCellY;
+    input.start_dir = static_cast<int8_t>(mode1StartDir);
+
+    nav_supervisor_update(&input, &supervisorShadowOutput);
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    supervisorShadowMatchesMainWindow = navSupervisorShadowMatchesMainWindow(supervisorDebug);
+}
+
 bool MainWindow::advanceMode1MissionIfNeeded()
 {
+    updateNavSupervisorShadow(false);
+
     if (!mode1MissionEnabled) {
         return false;
     }
@@ -5130,6 +5378,8 @@ bool MainWindow::advanceMode1MissionIfNeeded()
         nav_core_plan_debug_snapshot(&planDebug);
         mode1ReturnPlanLoaded =
             mode1ReturnRouteStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
+        nav_supervisor_notify_return_route_status(static_cast<int16_t>(mode1ReturnRouteStatus),
+                                                  mode1ReturnPlanLoaded);
 
         if (mode1ReturnRouteStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0) {
             planExecutionEnabled = true;
@@ -5678,6 +5928,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
             ++smartNoFrontierCount;
             if (mode1MissionEnabled
                 && mode1MissionState == Mode1MissionState::SearchSpecials) {
+                updateNavSupervisorShadow(true);
                 mode1MissionState = Mode1MissionState::Error;
                 mode1MissionDoneReason =
                     Mode1MissionDoneReason::NoFrontierBeforeRequiredSpecials;
@@ -5767,6 +6018,9 @@ void MainWindow::resetRobotPoseToWorldStart()
 
 void MainWindow::initializeNavMapFromWorldStart()
 {
+    nav_supervisor_reset();
+    syncNavSupervisorConfig();
+
     const double cellSizeMm = world.cellSizeMm();
     int cellX = 0;
     int cellY = 0;
@@ -5789,6 +6043,11 @@ void MainWindow::initializeNavMapFromWorldStart()
                       mode1StartCellX,
                       mode1StartCellY,
                       mode1StartDir);
+    if (mode1StartCellValid) {
+        nav_supervisor_set_start_cell(mode1StartCellX,
+                                      mode1StartCellY,
+                                      static_cast<int8_t>(mode1StartDir));
+    }
     updateShadowMapOverlay();
 }
 

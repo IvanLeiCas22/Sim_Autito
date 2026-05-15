@@ -3,6 +3,7 @@ C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_flood.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h \
+  C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_supervisor.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_types.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_world.h \

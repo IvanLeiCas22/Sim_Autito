@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "nav_core.h"
+#include "nav_supervisor.h"
 #include "sim_robot.h"
 #include "sim_world.h"
 
@@ -179,6 +180,10 @@ private:
     void setMode1MissionEnabled(bool enabled);
     void cancelMode1Mission(Mode1MissionDoneReason reason);
     bool mode1MissionAtStartCell(const NavMapDebugSnapshot &mapDebug) const;
+    void syncNavSupervisorConfig();
+    void updateNavSupervisorShadow(bool smartNoFrontier = false);
+    bool navSupervisorShadowMatchesMainWindow(
+        const NavSupervisorDebugSnapshot &supervisorDebug) const;
     bool advanceMode1MissionIfNeeded();
     void resetRobotPoseToWorldStart();
     void initializeNavMapFromWorldStart();
@@ -546,6 +551,16 @@ private:
     QLabel *mode1ReturnToStartActiveValueLabel = nullptr;
     QLabel *mode1AtStartCellValueLabel = nullptr;
     QLabel *mode1DoneReasonValueLabel = nullptr;
+    QLabel *supervisorStateValueLabel = nullptr;
+    QLabel *supervisorDoneReasonValueLabel = nullptr;
+    QLabel *supervisorRequiredSpecialsReachedValueLabel = nullptr;
+    QLabel *supervisorReturnRequestedValueLabel = nullptr;
+    QLabel *supervisorWaitingActionDoneValueLabel = nullptr;
+    QLabel *supervisorRequestClearPlanValueLabel = nullptr;
+    QLabel *supervisorRequestPlanReturnValueLabel = nullptr;
+    QLabel *supervisorRequestExecuteReturnValueLabel = nullptr;
+    QLabel *supervisorBlockSmartActionsValueLabel = nullptr;
+    QLabel *supervisorShadowMatchesMainWindowValueLabel = nullptr;
     QLabel *floodStatusValueLabel = nullptr;
     QLabel *floodValidValueLabel = nullptr;
     QLabel *floodGoalCellValueLabel = nullptr;
@@ -665,6 +680,8 @@ private:
     bool mode1StartCellValid = false;
     NavRouteStatus mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     bool mode1ReturnPlanLoaded = false;
+    NavSupervisorOutput supervisorShadowOutput = {};
+    bool supervisorShadowMatchesMainWindow = true;
     bool floodFrontierEvalValid = false;
     uint16_t floodFrontierCandidateCount = 0;
     uint16_t floodFrontierCandidateEdgeCount = 0;
