@@ -70,6 +70,27 @@ public:
         Error
     };
 
+    enum class Mode1MissionState {
+        Disabled,
+        SearchSpecials,
+        FoundRequiredSpecialsWaitActionDone,
+        ReturnToStartPlan,
+        ReturnToStartExecute,
+        Done,
+        Error
+    };
+
+    enum class Mode1MissionDoneReason {
+        None,
+        FoundRequiredSpecialsAndReturned,
+        NoReturnRoute,
+        ReturnRouteTooLong,
+        ReturnQueueOverflow,
+        StartCellInvalid,
+        NoFrontierBeforeRequiredSpecials,
+        Cancelled
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -121,6 +142,10 @@ private:
                                         const RobotSensors &sensors);
     void cancelDeadEndRecovery();
     bool advanceDeadEndRecoveryIfNeeded();
+    void setMode1MissionEnabled(bool enabled);
+    void cancelMode1Mission(Mode1MissionDoneReason reason);
+    bool mode1MissionAtStartCell(const NavMapDebugSnapshot &mapDebug) const;
+    bool advanceMode1MissionIfNeeded();
     void resetRobotPoseToWorldStart();
     void initializeNavMapFromWorldStart();
     void createRobotItem();
@@ -469,6 +494,24 @@ private:
     QLabel *smartFrontierRoutesExecutedCountValueLabel = nullptr;
     QLabel *smartNoFrontierCountValueLabel = nullptr;
     QLabel *smartLocalActionValueLabel = nullptr;
+    QLabel *mode1MissionEnabledValueLabel = nullptr;
+    QLabel *mode1MissionStateValueLabel = nullptr;
+    QLabel *mode1RequiredSpecialCountValueLabel = nullptr;
+    QLabel *mode1FoundSpecialCountValueLabel = nullptr;
+    QLabel *mode1RequiredSpecialsReachedValueLabel = nullptr;
+    QLabel *mode1ReturnRequestedValueLabel = nullptr;
+    QLabel *mode1WaitingActionDoneValueLabel = nullptr;
+    QLabel *mode1SearchCompleteLatchedAtCountValueLabel = nullptr;
+    QLabel *mode1PlanCancelledAfterRequiredFoundValueLabel = nullptr;
+    QLabel *mode1NavReadyForReturnValueLabel = nullptr;
+    QLabel *mode1PlanWasActiveWhenRequiredFoundValueLabel = nullptr;
+    QLabel *mode1PlanQueueCountWhenRequiredFoundValueLabel = nullptr;
+    QLabel *mode1StartCellValueLabel = nullptr;
+    QLabel *mode1ReturnRouteStatusValueLabel = nullptr;
+    QLabel *mode1ReturnPlanLoadedValueLabel = nullptr;
+    QLabel *mode1ReturnToStartActiveValueLabel = nullptr;
+    QLabel *mode1AtStartCellValueLabel = nullptr;
+    QLabel *mode1DoneReasonValueLabel = nullptr;
     QLabel *mapEnabledValueLabel = nullptr;
     QLabel *mapWidthValueLabel = nullptr;
     QLabel *mapHeightValueLabel = nullptr;
@@ -535,6 +578,24 @@ private:
     uint16_t smartFrontierRoutesExecutedCount = 0;
     uint16_t smartNoFrontierCount = 0;
     NavRecommendedAction smartLocalAction = NAV_RECOMMENDED_NONE;
+    bool mode1MissionEnabled = true;
+    Mode1MissionState mode1MissionState = Mode1MissionState::Disabled;
+    Mode1MissionDoneReason mode1MissionDoneReason = Mode1MissionDoneReason::None;
+    uint16_t mode1RequiredSpecialCount = 3;
+    uint16_t mode1FoundSpecialCount = 0;
+    bool mode1RequiredSpecialsReached = false;
+    bool mode1ReturnRequested = false;
+    bool mode1PlanCancelledAfterRequiredFound = false;
+    bool mode1NavReadyForReturn = false;
+    bool mode1PlanWasActiveWhenRequiredFound = false;
+    uint16_t mode1SearchCompleteLatchedAtCount = 0;
+    uint8_t mode1PlanQueueCountWhenRequiredFound = 0;
+    int8_t mode1StartCellX = 0;
+    int8_t mode1StartCellY = 0;
+    NavMapDirection mode1StartDir = NAV_DIR_EAST;
+    bool mode1StartCellValid = false;
+    NavRouteStatus mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
+    bool mode1ReturnPlanLoaded = false;
     DeadEndRecoveryPhase deadEndRecoveryPhase = DeadEndRecoveryPhase::None;
     NavApproachFrontDoneReason deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
     bool deadEndRecoveryPendingPivot = false;
