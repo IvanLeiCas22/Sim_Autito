@@ -35,6 +35,7 @@
 #include <QPen>
 #include <QPolygonF>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStringList>
@@ -4859,6 +4860,11 @@ void MainWindow::showControlTuningDialog()
     dialog.setWindowTitle("Control Tuning");
 
     auto *rootLayout = new QVBoxLayout(&dialog);
+    auto *scrollArea = new QScrollArea(&dialog);
+    auto *scrollContent = new QWidget(scrollArea);
+    auto *scrollLayout = new QVBoxLayout(scrollContent);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     auto *turnGroup = new QGroupBox("Turn yaw-rate PI", &dialog);
     auto *turnLayout = new QFormLayout(turnGroup);
@@ -4999,17 +5005,21 @@ void MainWindow::showControlTuningDialog()
     wallCautionLayout->addRow("kd:", wallCautionKdSpin);
     wallCautionLayout->addRow("correction_limit_pwm:", wallCautionLimitSpin);
 
-    rootLayout->addWidget(turnGroup);
-    rootLayout->addWidget(advanceYawGroup);
-    rootLayout->addWidget(wallGroup);
-    rootLayout->addWidget(diagGroup);
-    rootLayout->addWidget(wallCautionGroup);
+    scrollLayout->addWidget(turnGroup);
+    scrollLayout->addWidget(advanceYawGroup);
+    scrollLayout->addWidget(wallGroup);
+    scrollLayout->addWidget(diagGroup);
+    scrollLayout->addWidget(wallCautionGroup);
+    scrollLayout->addStretch(1);
+    scrollArea->setWidget(scrollContent);
+    rootLayout->addWidget(scrollArea, 1);
 
     auto *buttons = new QDialogButtonBox(&dialog);
     QPushButton *applyButton = buttons->addButton(QDialogButtonBox::Apply);
     QPushButton *resetButton = buttons->addButton(QDialogButtonBox::Reset);
     QPushButton *closeButton = buttons->addButton(QDialogButtonBox::Close);
     rootLayout->addWidget(buttons);
+    dialog.resize(560, 760);
 
     const auto loadCurrentValues = [&]() {
         NavTurnPidConfig turnConfig = {};

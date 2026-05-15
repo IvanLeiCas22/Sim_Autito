@@ -1,122 +1,164 @@
-# Current Simulator Tuning Checkpoint
+# Tuning actual del simulador
 
-Checkpoint actual del simulador Qt/C++ para el autito/micromouse.
+Estado documentado: modo 1 de navegacion en simulador Qt/C++ Widgets.
 
-Este documento registra una configuracion funcional validada para probar navegacion basica con regla de mano derecha, avance con yaw PD y wall assist, smooth turns, pivots, carga de laberintos JSON y tuning runtime.
+Estos valores son tuning validado en simulador. No deben asumirse como valores finales para el robot real ni para STM32 sin recalibracion con sensores, motores, bateria y `dt` reales.
 
-## Estado validado
+## Geometria usada
 
-- `ADVANCE_LINE` funciona con bases separadas, yaw PD y wall assist.
-- `SMOOTH_LEFT` y `SMOOTH_RIGHT` usan target de yaw-rate configurable, bases recalculadas automaticamente y fase `POST_YAW_SEEK_REAR_LINE`.
-- `PIVOT_LEFT`, `PIVOT_RIGHT` y `PIVOT_180` usan correccion de centro de pivot cerca del sensor trasero en el simulador.
-- La percepcion de paredes usa IR frontales, laterales y diagonales calibrados.
-- La ventana de tuning runtime se abre con `F3`.
-- La navegacion basica de prueba usa regla de mano derecha desde `MainWindow`.
+- Celda del laberinto: `200 mm`.
+- Sensores de piso:
+  - `floor_front`: `+42 mm`.
+  - `floor_rear`: `-42 mm`.
+  - Separacion: `84 mm`.
+- Centro de pivot simulado:
+  - `pivotCenterLocalXmm = -42.0`.
+  - `pivotCenterLocalYmm = 0.0`.
+- Celdas especiales:
+  - Tamano recomendado/default: `120 x 120 mm`.
+  - Se definen en JSON con `special_cells`.
+  - Si `size_mm` no esta presente, `SimWorld` usa el default de `120 mm`.
 
-## Parametros funcionales
+## Turn yaw-rate PI
 
-| Area | Parametro | Valor |
-| --- | --- | ---: |
-| Turn yaw-rate PI | Kp | 8 |
-| Turn yaw-rate PI | Ki | 0.5 |
-| Turn yaw-rate PI | Kd | 0 |
-| Turn yaw-rate PI | output_limit_pwm | 4000 |
-| Advance yaw PD | Kp | 50 |
-| Advance yaw PD | Ki | 0 |
-| Advance yaw PD | Kd | 2 |
-| Advance yaw PD | output_limit_pwm | 1200 |
-| Advance wall PD | Kp | 12 |
-| Advance wall PD | Kd | 600 |
-| Advance wall PD | correction_limit_pwm | 4000 |
-| Advance wall PD | error_deadband_mm | 0 |
-| Advance wall PD | target_left_mm | 60 |
-| Advance wall PD | target_right_mm | 60 |
-| Advance base PWM | left | 3000 |
-| Advance base PWM | right | 3370 |
-| Sim motor gains | leftMotorGain | 1.0 |
-| Sim motor gains | rightMotorGain | 0.89 |
-| Wall perception | front threshold | 140 mm |
-| Wall perception | side threshold | 100 mm |
-| Wall perception | diagonal threshold | 145 mm |
-| IR sensors | max range | 150 mm |
-| Floor sensors | front local x | +42.0 mm |
-| Floor sensors | rear local x | -42.0 mm |
-| Floor sensors | separation | 84.0 mm |
-| Special cell marker | default/recommended size | 120x120 mm |
-| Smooth turn | target yaw-rate min | 60 deg/s |
-| Smooth turn | target yaw-rate default | 120 deg/s |
-| Smooth turn | target yaw-rate max | 120 deg/s |
-| Pivot center correction | enabled | true |
-| Pivot center correction | pivotCenterLocalXmm | -42.0 mm |
-| Pivot center correction | pivotCenterLocalYmm | 0.0 mm |
+Config portable usada por smooth turns y pivots.
 
-## Tuning runtime
+| Parametro | Valor actual |
+| --- | ---: |
+| `Kp` | `8` |
+| `Ki` | `0.5` |
+| `Kd` | `0` |
+| `output_limit_pwm` | `4000` |
 
-Abrir la ventana:
+En codigo, `Ki` se guarda como `NAV_SMOOTH_YAW_RATE_KI_X100 = 50`.
 
-- Menu: `Tuning -> Control Tuning...`
-- Tecla: `F3`
+## Advance yaw PD
 
-La ventana permite modificar en runtime:
+Config portable para avance sin referencia lateral suficiente.
 
-- Turn yaw-rate PI: `Kp`, `Ki`, `Kd`, `output_limit_pwm`
-- Advance yaw PD: `Kp`, `Ki`, `Kd`, `output_limit_pwm`
-- Advance wall PD: `Kp`, `Kd`, `correction_limit_pwm`, `error_deadband_mm`, `target_left_mm`, `target_right_mm`
+| Parametro | Valor actual |
+| --- | ---: |
+| `Kp` | `50` |
+| `Ki` | `0` |
+| `Kd` | `2` |
+| `output_limit_pwm` | `1200` |
 
-Los cambios no se guardan en archivo. Al reiniciar el programa vuelven los defaults del codigo.
+El yaw hold de avance captura referencias relativas cuando cambia de pared a `YAW_ONLY`, para evitar que el robot intente volver a `0 deg` despues de perder una pared.
 
-## Pruebas manuales recomendadas
+## Advance wall PD
 
-1. Iniciar el simulador y verificar en telemetria:
-   - `smooth_target_yaw_rate_deg_s = 120 deg/s`
-   - `wall_kp = 12`
-   - `wall_kd = 600`
-   - `wall_correction_limit_pwm = 4000`
-   - `wall_error_deadband_mm = 0.0 mm`
-   - `wall_front_threshold_mm = 140.0 mm`
-   - `wall_side_threshold_mm = 100.0 mm`
-   - `wall_diag_threshold_mm = 145.0 mm`
-   - `sim_left_motor_gain = 1.000`
-   - `sim_right_motor_gain = 0.890`
-   - `sim_pivot_center_correction_enabled = true`
-   - `sim_pivot_center_local_x_mm = -42.0 mm`
-   - `sim_pivot_center_local_y_mm = 0.0 mm`
+Config portable para `ADVANCE_LINE` con paredes laterales.
 
-2. Probar `ADVANCE_LINE`:
-   - Colocar el robot con `floor_rear` sobre una linea.
-   - Usar `G` para iniciar avance.
-   - Confirmar que termina al detectar la siguiente linea con el sensor trasero.
-   - Con paredes laterales validas, confirmar que `advance_final_correction_source` pasa a `WALL_LEFT`, `WALL_RIGHT` o `WALL_CENTER`.
+| Parametro | Valor actual |
+| --- | ---: |
+| `Kp` | `12` |
+| `Kd` | `600` |
+| `correction_limit_pwm` | `4000` |
+| `error_deadband_mm` | `0` |
+| `target_left_mm` | `60` |
+| `target_right_mm` | `60` |
+| `single_side_error_scale` | `2` |
 
-3. Probar smooth turns:
-   - Usar `Q` y `E`.
-   - Confirmar que terminan preferentemente por `REAR_SENSOR_TARGET_LINE`.
-   - Confirmar que las bases smooth se recalculan segun el target.
+Reglas de error:
 
-4. Probar pivots:
-   - Colocar `floor_rear` sobre cinta.
-   - Usar `1`, `2` y `3`.
-   - Confirmar que `sim_last_motion_was_pivot_like = true` durante el giro.
-   - Confirmar que `floor_rear_global_x/y` se mantienen aproximadamente fijos durante el pivot.
+- `WALL_CENTER`: `right_distance_mm - left_distance_mm`.
+- `WALL_LEFT`: `2 * (target_left_mm - left_distance_mm)`.
+- `WALL_RIGHT`: `2 * (right_distance_mm - target_right_mm)`.
 
-5. Probar navegacion basica:
-   - Activar auto mode y simulacion.
-   - Activar navegacion basica con `B`.
-   - Verificar que decide solo en punto valido de decision o adquiere linea si no esta sobre una.
+## Diagonal guidance
 
-## Parametros sensibles
+Config portable actual en `NavDiagonalGuidanceConfig`.
 
-- `Advance wall PD Kd`: valores altos amortiguan o corrigen rapido, pero pueden introducir picos grandes si el error cambia bruscamente.
-- `Advance wall PD correction_limit_pwm`: valores altos dan autoridad al wall assist, pero pueden generar cambios de trayectoria fuertes.
-- `wall_diag_threshold_mm`: al estar en 145 mm con IR max 150 mm, la confirmacion diagonal es permisiva.
-- `smooth_target_yaw_rate_deg_s`: afecta radio de giro y bases PWM recalculadas.
-- `rightMotorGain`: si cambia el desbalance del simulador, hay que recalibrar bases de avance y smooth turns.
-- `pivotCenterLocalXmm/Ymm`: cambiarlo modifica donde queda fijo el robot durante pivots, aunque no cambia el origen visual.
-- `Special cell marker size`: con sensores de suelo separados 84 mm, 100x100 mm deja una ventana de deteccion simultanea demasiado chica; 120x120 mm aumenta la robustez y sigue dejando separacion razonable respecto de las cintas de frontera.
+| Parametro | Valor actual |
+| --- | ---: |
+| `diag_kp` | `30` |
+| `diag_kd` | `0` |
+| `diag_correction_limit_pwm` | `1000` |
+| `diag_error_scale_num` | `1` |
+| `diag_error_scale_den` | `1` |
+| `diag_error_scale` | `1/1` |
+| `diag_target_mm` | `99` |
+| `smooth_final_mode` | `SETPOINT` |
 
-## Notas
+El control diagonal usa control propio separado del wall PD lateral. En el tuning actual queda en P-only (`diag_kd = 0`).
 
-- `nav_core` sigue siendo portable y sin dependencias de Qt.
-- La regla de mano derecha sigue en `MainWindow` como capa experimental.
-- No hay mapa interno ni flood fill todavia.
-- No hay persistencia de tuning runtime todavia.
+Uso actual:
+
+- En `NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE`:
+  - prioridad a diagonales;
+  - modo configurable `HOLD_RELATIVE` o `SETPOINT`;
+  - default actual: `SETPOINT`.
+- En preview diagonal de `ADVANCE_LINE`:
+  - se activa por latch cuando el sensor frontal detecta la cinta siguiente;
+  - requiere armado previo para evitar que una marca especial central dispare el latch.
+
+## Smooth yaw carry
+
+Config portable actual en `NavSmoothYawCarryConfig`.
+
+| Parametro | Valor actual |
+| --- | ---: |
+| `smooth_yaw_carry_enabled` | `true` |
+| `smooth_yaw_carry_only_setpoint` | `true` |
+| `smooth_yaw_carry_require_diag` | `true` |
+| `smooth_yaw_carry_allow_advance_preview` | `true` |
+| `smooth_yaw_carry_min_abs_deg` | `3` |
+| `smooth_yaw_carry_max_abs_deg` | `15` |
+| `smooth_yaw_carry_offset_scale_num` | `1` |
+| `smooth_yaw_carry_offset_scale_den` | `1` |
+| `smooth_yaw_carry_offset_scale` | `1/1` |
+
+Fuentes actuales de candidato:
+
+- `NAV_YAW_CARRY_CANDIDATE_SMOOTH_FINAL_DIAG`.
+- `NAV_YAW_CARRY_CANDIDATE_ADVANCE_FRONT_DIAG_PREVIEW`.
+
+La compensacion se consume solo antes de iniciar `SMOOTH_LEFT` o `SMOOTH_RIGHT`.
+
+## Wall caution
+
+Config portable actual en `NavWallCautionConfig`.
+
+| Parametro | Valor actual del codigo |
+| --- | ---: |
+| `enabled` | `true` |
+| `timeout_ms` | `400` |
+| `delta_max_mm` | `10` |
+| `kp` | `12` |
+| `kd` | `600` |
+| `correction_limit_pwm` | `1000` |
+
+Nota de consistencia: el valor solicitado para documentacion era `correction_limit_pwm = 4000`, pero el default actual en codigo es `1000`. Este documento refleja el estado real del codigo. Si se quiere validar `4000` como tuning oficial, hay que cambiarlo desde F3 o ajustar el default portable.
+
+Estados por lado:
+
+- `NAV_WALL_CAUTION_CONFIDENCE_LOST`.
+- `NAV_WALL_CAUTION_CONFIDENCE_CONFIRMED`.
+- `NAV_WALL_CAUTION_CONFIDENCE_CAUTION`.
+
+`CAUTION` aplica solo a `ADVANCE_LINE` y usa hold relativo de la distancia lateral capturada al perder la confirmacion diagonal.
+
+## Umbrales de percepcion
+
+| Umbral | Valor |
+| --- | ---: |
+| Pared frontal | `140 mm` |
+| Pared lateral | `100 mm` |
+| Pared diagonal | `145 mm` |
+| Ventana minima de especial | `100 ms` |
+| Ventana maxima de especial | `800 ms` |
+
+## Ajuste desde UI
+
+La ventana `Control Tuning` se abre con `F3`.
+
+Permite editar:
+
+- `Turn yaw-rate PI`.
+- `Advance yaw PD`.
+- `Advance wall PD`.
+- `Diagonal guidance`.
+- `Smooth yaw carry`.
+- `Wall caution`.
+
+Los valores son runtime y no quedan persistidos automaticamente en JSON ni en firmware.
