@@ -1,4 +1,5 @@
 #include "nav_core.h"
+#include "nav_flood.h"
 #include "nav_map.h"
 #include "pid_controller.h"
 
@@ -3772,6 +3773,31 @@ void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug)
     }
 
     *debug = map_candidate_debug;
+}
+
+NavFloodStatus nav_core_flood_fill_to_cell(int8_t goal_x, int8_t goal_y)
+{
+    return nav_flood_fill_to_cell(goal_x, goal_y);
+}
+
+uint16_t nav_core_flood_get_cost(int8_t cell_x, int8_t cell_y)
+{
+    return nav_flood_get_cost(cell_x, cell_y);
+}
+
+void nav_core_flood_get_debug(NavFloodDebugSnapshot *snapshot)
+{
+    nav_flood_get_debug_snapshot(snapshot);
+}
+
+void nav_core_flood_clear(void)
+{
+    nav_flood_clear();
+}
+
+bool nav_core_flood_is_valid(void)
+{
+    return nav_flood_is_valid();
 }
 
 bool nav_core_rear_line_trusted_for_decision(void)

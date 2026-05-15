@@ -33,7 +33,7 @@
 			"CMakeLists.txt",
 			"D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/cmake/Qt6Widgets/Qt6WidgetsTargets.cmake",
 			"D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/cmake/Qt6Widgets/Qt6WidgetsConfig.cmake",
-			"build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/.qtc/package-manager/maintenance_tool_provider.cmake",
+			"build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/.qtc/package-manager/maintenance_tool_provider.cmake",
 			"D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/cmake/Qt6Core/Qt6CoreTargets.cmake",
 			"D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/cmake/Qt6Core/Qt6CoreConfig.cmake",
 			"D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/cmake/Qt6EntryPointPrivate/Qt6EntryPointPrivateTargets.cmake",
@@ -77,13 +77,13 @@
 			{
 				"command" : 4,
 				"file" : 1,
-				"line" : 52,
+				"line" : 54,
 				"parent" : 0
 			},
 			{
 				"command" : 5,
 				"file" : 1,
-				"line" : 38,
+				"line" : 40,
 				"parent" : 0
 			},
 			{
@@ -267,13 +267,13 @@
 			{
 				"command" : 11,
 				"file" : 1,
-				"line" : 33,
+				"line" : 35,
 				"parent" : 0
 			},
 			{
 				"command" : 12,
 				"file" : 1,
-				"line" : 26,
+				"line" : 28,
 				"parent" : 0
 			}
 		]
@@ -284,7 +284,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-DQT_QML_DEBUG -g -fdiagnostics-color=always"
+					"fragment" : "-O3 -DNDEBUG -fdiagnostics-color=always"
 				}
 			],
 			"defines" : 
@@ -304,6 +304,10 @@
 				{
 					"backtrace" : 13,
 					"define" : "QT_NEEDS_QMAIN"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "QT_NO_DEBUG"
 				},
 				{
 					"backtrace" : 6,
@@ -342,7 +346,7 @@
 			[
 				{
 					"backtrace" : 0,
-					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/include"
+					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include"
 				},
 				{
 					"backtrace" : 41,
@@ -396,7 +400,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-g -fdiagnostics-color=always"
+					"fragment" : "-O3 -DNDEBUG -fdiagnostics-color=always"
 				}
 			],
 			"defines" : 
@@ -416,6 +420,10 @@
 				{
 					"backtrace" : 13,
 					"define" : "QT_NEEDS_QMAIN"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "QT_NO_DEBUG"
 				},
 				{
 					"backtrace" : 6,
@@ -454,7 +462,7 @@
 			[
 				{
 					"backtrace" : 0,
-					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/include"
+					"path" : "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include"
 				},
 				{
 					"backtrace" : 41,
@@ -499,18 +507,19 @@
 			[
 				8,
 				10,
-				12
+				12,
+				14
 			]
 		}
 	],
 	"dependencies" : 
 	[
 		{
-			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
-		},
-		{
 			"backtrace" : 0,
 			"id" : "Sim_Autito_autogen::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "Sim_Autito::@6890427a1f51a3e7e1df",
@@ -533,7 +542,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-DQT_QML_DEBUG -g",
+				"fragment" : "-O3 -DNDEBUG",
 				"role" : "flags"
 			},
 			{
@@ -621,7 +630,7 @@
 			"sourceIndexes" : 
 			[
 				0,
-				15
+				17
 			]
 		},
 		{
@@ -634,7 +643,8 @@
 				6,
 				8,
 				10,
-				12
+				12,
+				14
 			]
 		},
 		{
@@ -647,14 +657,15 @@
 				9,
 				11,
 				13,
-				14
+				15,
+				16
 			]
 		},
 		{
 			"name" : "CMake Rules",
 			"sourceIndexes" : 
 			[
-				16
+				18
 			]
 		}
 	],
@@ -664,7 +675,7 @@
 			"backtrace" : 0,
 			"compileGroupIndex" : 0,
 			"isGenerated" : true,
-			"path" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/mocs_compilation.cpp",
+			"path" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/mocs_compilation.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
@@ -731,6 +742,17 @@
 		{
 			"backtrace" : 4,
 			"compileGroupIndex" : 1,
+			"path" : "nav/nav_flood.c",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 4,
+			"path" : "nav/nav_flood.h",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 1,
 			"path" : "nav/pid_controller.c",
 			"sourceGroupIndex" : 1
 		},
@@ -747,13 +769,13 @@
 		{
 			"backtrace" : 0,
 			"isGenerated" : true,
-			"path" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/timestamp",
+			"path" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/timestamp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 0,
 			"isGenerated" : true,
-			"path" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/timestamp.rule",
+			"path" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/timestamp.rule",
 			"sourceGroupIndex" : 3
 		}
 	],

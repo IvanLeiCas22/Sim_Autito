@@ -17,13 +17,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 52,
+				"line" : 56,
 				"parent" : 0
 			},
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 63,
+				"line" : 67,
 				"parent" : 0
 			}
 		]
@@ -45,7 +45,7 @@
 		{
 			"backtrace" : 2,
 			"component" : "Unspecified",
-			"scriptFile" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/.qt/deploy_Sim_Autito_55c6516401.cmake",
+			"scriptFile" : "build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/.qt/deploy_Sim_Autito_55c6516401.cmake",
 			"type" : "script"
 		}
 	],

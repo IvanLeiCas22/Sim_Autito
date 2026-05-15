@@ -76,6 +76,84 @@ constexpr TestSequenceStep kTestSequence[kTestSequenceLength] = {
     TestSequenceStep::AdvanceUntilRearBlack
 };
 
+uint8_t mapWallBit(NavMapDirection dir)
+{
+    switch (dir) {
+    case NAV_DIR_NORTH:
+        return NAV_MAP_WALL_NORTH;
+    case NAV_DIR_EAST:
+        return NAV_MAP_WALL_EAST;
+    case NAV_DIR_SOUTH:
+        return NAV_MAP_WALL_SOUTH;
+    case NAV_DIR_WEST:
+        return NAV_MAP_WALL_WEST;
+    }
+
+    return 0;
+}
+
+void neighborForDirection(int8_t cellX,
+                          int8_t cellY,
+                          NavMapDirection dir,
+                          int8_t *neighborX,
+                          int8_t *neighborY)
+{
+    *neighborX = cellX;
+    *neighborY = cellY;
+
+    switch (dir) {
+    case NAV_DIR_NORTH:
+        --(*neighborY);
+        break;
+    case NAV_DIR_EAST:
+        ++(*neighborX);
+        break;
+    case NAV_DIR_SOUTH:
+        ++(*neighborY);
+        break;
+    case NAV_DIR_WEST:
+        --(*neighborX);
+        break;
+    }
+}
+
+MainWindow::FloodFrontierEntryRelative floodEntryRelative(NavMapDirection arrivalDir,
+                                                          NavMapDirection exitDir)
+{
+    const int delta = (static_cast<int>(exitDir) - static_cast<int>(arrivalDir)) & 3;
+    switch (delta) {
+    case 0:
+        return MainWindow::FloodFrontierEntryRelative::Front;
+    case 1:
+        return MainWindow::FloodFrontierEntryRelative::Right;
+    case 2:
+        return MainWindow::FloodFrontierEntryRelative::Back;
+    case 3:
+        return MainWindow::FloodFrontierEntryRelative::Left;
+    }
+
+    return MainWindow::FloodFrontierEntryRelative::None;
+}
+
+MainWindow::FloodFrontierEntryAction floodEntryActionForRelative(
+    MainWindow::FloodFrontierEntryRelative relative)
+{
+    switch (relative) {
+    case MainWindow::FloodFrontierEntryRelative::Front:
+        return MainWindow::FloodFrontierEntryAction::AdvanceLine;
+    case MainWindow::FloodFrontierEntryRelative::Right:
+        return MainWindow::FloodFrontierEntryAction::SmoothRight;
+    case MainWindow::FloodFrontierEntryRelative::Left:
+        return MainWindow::FloodFrontierEntryAction::SmoothLeft;
+    case MainWindow::FloodFrontierEntryRelative::Back:
+        return MainWindow::FloodFrontierEntryAction::UnsupportedBackExit;
+    case MainWindow::FloodFrontierEntryRelative::None:
+        break;
+    }
+
+    return MainWindow::FloodFrontierEntryAction::None;
+}
+
 double normalizeAngleSignedDeg(double angleDeg)
 {
     double normalized = std::fmod(angleDeg + 180.0, 360.0);
@@ -755,6 +833,24 @@ QString routeStatusText(NavRouteStatus status)
     return "UNKNOWN";
 }
 
+QString floodStatusText(NavFloodStatus status)
+{
+    switch (status) {
+    case NAV_FLOOD_STATUS_IDLE:
+        return "IDLE";
+    case NAV_FLOOD_STATUS_OK:
+        return "OK";
+    case NAV_FLOOD_STATUS_GOAL_OUT_OF_BOUNDS:
+        return "GOAL_OUT_OF_BOUNDS";
+    case NAV_FLOOD_STATUS_GOAL_NOT_VISITED:
+        return "GOAL_NOT_VISITED";
+    case NAV_FLOOD_STATUS_MAP_DISABLED:
+        return "MAP_DISABLED";
+    }
+
+    return "UNKNOWN";
+}
+
 QString frontierExitRelativeText(NavFrontierExitRelative relative)
 {
     switch (relative) {
@@ -899,6 +995,84 @@ QString mode1MissionDoneReasonText(MainWindow::Mode1MissionDoneReason reason)
     return "UNKNOWN";
 }
 
+QString floodFrontierDecisionText(MainWindow::FloodFrontierDecision decision)
+{
+    switch (decision) {
+    case MainWindow::FloodFrontierDecision::None:
+        return "NONE";
+    case MainWindow::FloodFrontierDecision::TryFrontier:
+        return "TRY_FRONTIER";
+    case MainWindow::FloodFrontierDecision::FallbackSafe:
+        return "FALLBACK_SAFE";
+    }
+
+    return "UNKNOWN";
+}
+
+QString floodFrontierDecisionReasonText(MainWindow::FloodFrontierDecisionReason reason)
+{
+    switch (reason) {
+    case MainWindow::FloodFrontierDecisionReason::None:
+        return "NONE";
+    case MainWindow::FloodFrontierDecisionReason::NoFlood:
+        return "NO_FLOOD";
+    case MainWindow::FloodFrontierDecisionReason::CurrentCellUnreachable:
+        return "CURRENT_CELL_UNREACHABLE";
+    case MainWindow::FloodFrontierDecisionReason::NoFrontier:
+        return "NO_FRONTIER";
+    case MainWindow::FloodFrontierDecisionReason::FrontierBetterThanSafeReturn:
+        return "FRONTIER_BETTER_THAN_SAFE_RETURN";
+    case MainWindow::FloodFrontierDecisionReason::FrontierNotBetterThanSafeReturn:
+        return "FRONTIER_NOT_BETTER_THAN_SAFE_RETURN";
+    }
+
+    return "UNKNOWN";
+}
+
+QString floodFrontierEntryRelativeText(MainWindow::FloodFrontierEntryRelative relative)
+{
+    switch (relative) {
+    case MainWindow::FloodFrontierEntryRelative::None:
+        return "NONE";
+    case MainWindow::FloodFrontierEntryRelative::Front:
+        return "FRONT";
+    case MainWindow::FloodFrontierEntryRelative::Right:
+        return "RIGHT";
+    case MainWindow::FloodFrontierEntryRelative::Left:
+        return "LEFT";
+    case MainWindow::FloodFrontierEntryRelative::Back:
+        return "BACK";
+    }
+
+    return "UNKNOWN";
+}
+
+QString floodFrontierEntryActionText(MainWindow::FloodFrontierEntryAction action)
+{
+    switch (action) {
+    case MainWindow::FloodFrontierEntryAction::None:
+        return "NONE";
+    case MainWindow::FloodFrontierEntryAction::AdvanceLine:
+        return "ADVANCE_LINE";
+    case MainWindow::FloodFrontierEntryAction::SmoothRight:
+        return "SMOOTH_RIGHT";
+    case MainWindow::FloodFrontierEntryAction::SmoothLeft:
+        return "SMOOTH_LEFT";
+    case MainWindow::FloodFrontierEntryAction::UnsupportedBackExit:
+        return "UNSUPPORTED_BACK_EXIT";
+    }
+
+    return "UNKNOWN";
+}
+
+QString floodFrontierEntryOptionText(MainWindow::FloodFrontierEntryRelative relative,
+                                     MainWindow::FloodFrontierEntryAction action)
+{
+    return QString("%1 / %2")
+        .arg(floodFrontierEntryRelativeText(relative))
+        .arg(floodFrontierEntryActionText(action));
+}
+
 QString mapCandidateCellText(int8_t cellX, int8_t cellY, bool valid)
 {
     if (!valid) {
@@ -1038,7 +1212,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_I:
-        motorTestCommand = {3000, 3000};
+        if ((event->modifiers() & Qt::ShiftModifier) != 0) {
+            motorTestCommand = {3000, 3000};
+        } else {
+            runFloodFillToMode1Start();
+        }
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
@@ -1117,9 +1295,13 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_F:
-        resetNavigationYawReference();
-        nav_core_start_approach_front_wall_for_pivot();
-        updateNavCorePipeline();
+        if ((event->modifiers() & Qt::ShiftModifier) != 0) {
+            evaluateFloodFrontierCandidates();
+        } else {
+            resetNavigationYawReference();
+            nav_core_start_approach_front_wall_for_pivot();
+            updateNavCorePipeline();
+        }
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
@@ -1402,9 +1584,16 @@ void MainWindow::drawShadowMapOverlay()
     absentWallPen.setCapStyle(Qt::SquareCap);
     QPen specialCellPen(QColor(255, 210, 0, 230), 5.0);
     specialCellPen.setJoinStyle(Qt::MiterJoin);
+    QPen floodFrontierCellPen(QColor(30, 190, 120, 235), 4.0);
+    floodFrontierCellPen.setJoinStyle(Qt::MiterJoin);
+    QPen floodFrontierNeighborPen(QColor(255, 145, 20, 225), 3.0, Qt::DashLine);
+    floodFrontierNeighborPen.setJoinStyle(Qt::MiterJoin);
+    QPen floodFrontierArrowPen(QColor(30, 110, 240, 230), 3.0);
+    floodFrontierArrowPen.setCapStyle(Qt::RoundCap);
     QPen arrowPen(QColor(0, 70, 180, 230), 4.0);
     arrowPen.setCapStyle(Qt::RoundCap);
     const QBrush arrowBrush(QColor(0, 70, 180, 230));
+    const bool floodValid = nav_core_flood_is_valid();
 
     const auto remember = [this](QGraphicsItem *item, double zValue) {
         if (!item) {
@@ -1470,6 +1659,86 @@ void MainWindow::drawShadowMapOverlay()
                 remember(label, 3.05);
             }
 
+            if (floodValid && cell.visited) {
+                const uint16_t floodCost =
+                    nav_core_flood_get_cost(static_cast<int8_t>(x), static_cast<int8_t>(y));
+                QGraphicsTextItem *costLabel = scene->addText(
+                    floodCost == NAV_FLOOD_COST_INF ? QString::fromUtf8("\xE2\x88\x9E")
+                                                     : QString::number(floodCost));
+                QFont font = costLabel->font();
+                font.setBold(true);
+                font.setPointSizeF(std::max(7.0, cellSizeMm * 0.07));
+                costLabel->setFont(font);
+                costLabel->setDefaultTextColor(
+                    floodCost == NAV_FLOOD_COST_INF
+                        ? QColor(80, 80, 80, 170)
+                        : QColor(20, 35, 55, 210));
+                const QRectF costBounds = costLabel->boundingRect();
+                const double margin = std::max(5.0, cellSizeMm * 0.04);
+                costLabel->setPos(x0 + margin,
+                                  y0 + cellSizeMm - margin - costBounds.height());
+                remember(costLabel, 3.08);
+            }
+
+            if (floodFrontierBestFound
+                && x == floodFrontierBestCellX
+                && y == floodFrontierBestCellY) {
+                const double inset = std::max(9.0, cellSizeMm * 0.12);
+                remember(scene->addRect(x0 + inset,
+                                        y0 + inset,
+                                        cellSizeMm - inset * 2.0,
+                                        cellSizeMm - inset * 2.0,
+                                        floodFrontierCellPen,
+                                        Qt::NoBrush),
+                         3.12);
+
+                QGraphicsTextItem *frontierLabel = scene->addText("F");
+                QFont font = frontierLabel->font();
+                font.setBold(true);
+                font.setPointSizeF(std::max(8.0, cellSizeMm * 0.09));
+                frontierLabel->setFont(font);
+                frontierLabel->setDefaultTextColor(QColor(30, 120, 75, 235));
+                frontierLabel->setPos(x0 + inset + 2.0, y0 + inset);
+                remember(frontierLabel, 3.13);
+
+                if (floodFrontierEntryPreferredSupported) {
+                    QString actionText = "ADV";
+                    if (floodFrontierEntryPreferredAction
+                        == FloodFrontierEntryAction::SmoothRight) {
+                        actionText = "SR";
+                    } else if (floodFrontierEntryPreferredAction
+                               == FloodFrontierEntryAction::SmoothLeft) {
+                        actionText = "SL";
+                    } else if (floodFrontierEntryPreferredAction
+                               == FloodFrontierEntryAction::UnsupportedBackExit) {
+                        actionText = "BACK";
+                    }
+                    QGraphicsTextItem *entryLabel = scene->addText(actionText);
+                    QFont entryFont = entryLabel->font();
+                    entryFont.setBold(true);
+                    entryFont.setPointSizeF(std::max(7.0, cellSizeMm * 0.075));
+                    entryLabel->setFont(entryFont);
+                    entryLabel->setDefaultTextColor(QColor(20, 80, 160, 235));
+                    const QRectF entryBounds = entryLabel->boundingRect();
+                    entryLabel->setPos(x0 + cellSizeMm * 0.5 - entryBounds.width() * 0.5,
+                                       y0 + cellSizeMm * 0.5 - entryBounds.height() * 0.5);
+                    remember(entryLabel, 3.13);
+                }
+            }
+
+            if (floodFrontierBestFound
+                && x == floodFrontierBestNeighborCellX
+                && y == floodFrontierBestNeighborCellY) {
+                const double inset = std::max(12.0, cellSizeMm * 0.15);
+                remember(scene->addRect(x0 + inset,
+                                        y0 + inset,
+                                        cellSizeMm - inset * 2.0,
+                                        cellSizeMm - inset * 2.0,
+                                        floodFrontierNeighborPen,
+                                        QBrush(QColor(255, 180, 70, 28))),
+                         3.1);
+            }
+
             if ((cell.walls_known & NAV_MAP_WALL_NORTH) != 0) {
                 drawKnownWall(x0, y0, x1, y0, (cell.walls_present & NAV_MAP_WALL_NORTH) != 0);
             }
@@ -1483,6 +1752,16 @@ void MainWindow::drawShadowMapOverlay()
                 drawKnownWall(x0, y0, x0, y1, (cell.walls_present & NAV_MAP_WALL_WEST) != 0);
             }
         }
+    }
+
+    if (floodFrontierBestFound) {
+        const double fromX = (static_cast<double>(floodFrontierBestCellX) + 0.5) * cellSizeMm;
+        const double fromY = (static_cast<double>(floodFrontierBestCellY) + 0.5) * cellSizeMm;
+        const double toX =
+            (static_cast<double>(floodFrontierBestNeighborCellX) + 0.5) * cellSizeMm;
+        const double toY =
+            (static_cast<double>(floodFrontierBestNeighborCellY) + 0.5) * cellSizeMm;
+        remember(scene->addLine(fromX, fromY, toX, toY, floodFrontierArrowPen), 3.14);
     }
 
     if (mapDebug.cell_x < 0 || mapDebug.cell_y < 0
@@ -1943,6 +2222,41 @@ void MainWindow::createTelemetryPanel()
     mode1ReturnToStartActiveValueLabel = new QLabel(panel);
     mode1AtStartCellValueLabel = new QLabel(panel);
     mode1DoneReasonValueLabel = new QLabel(panel);
+    floodStatusValueLabel = new QLabel(panel);
+    floodValidValueLabel = new QLabel(panel);
+    floodGoalCellValueLabel = new QLabel(panel);
+    floodCurrentCellCostValueLabel = new QLabel(panel);
+    floodReachedCountValueLabel = new QLabel(panel);
+    floodExpandedCountValueLabel = new QLabel(panel);
+    floodFrontierEvalValidValueLabel = new QLabel(panel);
+    floodFrontierCandidateCountValueLabel = new QLabel(panel);
+    floodFrontierCandidateEdgeCountValueLabel = new QLabel(panel);
+    floodFrontierCandidateCellCountValueLabel = new QLabel(panel);
+    floodFrontierCandidateNeighborCellCountValueLabel = new QLabel(panel);
+    floodFrontierBestFoundValueLabel = new QLabel(panel);
+    floodFrontierBestCellValueLabel = new QLabel(panel);
+    floodFrontierBestNeighborCellValueLabel = new QLabel(panel);
+    floodFrontierBestExitDirValueLabel = new QLabel(panel);
+    floodFrontierBestCostToStartValueLabel = new QLabel(panel);
+    floodFrontierBestNeighborManhattanValueLabel = new QLabel(panel);
+    floodFrontierBestScoreValueLabel = new QLabel(panel);
+    floodFrontierSafeReturnCostValueLabel = new QLabel(panel);
+    floodFrontierBestScoreDebugValueLabel = new QLabel(panel);
+    floodFrontierScoreImprovementValueLabel = new QLabel(panel);
+    floodFrontierScoreMarginValueLabel = new QLabel(panel);
+    floodFrontierDecisionValueLabel = new QLabel(panel);
+    floodFrontierDecisionReasonValueLabel = new QLabel(panel);
+    floodFrontierEntryRequiredDirValueLabel = new QLabel(panel);
+    floodFrontierEntryRelativeFromCurrentDirValueLabel = new QLabel(panel);
+    floodFrontierEntryActionFromCurrentDirValueLabel = new QLabel(panel);
+    floodFrontierEntrySupportedFromCurrentDirValueLabel = new QLabel(panel);
+    floodFrontierEntryNorthValueLabel = new QLabel(panel);
+    floodFrontierEntryEastValueLabel = new QLabel(panel);
+    floodFrontierEntrySouthValueLabel = new QLabel(panel);
+    floodFrontierEntryWestValueLabel = new QLabel(panel);
+    floodFrontierEntryPreferredArrivalDirValueLabel = new QLabel(panel);
+    floodFrontierEntryPreferredActionValueLabel = new QLabel(panel);
+    floodFrontierEntryPreferredSupportedValueLabel = new QLabel(panel);
     mapEnabledValueLabel = new QLabel(panel);
     mapWidthValueLabel = new QLabel(panel);
     mapHeightValueLabel = new QLabel(panel);
@@ -2277,6 +2591,41 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mode1ReturnToStartActiveValueLabel);
     configureTelemetryValueLabel(mode1AtStartCellValueLabel);
     configureTelemetryValueLabel(mode1DoneReasonValueLabel);
+    configureTelemetryValueLabel(floodStatusValueLabel);
+    configureTelemetryValueLabel(floodValidValueLabel);
+    configureTelemetryValueLabel(floodGoalCellValueLabel);
+    configureTelemetryValueLabel(floodCurrentCellCostValueLabel);
+    configureTelemetryValueLabel(floodReachedCountValueLabel);
+    configureTelemetryValueLabel(floodExpandedCountValueLabel);
+    configureTelemetryValueLabel(floodFrontierEvalValidValueLabel);
+    configureTelemetryValueLabel(floodFrontierCandidateCountValueLabel);
+    configureTelemetryValueLabel(floodFrontierCandidateEdgeCountValueLabel);
+    configureTelemetryValueLabel(floodFrontierCandidateCellCountValueLabel);
+    configureTelemetryValueLabel(floodFrontierCandidateNeighborCellCountValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestFoundValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestCellValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestNeighborCellValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestExitDirValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestCostToStartValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestNeighborManhattanValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestScoreValueLabel);
+    configureTelemetryValueLabel(floodFrontierSafeReturnCostValueLabel);
+    configureTelemetryValueLabel(floodFrontierBestScoreDebugValueLabel);
+    configureTelemetryValueLabel(floodFrontierScoreImprovementValueLabel);
+    configureTelemetryValueLabel(floodFrontierScoreMarginValueLabel);
+    configureTelemetryValueLabel(floodFrontierDecisionValueLabel);
+    configureTelemetryValueLabel(floodFrontierDecisionReasonValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryRequiredDirValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryRelativeFromCurrentDirValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryActionFromCurrentDirValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntrySupportedFromCurrentDirValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryNorthValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryEastValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntrySouthValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryWestValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryPreferredArrivalDirValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryPreferredActionValueLabel);
+    configureTelemetryValueLabel(floodFrontierEntryPreferredSupportedValueLabel);
     configureTelemetryValueLabel(mapEnabledValueLabel);
     configureTelemetryValueLabel(mapWidthValueLabel);
     configureTelemetryValueLabel(mapHeightValueLabel);
@@ -2701,6 +3050,55 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("mode1_return_to_start_active:", mode1ReturnToStartActiveValueLabel);
     layout->addRow("mode1_at_start_cell:", mode1AtStartCellValueLabel);
     layout->addRow("mode1_done_reason:", mode1DoneReasonValueLabel);
+    layout->addRow("flood_status:", floodStatusValueLabel);
+    layout->addRow("flood_valid:", floodValidValueLabel);
+    layout->addRow("flood_goal_cell:", floodGoalCellValueLabel);
+    layout->addRow("flood_current_cell_cost:", floodCurrentCellCostValueLabel);
+    layout->addRow("flood_reached_count:", floodReachedCountValueLabel);
+    layout->addRow("flood_expanded_count:", floodExpandedCountValueLabel);
+    layout->addRow("flood_frontier_eval_valid:", floodFrontierEvalValidValueLabel);
+    layout->addRow("flood_frontier_candidate_count:", floodFrontierCandidateCountValueLabel);
+    layout->addRow("flood_fr_candidate_edge_count:",
+                   floodFrontierCandidateEdgeCountValueLabel);
+    layout->addRow("flood_fr_candidate_cell_count:",
+                   floodFrontierCandidateCellCountValueLabel);
+    layout->addRow("flood_fr_candidate_neighbor_cell_count:",
+                   floodFrontierCandidateNeighborCellCountValueLabel);
+    layout->addRow("flood_frontier_best_found:", floodFrontierBestFoundValueLabel);
+    layout->addRow("flood_frontier_best_cell:", floodFrontierBestCellValueLabel);
+    layout->addRow("flood_frontier_best_neighbor_cell:",
+                   floodFrontierBestNeighborCellValueLabel);
+    layout->addRow("flood_frontier_best_exit_dir:", floodFrontierBestExitDirValueLabel);
+    layout->addRow("flood_frontier_best_cost_to_start:",
+                   floodFrontierBestCostToStartValueLabel);
+    layout->addRow("flood_frontier_best_neighbor_manhattan:",
+                   floodFrontierBestNeighborManhattanValueLabel);
+    layout->addRow("flood_frontier_best_score:", floodFrontierBestScoreValueLabel);
+    layout->addRow("flood_fr_safe_return_cost:", floodFrontierSafeReturnCostValueLabel);
+    layout->addRow("flood_fr_best_score:", floodFrontierBestScoreDebugValueLabel);
+    layout->addRow("flood_fr_score_improvement:",
+                   floodFrontierScoreImprovementValueLabel);
+    layout->addRow("flood_fr_score_margin:", floodFrontierScoreMarginValueLabel);
+    layout->addRow("flood_fr_decision:", floodFrontierDecisionValueLabel);
+    layout->addRow("flood_fr_decision_reason:", floodFrontierDecisionReasonValueLabel);
+    layout->addRow("flood_fr_entry_required_dir:",
+                   floodFrontierEntryRequiredDirValueLabel);
+    layout->addRow("flood_fr_entry_relative_from_current_dir:",
+                   floodFrontierEntryRelativeFromCurrentDirValueLabel);
+    layout->addRow("flood_fr_entry_action_from_current_dir:",
+                   floodFrontierEntryActionFromCurrentDirValueLabel);
+    layout->addRow("flood_fr_entry_supported_from_current_dir:",
+                   floodFrontierEntrySupportedFromCurrentDirValueLabel);
+    layout->addRow("flood_fr_entry_if_arrive_north:", floodFrontierEntryNorthValueLabel);
+    layout->addRow("flood_fr_entry_if_arrive_east:", floodFrontierEntryEastValueLabel);
+    layout->addRow("flood_fr_entry_if_arrive_south:", floodFrontierEntrySouthValueLabel);
+    layout->addRow("flood_fr_entry_if_arrive_west:", floodFrontierEntryWestValueLabel);
+    layout->addRow("flood_fr_entry_preferred_arrival_dir:",
+                   floodFrontierEntryPreferredArrivalDirValueLabel);
+    layout->addRow("flood_fr_entry_preferred_action:",
+                   floodFrontierEntryPreferredActionValueLabel);
+    layout->addRow("flood_fr_entry_preferred_supported:",
+                   floodFrontierEntryPreferredSupportedValueLabel);
 
     layout->addRow(mapTitle);
     layout->addRow("map_enabled:", mapEnabledValueLabel);
@@ -2819,6 +3217,29 @@ void MainWindow::createTelemetryPanel()
                  mode1PlanQueueCountWhenRequiredFoundValueLabel);
     addPinnedRow("mode1_return_route_status", mode1ReturnRouteStatusValueLabel);
     addPinnedRow("mode1_done_reason", mode1DoneReasonValueLabel);
+    addPinnedRow("flood_status", floodStatusValueLabel);
+    addPinnedRow("flood_current_cell_cost", floodCurrentCellCostValueLabel);
+    addPinnedRow("flood_fr_candidate_edge_count", floodFrontierCandidateEdgeCountValueLabel);
+    addPinnedRow("flood_fr_candidate_cell_count", floodFrontierCandidateCellCountValueLabel);
+    addPinnedRow("flood_fr_candidate_neighbor_cell_count",
+                 floodFrontierCandidateNeighborCellCountValueLabel);
+    addPinnedRow("flood_frontier_best_found", floodFrontierBestFoundValueLabel);
+    addPinnedRow("flood_frontier_best_cell", floodFrontierBestCellValueLabel);
+    addPinnedRow("flood_frontier_best_neighbor_cell",
+                 floodFrontierBestNeighborCellValueLabel);
+    addPinnedRow("flood_frontier_best_score", floodFrontierBestScoreValueLabel);
+    addPinnedRow("flood_fr_safe_return_cost", floodFrontierSafeReturnCostValueLabel);
+    addPinnedRow("flood_fr_best_score", floodFrontierBestScoreDebugValueLabel);
+    addPinnedRow("flood_fr_score_improvement", floodFrontierScoreImprovementValueLabel);
+    addPinnedRow("flood_fr_decision", floodFrontierDecisionValueLabel);
+    addPinnedRow("flood_fr_decision_reason", floodFrontierDecisionReasonValueLabel);
+    addPinnedRow("flood_fr_entry_required_dir", floodFrontierEntryRequiredDirValueLabel);
+    addPinnedRow("flood_fr_entry_preferred_arrival_dir",
+                 floodFrontierEntryPreferredArrivalDirValueLabel);
+    addPinnedRow("flood_fr_entry_preferred_action",
+                 floodFrontierEntryPreferredActionValueLabel);
+    addPinnedRow("flood_fr_entry_preferred_supported",
+                 floodFrontierEntryPreferredSupportedValueLabel);
     tree->insertTopLevelItem(0, pinnedTitle);
 
     dock->setWidget(tree);
@@ -4172,6 +4593,164 @@ void MainWindow::updateTelemetryPanel()
         mode1DoneReasonValueLabel->setText(
             mode1MissionDoneReasonText(mode1MissionDoneReason));
     }
+    NavFloodDebugSnapshot floodDebug = {};
+    nav_core_flood_get_debug(&floodDebug);
+    if (floodStatusValueLabel) {
+        floodStatusValueLabel->setText(floodStatusText(floodDebug.status));
+    }
+    if (floodValidValueLabel) {
+        floodValidValueLabel->setText(floodDebug.valid ? "true" : "false");
+    }
+    if (floodGoalCellValueLabel) {
+        floodGoalCellValueLabel->setText(
+            QString("(%1,%2)").arg(floodDebug.goal_x).arg(floodDebug.goal_y));
+    }
+    if (floodCurrentCellCostValueLabel) {
+        floodCurrentCellCostValueLabel->setText(
+            floodDebug.current_cell_cost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(floodDebug.current_cell_cost));
+    }
+    if (floodReachedCountValueLabel) {
+        floodReachedCountValueLabel->setText(QString::number(floodDebug.reached_count));
+    }
+    if (floodExpandedCountValueLabel) {
+        floodExpandedCountValueLabel->setText(QString::number(floodDebug.expanded_count));
+    }
+    if (floodFrontierEvalValidValueLabel) {
+        floodFrontierEvalValidValueLabel->setText(floodFrontierEvalValid ? "true" : "false");
+    }
+    if (floodFrontierCandidateCountValueLabel) {
+        floodFrontierCandidateCountValueLabel->setText(
+            QString::number(floodFrontierCandidateCount));
+    }
+    if (floodFrontierCandidateEdgeCountValueLabel) {
+        floodFrontierCandidateEdgeCountValueLabel->setText(
+            QString::number(floodFrontierCandidateEdgeCount));
+    }
+    if (floodFrontierCandidateCellCountValueLabel) {
+        floodFrontierCandidateCellCountValueLabel->setText(
+            QString::number(floodFrontierCandidateCellCount));
+    }
+    if (floodFrontierCandidateNeighborCellCountValueLabel) {
+        floodFrontierCandidateNeighborCellCountValueLabel->setText(
+            QString::number(floodFrontierCandidateNeighborCellCount));
+    }
+    if (floodFrontierBestFoundValueLabel) {
+        floodFrontierBestFoundValueLabel->setText(floodFrontierBestFound ? "true" : "false");
+    }
+    if (floodFrontierBestCellValueLabel) {
+        floodFrontierBestCellValueLabel->setText(
+            floodFrontierBestFound
+                ? QString("(%1,%2)")
+                      .arg(floodFrontierBestCellX)
+                      .arg(floodFrontierBestCellY)
+                : "none");
+    }
+    if (floodFrontierBestNeighborCellValueLabel) {
+        floodFrontierBestNeighborCellValueLabel->setText(
+            floodFrontierBestFound
+                ? QString("(%1,%2)")
+                      .arg(floodFrontierBestNeighborCellX)
+                      .arg(floodFrontierBestNeighborCellY)
+                : "none");
+    }
+    if (floodFrontierBestExitDirValueLabel) {
+        floodFrontierBestExitDirValueLabel->setText(
+            floodFrontierBestFound ? mapDirectionText(floodFrontierBestExitDir) : "NONE");
+    }
+    if (floodFrontierBestCostToStartValueLabel) {
+        floodFrontierBestCostToStartValueLabel->setText(
+            floodFrontierBestFound
+                ? QString::number(floodFrontierBestCostToStart)
+                : "INF");
+    }
+    if (floodFrontierBestNeighborManhattanValueLabel) {
+        floodFrontierBestNeighborManhattanValueLabel->setText(
+            floodFrontierBestFound
+                ? QString::number(floodFrontierBestNeighborManhattan)
+                : "0");
+    }
+    if (floodFrontierBestScoreValueLabel) {
+        floodFrontierBestScoreValueLabel->setText(
+            floodFrontierBestFound ? QString::number(floodFrontierBestScore) : "INF");
+    }
+    if (floodFrontierSafeReturnCostValueLabel) {
+        floodFrontierSafeReturnCostValueLabel->setText(
+            floodFrontierSafeReturnCost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(floodFrontierSafeReturnCost));
+    }
+    if (floodFrontierBestScoreDebugValueLabel) {
+        floodFrontierBestScoreDebugValueLabel->setText(
+            floodFrontierBestFound ? QString::number(floodFrontierBestScore) : "INF");
+    }
+    if (floodFrontierScoreImprovementValueLabel) {
+        floodFrontierScoreImprovementValueLabel->setText(
+            QString::number(floodFrontierScoreImprovement));
+    }
+    if (floodFrontierScoreMarginValueLabel) {
+        floodFrontierScoreMarginValueLabel->setText(
+            QString::number(floodFrontierScoreMargin));
+    }
+    if (floodFrontierDecisionValueLabel) {
+        floodFrontierDecisionValueLabel->setText(
+            floodFrontierDecisionText(floodFrontierDecision));
+    }
+    if (floodFrontierDecisionReasonValueLabel) {
+        floodFrontierDecisionReasonValueLabel->setText(
+            floodFrontierDecisionReasonText(floodFrontierDecisionReason));
+    }
+    if (floodFrontierEntryRequiredDirValueLabel) {
+        floodFrontierEntryRequiredDirValueLabel->setText(
+            floodFrontierBestFound ? mapDirectionText(floodFrontierEntryRequiredDir) : "NONE");
+    }
+    if (floodFrontierEntryRelativeFromCurrentDirValueLabel) {
+        floodFrontierEntryRelativeFromCurrentDirValueLabel->setText(
+            floodFrontierEntryRelativeText(floodFrontierEntryRelativeFromCurrentDir));
+    }
+    if (floodFrontierEntryActionFromCurrentDirValueLabel) {
+        floodFrontierEntryActionFromCurrentDirValueLabel->setText(
+            floodFrontierEntryActionText(floodFrontierEntryActionFromCurrentDir));
+    }
+    if (floodFrontierEntrySupportedFromCurrentDirValueLabel) {
+        floodFrontierEntrySupportedFromCurrentDirValueLabel->setText(
+            floodFrontierEntrySupportedFromCurrentDir ? "true" : "false");
+    }
+    if (floodFrontierEntryNorthValueLabel) {
+        floodFrontierEntryNorthValueLabel->setText(floodFrontierEntryOptionText(
+            floodFrontierEntryRelativeByArrivalDir[NAV_DIR_NORTH],
+            floodFrontierEntryActionByArrivalDir[NAV_DIR_NORTH]));
+    }
+    if (floodFrontierEntryEastValueLabel) {
+        floodFrontierEntryEastValueLabel->setText(floodFrontierEntryOptionText(
+            floodFrontierEntryRelativeByArrivalDir[NAV_DIR_EAST],
+            floodFrontierEntryActionByArrivalDir[NAV_DIR_EAST]));
+    }
+    if (floodFrontierEntrySouthValueLabel) {
+        floodFrontierEntrySouthValueLabel->setText(floodFrontierEntryOptionText(
+            floodFrontierEntryRelativeByArrivalDir[NAV_DIR_SOUTH],
+            floodFrontierEntryActionByArrivalDir[NAV_DIR_SOUTH]));
+    }
+    if (floodFrontierEntryWestValueLabel) {
+        floodFrontierEntryWestValueLabel->setText(floodFrontierEntryOptionText(
+            floodFrontierEntryRelativeByArrivalDir[NAV_DIR_WEST],
+            floodFrontierEntryActionByArrivalDir[NAV_DIR_WEST]));
+    }
+    if (floodFrontierEntryPreferredArrivalDirValueLabel) {
+        floodFrontierEntryPreferredArrivalDirValueLabel->setText(
+            floodFrontierEntryPreferredSupported
+                ? mapDirectionText(floodFrontierEntryPreferredArrivalDir)
+                : "NONE");
+    }
+    if (floodFrontierEntryPreferredActionValueLabel) {
+        floodFrontierEntryPreferredActionValueLabel->setText(
+            floodFrontierEntryActionText(floodFrontierEntryPreferredAction));
+    }
+    if (floodFrontierEntryPreferredSupportedValueLabel) {
+        floodFrontierEntryPreferredSupportedValueLabel->setText(
+            floodFrontierEntryPreferredSupported ? "true" : "false");
+    }
     if (mapOverlayEnabledValueLabel) {
         mapOverlayEnabledValueLabel->setText(shadowMapOverlayEnabled ? "true" : "false");
     }
@@ -5294,6 +5873,224 @@ void MainWindow::planRouteToNearestFrontier()
     updateTelemetryPanel();
 }
 
+void MainWindow::runFloodFillToMode1Start()
+{
+    clearFloodFrontierEvaluation();
+
+    if (!mode1StartCellValid) {
+        nav_core_flood_fill_to_cell(-1, -1);
+        updateTelemetryPanel();
+        return;
+    }
+
+    nav_core_flood_fill_to_cell(mode1StartCellX, mode1StartCellY);
+    updateTelemetryPanel();
+}
+
+void MainWindow::clearFloodFrontierEvaluation()
+{
+    floodFrontierEvalValid = false;
+    floodFrontierCandidateCount = 0;
+    floodFrontierCandidateEdgeCount = 0;
+    floodFrontierCandidateCellCount = 0;
+    floodFrontierCandidateNeighborCellCount = 0;
+    floodFrontierBestFound = false;
+    floodFrontierBestCellX = -1;
+    floodFrontierBestCellY = -1;
+    floodFrontierBestNeighborCellX = -1;
+    floodFrontierBestNeighborCellY = -1;
+    floodFrontierBestExitDir = NAV_DIR_NORTH;
+    floodFrontierBestCostToStart = NAV_FLOOD_COST_INF;
+    floodFrontierBestNeighborManhattan = 0;
+    floodFrontierBestScore = NAV_FLOOD_COST_INF;
+    floodFrontierSafeReturnCost = NAV_FLOOD_COST_INF;
+    floodFrontierScoreImprovement = 0;
+    floodFrontierDecision = FloodFrontierDecision::None;
+    floodFrontierDecisionReason = FloodFrontierDecisionReason::None;
+    floodFrontierEntryRequiredDir = NAV_DIR_NORTH;
+    floodFrontierEntryRelativeFromCurrentDir = FloodFrontierEntryRelative::None;
+    floodFrontierEntryActionFromCurrentDir = FloodFrontierEntryAction::None;
+    floodFrontierEntrySupportedFromCurrentDir = false;
+    for (int i = 0; i < 4; ++i) {
+        floodFrontierEntryRelativeByArrivalDir[i] = FloodFrontierEntryRelative::None;
+        floodFrontierEntryActionByArrivalDir[i] = FloodFrontierEntryAction::None;
+    }
+    floodFrontierEntryPreferredArrivalDir = NAV_DIR_NORTH;
+    floodFrontierEntryPreferredAction = FloodFrontierEntryAction::None;
+    floodFrontierEntryPreferredSupported = false;
+}
+
+void MainWindow::evaluateFloodFrontierCandidates()
+{
+    clearFloodFrontierEvaluation();
+
+    if (!nav_core_flood_is_valid() || !mode1StartCellValid) {
+        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
+        floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFlood;
+        return;
+    }
+
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
+    if (!mapDebug.enabled) {
+        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
+        floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFlood;
+        return;
+    }
+
+    floodFrontierEvalValid = true;
+    floodFrontierSafeReturnCost = nav_core_flood_get_cost(mapDebug.cell_x, mapDebug.cell_y);
+    const int cols = std::min<int>(world.cols(), mapDebug.width);
+    const int rows = std::min<int>(world.rows(), mapDebug.height);
+    bool countedNeighborCells[NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT] = {};
+
+    for (int y = 0; y < rows; ++y) {
+        for (int x = 0; x < cols; ++x) {
+            NavMapCell cell = {};
+            if (!nav_core_get_map_cell(static_cast<int8_t>(x),
+                                       static_cast<int8_t>(y),
+                                       &cell)
+                || !cell.visited) {
+                continue;
+            }
+
+            const uint16_t floodCost =
+                nav_core_flood_get_cost(static_cast<int8_t>(x), static_cast<int8_t>(y));
+            if (floodCost == NAV_FLOOD_COST_INF) {
+                continue;
+            }
+
+            bool cellHasCandidateEdge = false;
+            for (uint8_t dirValue = 0; dirValue < 4u; ++dirValue) {
+                const NavMapDirection exitDir = static_cast<NavMapDirection>(dirValue);
+                const uint8_t wallBit = mapWallBit(exitDir);
+                if ((cell.walls_known & wallBit) == 0
+                    || (cell.walls_present & wallBit) != 0) {
+                    continue;
+                }
+
+                int8_t neighborX = 0;
+                int8_t neighborY = 0;
+                neighborForDirection(static_cast<int8_t>(x),
+                                     static_cast<int8_t>(y),
+                                     exitDir,
+                                     &neighborX,
+                                     &neighborY);
+                if (neighborX < 0 || neighborY < 0
+                    || neighborX >= cols || neighborY >= rows) {
+                    continue;
+                }
+
+                NavMapCell neighbor = {};
+                if (!nav_core_get_map_cell(neighborX, neighborY, &neighbor)
+                    || neighbor.visited) {
+                    continue;
+                }
+
+                const uint16_t neighborManhattan = static_cast<uint16_t>(
+                    std::abs(static_cast<int>(neighborX) - static_cast<int>(mode1StartCellX))
+                    + std::abs(static_cast<int>(neighborY) - static_cast<int>(mode1StartCellY)));
+                const uint32_t score =
+                    static_cast<uint32_t>(floodCost) + 1u + neighborManhattan;
+                ++floodFrontierCandidateCount;
+                ++floodFrontierCandidateEdgeCount;
+                if (!cellHasCandidateEdge) {
+                    ++floodFrontierCandidateCellCount;
+                    cellHasCandidateEdge = true;
+                }
+                const int neighborIndex = static_cast<int>(neighborY) * NAV_MAP_MAX_WIDTH
+                                          + static_cast<int>(neighborX);
+                if (neighborIndex >= 0
+                    && neighborIndex < static_cast<int>(NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT)
+                    && !countedNeighborCells[neighborIndex]) {
+                    countedNeighborCells[neighborIndex] = true;
+                    ++floodFrontierCandidateNeighborCellCount;
+                }
+
+                if (!floodFrontierBestFound
+                    || score < static_cast<uint32_t>(floodFrontierBestScore)) {
+                    floodFrontierBestFound = true;
+                    floodFrontierBestCellX = static_cast<int8_t>(x);
+                    floodFrontierBestCellY = static_cast<int8_t>(y);
+                    floodFrontierBestNeighborCellX = neighborX;
+                    floodFrontierBestNeighborCellY = neighborY;
+                    floodFrontierBestExitDir = exitDir;
+                    floodFrontierBestCostToStart = floodCost;
+                    floodFrontierBestNeighborManhattan = neighborManhattan;
+                    floodFrontierBestScore =
+                        score > NAV_FLOOD_COST_INF
+                            ? NAV_FLOOD_COST_INF
+                            : static_cast<uint16_t>(score);
+                }
+            }
+        }
+    }
+
+    if (floodFrontierSafeReturnCost == NAV_FLOOD_COST_INF) {
+        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
+        floodFrontierDecisionReason = FloodFrontierDecisionReason::CurrentCellUnreachable;
+        return;
+    }
+
+    if (!floodFrontierBestFound) {
+        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
+        floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFrontier;
+        return;
+    }
+
+    floodFrontierEntryRequiredDir = floodFrontierBestExitDir;
+    floodFrontierEntryRelativeFromCurrentDir =
+        floodEntryRelative(mapDebug.dir, floodFrontierEntryRequiredDir);
+    floodFrontierEntryActionFromCurrentDir =
+        floodEntryActionForRelative(floodFrontierEntryRelativeFromCurrentDir);
+    floodFrontierEntrySupportedFromCurrentDir =
+        floodFrontierEntryActionFromCurrentDir == FloodFrontierEntryAction::AdvanceLine
+        || floodFrontierEntryActionFromCurrentDir == FloodFrontierEntryAction::SmoothRight
+        || floodFrontierEntryActionFromCurrentDir == FloodFrontierEntryAction::SmoothLeft;
+
+    for (uint8_t dirValue = 0; dirValue < 4u; ++dirValue) {
+        const NavMapDirection arrivalDir = static_cast<NavMapDirection>(dirValue);
+        floodFrontierEntryRelativeByArrivalDir[dirValue] =
+            floodEntryRelative(arrivalDir, floodFrontierEntryRequiredDir);
+        floodFrontierEntryActionByArrivalDir[dirValue] =
+            floodEntryActionForRelative(floodFrontierEntryRelativeByArrivalDir[dirValue]);
+    }
+
+    const FloodFrontierEntryAction preferredActions[] = {
+        FloodFrontierEntryAction::AdvanceLine,
+        FloodFrontierEntryAction::SmoothRight,
+        FloodFrontierEntryAction::SmoothLeft
+    };
+    for (FloodFrontierEntryAction preferredAction : preferredActions) {
+        for (uint8_t dirValue = 0; dirValue < 4u; ++dirValue) {
+            if (floodFrontierEntryActionByArrivalDir[dirValue] == preferredAction) {
+                floodFrontierEntryPreferredArrivalDir =
+                    static_cast<NavMapDirection>(dirValue);
+                floodFrontierEntryPreferredAction = preferredAction;
+                floodFrontierEntryPreferredSupported = true;
+                break;
+            }
+        }
+        if (floodFrontierEntryPreferredSupported) {
+            break;
+        }
+    }
+
+    floodFrontierScoreImprovement =
+        static_cast<int32_t>(floodFrontierSafeReturnCost)
+        - static_cast<int32_t>(floodFrontierBestScore);
+    if (static_cast<uint32_t>(floodFrontierBestScore) + floodFrontierScoreMargin
+        < floodFrontierSafeReturnCost) {
+        floodFrontierDecision = FloodFrontierDecision::TryFrontier;
+        floodFrontierDecisionReason =
+            FloodFrontierDecisionReason::FrontierBetterThanSafeReturn;
+    } else {
+        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
+        floodFrontierDecisionReason =
+            FloodFrontierDecisionReason::FrontierNotBetterThanSafeReturn;
+    }
+}
+
 void MainWindow::showControlTuningDialog()
 {
     QDialog dialog(this);
@@ -5638,6 +6435,8 @@ void MainWindow::showControlsHelp()
         "- J: Execute route currently loaded by K, only when rear sensor is on line\n"
         "- K: Dry-run route plan to target cell\n"
         "- T: Dry-run route plan to nearest exploration frontier\n"
+        "- I: Compute flood fill costs to mode 1 start cell\n"
+        "- Shift+F: Evaluate flood frontier candidates for return debug\n"
         "- L: Test CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE -> PIVOT_180 sequence\n"
         "- B: Toggle basic autonomous navigation; dead-ends use approach-front then PIVOT_180\n"
         "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED / SMART_RECOGNITION\n"
@@ -5645,7 +6444,7 @@ void MainWindow::showControlsHelp()
         "- Y: Toggle shadow logical map overlay\n"
         "\n"
         "Motor test:\n"
-        "- I: test PWM {3000, 3000} avanzar\n"
+        "- Shift+I: test PWM {3000, 3000} avanzar\n"
         "\n"
         "Smooth tuning:\n"
         "- +: increase smooth target yaw rate by 5 deg/s\n"

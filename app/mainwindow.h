@@ -91,6 +91,37 @@ public:
         Cancelled
     };
 
+    enum class FloodFrontierDecision {
+        None,
+        TryFrontier,
+        FallbackSafe
+    };
+
+    enum class FloodFrontierDecisionReason {
+        None,
+        NoFlood,
+        CurrentCellUnreachable,
+        NoFrontier,
+        FrontierBetterThanSafeReturn,
+        FrontierNotBetterThanSafeReturn
+    };
+
+    enum class FloodFrontierEntryRelative {
+        None,
+        Front,
+        Right,
+        Left,
+        Back
+    };
+
+    enum class FloodFrontierEntryAction {
+        None,
+        AdvanceLine,
+        SmoothRight,
+        SmoothLeft,
+        UnsupportedBackExit
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -119,6 +150,9 @@ private:
     void promptSmoothTargetYawRate();
     void promptRoutePlanToCell();
     void planRouteToNearestFrontier();
+    void runFloodFillToMode1Start();
+    void clearFloodFrontierEvaluation();
+    void evaluateFloodFrontierCandidates();
     void toggleTestSequence();
     void cancelTestSequence();
     void startCurrentTestSequenceStep();
@@ -512,6 +546,41 @@ private:
     QLabel *mode1ReturnToStartActiveValueLabel = nullptr;
     QLabel *mode1AtStartCellValueLabel = nullptr;
     QLabel *mode1DoneReasonValueLabel = nullptr;
+    QLabel *floodStatusValueLabel = nullptr;
+    QLabel *floodValidValueLabel = nullptr;
+    QLabel *floodGoalCellValueLabel = nullptr;
+    QLabel *floodCurrentCellCostValueLabel = nullptr;
+    QLabel *floodReachedCountValueLabel = nullptr;
+    QLabel *floodExpandedCountValueLabel = nullptr;
+    QLabel *floodFrontierEvalValidValueLabel = nullptr;
+    QLabel *floodFrontierCandidateCountValueLabel = nullptr;
+    QLabel *floodFrontierCandidateEdgeCountValueLabel = nullptr;
+    QLabel *floodFrontierCandidateCellCountValueLabel = nullptr;
+    QLabel *floodFrontierCandidateNeighborCellCountValueLabel = nullptr;
+    QLabel *floodFrontierBestFoundValueLabel = nullptr;
+    QLabel *floodFrontierBestCellValueLabel = nullptr;
+    QLabel *floodFrontierBestNeighborCellValueLabel = nullptr;
+    QLabel *floodFrontierBestExitDirValueLabel = nullptr;
+    QLabel *floodFrontierBestCostToStartValueLabel = nullptr;
+    QLabel *floodFrontierBestNeighborManhattanValueLabel = nullptr;
+    QLabel *floodFrontierBestScoreValueLabel = nullptr;
+    QLabel *floodFrontierSafeReturnCostValueLabel = nullptr;
+    QLabel *floodFrontierBestScoreDebugValueLabel = nullptr;
+    QLabel *floodFrontierScoreImprovementValueLabel = nullptr;
+    QLabel *floodFrontierScoreMarginValueLabel = nullptr;
+    QLabel *floodFrontierDecisionValueLabel = nullptr;
+    QLabel *floodFrontierDecisionReasonValueLabel = nullptr;
+    QLabel *floodFrontierEntryRequiredDirValueLabel = nullptr;
+    QLabel *floodFrontierEntryRelativeFromCurrentDirValueLabel = nullptr;
+    QLabel *floodFrontierEntryActionFromCurrentDirValueLabel = nullptr;
+    QLabel *floodFrontierEntrySupportedFromCurrentDirValueLabel = nullptr;
+    QLabel *floodFrontierEntryNorthValueLabel = nullptr;
+    QLabel *floodFrontierEntryEastValueLabel = nullptr;
+    QLabel *floodFrontierEntrySouthValueLabel = nullptr;
+    QLabel *floodFrontierEntryWestValueLabel = nullptr;
+    QLabel *floodFrontierEntryPreferredArrivalDirValueLabel = nullptr;
+    QLabel *floodFrontierEntryPreferredActionValueLabel = nullptr;
+    QLabel *floodFrontierEntryPreferredSupportedValueLabel = nullptr;
     QLabel *mapEnabledValueLabel = nullptr;
     QLabel *mapWidthValueLabel = nullptr;
     QLabel *mapHeightValueLabel = nullptr;
@@ -596,6 +665,48 @@ private:
     bool mode1StartCellValid = false;
     NavRouteStatus mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     bool mode1ReturnPlanLoaded = false;
+    bool floodFrontierEvalValid = false;
+    uint16_t floodFrontierCandidateCount = 0;
+    uint16_t floodFrontierCandidateEdgeCount = 0;
+    uint16_t floodFrontierCandidateCellCount = 0;
+    uint16_t floodFrontierCandidateNeighborCellCount = 0;
+    bool floodFrontierBestFound = false;
+    int8_t floodFrontierBestCellX = -1;
+    int8_t floodFrontierBestCellY = -1;
+    int8_t floodFrontierBestNeighborCellX = -1;
+    int8_t floodFrontierBestNeighborCellY = -1;
+    NavMapDirection floodFrontierBestExitDir = NAV_DIR_NORTH;
+    uint16_t floodFrontierBestCostToStart = NAV_FLOOD_COST_INF;
+    uint16_t floodFrontierBestNeighborManhattan = 0;
+    uint16_t floodFrontierBestScore = NAV_FLOOD_COST_INF;
+    uint16_t floodFrontierSafeReturnCost = NAV_FLOOD_COST_INF;
+    int32_t floodFrontierScoreImprovement = 0;
+    uint16_t floodFrontierScoreMargin = 0;
+    FloodFrontierDecision floodFrontierDecision = FloodFrontierDecision::None;
+    FloodFrontierDecisionReason floodFrontierDecisionReason =
+        FloodFrontierDecisionReason::None;
+    NavMapDirection floodFrontierEntryRequiredDir = NAV_DIR_NORTH;
+    FloodFrontierEntryRelative floodFrontierEntryRelativeFromCurrentDir =
+        FloodFrontierEntryRelative::None;
+    FloodFrontierEntryAction floodFrontierEntryActionFromCurrentDir =
+        FloodFrontierEntryAction::None;
+    bool floodFrontierEntrySupportedFromCurrentDir = false;
+    FloodFrontierEntryRelative floodFrontierEntryRelativeByArrivalDir[4] = {
+        FloodFrontierEntryRelative::None,
+        FloodFrontierEntryRelative::None,
+        FloodFrontierEntryRelative::None,
+        FloodFrontierEntryRelative::None
+    };
+    FloodFrontierEntryAction floodFrontierEntryActionByArrivalDir[4] = {
+        FloodFrontierEntryAction::None,
+        FloodFrontierEntryAction::None,
+        FloodFrontierEntryAction::None,
+        FloodFrontierEntryAction::None
+    };
+    NavMapDirection floodFrontierEntryPreferredArrivalDir = NAV_DIR_NORTH;
+    FloodFrontierEntryAction floodFrontierEntryPreferredAction =
+        FloodFrontierEntryAction::None;
+    bool floodFrontierEntryPreferredSupported = false;
     DeadEndRecoveryPhase deadEndRecoveryPhase = DeadEndRecoveryPhase::None;
     NavApproachFrontDoneReason deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
     bool deadEndRecoveryPendingPivot = false;

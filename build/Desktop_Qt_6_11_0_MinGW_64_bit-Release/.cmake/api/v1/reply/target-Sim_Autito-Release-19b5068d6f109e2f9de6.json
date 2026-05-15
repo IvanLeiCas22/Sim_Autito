@@ -77,13 +77,13 @@
 			{
 				"command" : 4,
 				"file" : 1,
-				"line" : 50,
+				"line" : 56,
 				"parent" : 0
 			},
 			{
 				"command" : 5,
 				"file" : 1,
-				"line" : 36,
+				"line" : 42,
 				"parent" : 0
 			},
 			{
@@ -267,13 +267,13 @@
 			{
 				"command" : 11,
 				"file" : 1,
-				"line" : 31,
+				"line" : 37,
 				"parent" : 0
 			},
 			{
 				"command" : 12,
 				"file" : 1,
-				"line" : 24,
+				"line" : 30,
 				"parent" : 0
 			}
 		]
@@ -506,18 +506,21 @@
 			"sourceIndexes" : 
 			[
 				8,
-				10
+				10,
+				12,
+				14,
+				16
 			]
 		}
 	],
 	"dependencies" : 
 	[
 		{
-			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
-		},
-		{
 			"backtrace" : 0,
 			"id" : "Sim_Autito_autogen::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Sim_Autito_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "Sim_Autito::@6890427a1f51a3e7e1df",
@@ -628,7 +631,7 @@
 			"sourceIndexes" : 
 			[
 				0,
-				13
+				19
 			]
 		},
 		{
@@ -640,7 +643,10 @@
 				4,
 				6,
 				8,
-				10
+				10,
+				12,
+				14,
+				16
 			]
 		},
 		{
@@ -652,14 +658,17 @@
 				7,
 				9,
 				11,
-				12
+				13,
+				15,
+				17,
+				18
 			]
 		},
 		{
 			"name" : "CMake Rules",
 			"sourceIndexes" : 
 			[
-				14
+				20
 			]
 		}
 	],
@@ -720,6 +729,39 @@
 		{
 			"backtrace" : 4,
 			"path" : "nav/nav_core.h",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 1,
+			"path" : "nav/nav_map.c",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 4,
+			"path" : "nav/nav_map.h",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 1,
+			"path" : "nav/nav_flood.c",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 4,
+			"path" : "nav/nav_flood.h",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 1,
+			"path" : "nav/nav_supervisor.c",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 4,
+			"path" : "nav/nav_supervisor.h",
 			"sourceGroupIndex" : 2
 		},
 		{

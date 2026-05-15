@@ -18,6 +18,10 @@ qt_add_executable(Sim_Autito
     nav/nav_core.h
     nav/nav_map.c
     nav/nav_map.h
+    nav/nav_flood.c
+    nav/nav_flood.h
+    nav/nav_supervisor.c
+    nav/nav_supervisor.h
     nav/pid_controller.c
     nav/pid_controller.h
     nav/nav_types.h

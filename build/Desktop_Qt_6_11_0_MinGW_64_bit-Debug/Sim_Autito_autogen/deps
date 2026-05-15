@@ -12,8 +12,12 @@ Sim_Autito_autogen/timestamp: \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Debug/Sim_Autito_autogen/moc_predefs.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.c \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_core.h \
+	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_flood.c \
+	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_flood.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.c \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h \
+	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_supervisor.c \
+	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_supervisor.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_types.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/pid_controller.c \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/pid_controller.h \

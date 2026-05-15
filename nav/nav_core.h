@@ -3,6 +3,7 @@
 
 #include "nav_types.h"
 #include "nav_map.h"
+#include "nav_flood.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -606,6 +607,11 @@ void nav_core_get_map_candidate_debug(NavMapCandidateDebug *debug);
 NavRecommendedAction nav_core_recommend_basic_action(const RobotSensors *sensors);
 bool nav_core_rear_line_trusted_for_decision(void);
 NavRearLineTrustSource nav_core_rear_line_trust_source(void);
+NavFloodStatus nav_core_flood_fill_to_cell(int8_t goal_x, int8_t goal_y);
+uint16_t nav_core_flood_get_cost(int8_t cell_x, int8_t cell_y);
+void nav_core_flood_get_debug(NavFloodDebugSnapshot *snapshot);
+void nav_core_flood_clear(void);
+bool nav_core_flood_is_valid(void);
 void nav_core_plan_clear(void);
 bool nav_core_plan_push(NavPlanAction action);
 uint8_t nav_core_plan_count(void);
