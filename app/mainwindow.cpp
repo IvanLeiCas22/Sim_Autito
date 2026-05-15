@@ -1075,6 +1075,36 @@ NavSupervisorRequestedAction supervisorRequestedActionFromRecommended(
     }
 }
 
+NavRecommendedAction recommendedActionFromSupervisorRequestedAction(
+    NavSupervisorRequestedAction action,
+    bool *ok)
+{
+    if (ok) {
+        *ok = true;
+    }
+
+    switch (action) {
+    case NAV_SUPERVISOR_REQUESTED_ACTION_ACQUIRE_REAR_LINE:
+        return NAV_RECOMMENDED_ACQUIRE_REAR_LINE;
+    case NAV_SUPERVISOR_REQUESTED_ACTION_ADVANCE_LINE:
+        return NAV_RECOMMENDED_ADVANCE_LINE;
+    case NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_LEFT:
+        return NAV_RECOMMENDED_SMOOTH_LEFT;
+    case NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_RIGHT:
+        return NAV_RECOMMENDED_SMOOTH_RIGHT;
+    case NAV_SUPERVISOR_REQUESTED_ACTION_PIVOT_180:
+        return NAV_RECOMMENDED_PIVOT_180;
+    case NAV_SUPERVISOR_REQUESTED_ACTION_RECOVERY_PIVOT_180_FRONT_BLOCKED:
+        return NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED;
+    case NAV_SUPERVISOR_REQUESTED_ACTION_NONE:
+    default:
+        if (ok) {
+            *ok = false;
+        }
+        return NAV_RECOMMENDED_NONE;
+    }
+}
+
 QString mode1MissionStateText(MainWindow::Mode1MissionState state)
 {
     switch (state) {
@@ -2401,6 +2431,11 @@ void MainWindow::createTelemetryPanel()
     supervisorSmartActionInProgressValueLabel = new QLabel(panel);
     supervisorSmartCompareReasonValueLabel = new QLabel(panel);
     supervisorSmartShadowMatchesMainWindowValueLabel = new QLabel(panel);
+    supervisorSmartLocalControlEnabledValueLabel = new QLabel(panel);
+    supervisorSmartLocalControlAppliedValueLabel = new QLabel(panel);
+    supervisorSmartLocalControlActionValueLabel = new QLabel(panel);
+    supervisorSmartLocalControlMapOkValueLabel = new QLabel(panel);
+    supervisorSmartLocalControlFallbackLegacyValueLabel = new QLabel(panel);
     mainwindowSmartStateValueLabel = new QLabel(panel);
     mainwindowSmartLocalActionValueLabel = new QLabel(panel);
     mode1MissionEnabledValueLabel = new QLabel(panel);
@@ -2795,6 +2830,11 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(supervisorSmartActionInProgressValueLabel);
     configureTelemetryValueLabel(supervisorSmartCompareReasonValueLabel);
     configureTelemetryValueLabel(supervisorSmartShadowMatchesMainWindowValueLabel);
+    configureTelemetryValueLabel(supervisorSmartLocalControlEnabledValueLabel);
+    configureTelemetryValueLabel(supervisorSmartLocalControlAppliedValueLabel);
+    configureTelemetryValueLabel(supervisorSmartLocalControlActionValueLabel);
+    configureTelemetryValueLabel(supervisorSmartLocalControlMapOkValueLabel);
+    configureTelemetryValueLabel(supervisorSmartLocalControlFallbackLegacyValueLabel);
     configureTelemetryValueLabel(mainwindowSmartStateValueLabel);
     configureTelemetryValueLabel(mainwindowSmartLocalActionValueLabel);
     configureTelemetryValueLabel(mode1MissionEnabledValueLabel);
@@ -3284,6 +3324,16 @@ void MainWindow::createTelemetryPanel()
                    supervisorSmartCompareReasonValueLabel);
     layout->addRow("supervisor_smart_shadow_matches_mainwindow:",
                    supervisorSmartShadowMatchesMainWindowValueLabel);
+    layout->addRow("supervisor_smart_local_control_enabled:",
+                   supervisorSmartLocalControlEnabledValueLabel);
+    layout->addRow("supervisor_smart_local_control_applied:",
+                   supervisorSmartLocalControlAppliedValueLabel);
+    layout->addRow("supervisor_smart_local_control_action:",
+                   supervisorSmartLocalControlActionValueLabel);
+    layout->addRow("supervisor_smart_local_control_map_ok:",
+                   supervisorSmartLocalControlMapOkValueLabel);
+    layout->addRow("supervisor_smart_local_control_fallback_legacy:",
+                   supervisorSmartLocalControlFallbackLegacyValueLabel);
     layout->addRow("mainwindow_smart_state:", mainwindowSmartStateValueLabel);
     layout->addRow("mainwindow_smart_local_action:", mainwindowSmartLocalActionValueLabel);
     layout->addRow("mode1_mission_enabled:", mode1MissionEnabledValueLabel);
@@ -3485,6 +3535,12 @@ void MainWindow::createTelemetryPanel()
                  supervisorSmartDecisionReasonValueLabel);
     addPinnedRow("supervisor_smart_compare_reason",
                  supervisorSmartCompareReasonValueLabel);
+    addPinnedRow("supervisor_smart_local_control_enabled",
+                 supervisorSmartLocalControlEnabledValueLabel);
+    addPinnedRow("supervisor_smart_local_control_applied",
+                 supervisorSmartLocalControlAppliedValueLabel);
+    addPinnedRow("supervisor_smart_local_control_action",
+                 supervisorSmartLocalControlActionValueLabel);
     addPinnedRow("mode1_mission_state", mode1MissionStateValueLabel);
     addPinnedRow("mode1_found_special_count", mode1FoundSpecialCountValueLabel);
     addPinnedRow("mode1_required_specials_reached",
@@ -4786,6 +4842,26 @@ void MainWindow::updateTelemetryPanel()
     if (supervisorSmartShadowMatchesMainWindowValueLabel) {
         supervisorSmartShadowMatchesMainWindowValueLabel->setText(
             supervisorSmartShadowMatchesMainWindow ? "true" : "false");
+    }
+    if (supervisorSmartLocalControlEnabledValueLabel) {
+        supervisorSmartLocalControlEnabledValueLabel->setText(
+            supervisorSmartLocalControlEnabled ? "true" : "false");
+    }
+    if (supervisorSmartLocalControlAppliedValueLabel) {
+        supervisorSmartLocalControlAppliedValueLabel->setText(
+            supervisorSmartLocalControlApplied ? "true" : "false");
+    }
+    if (supervisorSmartLocalControlActionValueLabel) {
+        supervisorSmartLocalControlActionValueLabel->setText(
+            supervisorRequestedActionText(supervisorSmartLocalControlAction));
+    }
+    if (supervisorSmartLocalControlMapOkValueLabel) {
+        supervisorSmartLocalControlMapOkValueLabel->setText(
+            supervisorSmartLocalControlMapOk ? "true" : "false");
+    }
+    if (supervisorSmartLocalControlFallbackLegacyValueLabel) {
+        supervisorSmartLocalControlFallbackLegacyValueLabel->setText(
+            supervisorSmartLocalControlFallbackLegacy ? "true" : "false");
     }
     if (mainwindowSmartStateValueLabel) {
         mainwindowSmartStateValueLabel->setText(
@@ -6208,6 +6284,11 @@ bool MainWindow::advanceDeadEndRecoveryIfNeeded()
 
 void MainWindow::advanceBasicNavAutonomyIfNeeded()
 {
+    supervisorSmartLocalControlApplied = false;
+    supervisorSmartLocalControlAction = NAV_SUPERVISOR_REQUESTED_ACTION_NONE;
+    supervisorSmartLocalControlMapOk = false;
+    supervisorSmartLocalControlFallbackLegacy = false;
+
     if (!basicNavAutonomyEnabled) {
         return;
     }
@@ -6274,6 +6355,35 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     if (nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION) {
         NavMapCandidateDebug candidateDebug = {};
         nav_core_get_map_candidate_debug(&candidateDebug);
+        if (supervisorSmartLocalControlEnabled
+            && supervisorSmartLastOutput.request_start_action
+            && supervisorSmartLastOutput.requested_action
+                != NAV_SUPERVISOR_REQUESTED_ACTION_NONE
+            && navReady
+            && !supervisorLastOutput.block_smart_actions
+            && !planExecutionEnabled) {
+            bool mapOk = false;
+            const NavRecommendedAction supervisorAction =
+                recommendedActionFromSupervisorRequestedAction(
+                    supervisorSmartLastOutput.requested_action,
+                    &mapOk);
+            supervisorSmartLocalControlAction =
+                supervisorSmartLastOutput.requested_action;
+            supervisorSmartLocalControlMapOk = mapOk;
+            if (mapOk) {
+                basicNavRecommendedAction = supervisorAction;
+                smartLocalAction = supervisorAction;
+                smartRecognitionState = candidateDebug.used_unvisited_preference
+                    ? SmartRecognitionState::LocalUnvisited
+                    : SmartRecognitionState::Idle;
+                supervisorSmartLocalControlApplied = true;
+                supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
+                startBasicNavRecommendedAction(supervisorAction, sensors);
+                return;
+            }
+            supervisorSmartLocalControlFallbackLegacy = true;
+        }
+
         if (!basicNavDecisionPointValid
             || candidateDebug.used_unvisited_preference
             || basicNavRecommendedAction == NAV_RECOMMENDED_ACQUIRE_REAR_LINE

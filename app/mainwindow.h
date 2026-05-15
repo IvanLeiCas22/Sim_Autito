@@ -563,6 +563,11 @@ private:
     QLabel *supervisorSmartActionInProgressValueLabel = nullptr;
     QLabel *supervisorSmartCompareReasonValueLabel = nullptr;
     QLabel *supervisorSmartShadowMatchesMainWindowValueLabel = nullptr;
+    QLabel *supervisorSmartLocalControlEnabledValueLabel = nullptr;
+    QLabel *supervisorSmartLocalControlAppliedValueLabel = nullptr;
+    QLabel *supervisorSmartLocalControlActionValueLabel = nullptr;
+    QLabel *supervisorSmartLocalControlMapOkValueLabel = nullptr;
+    QLabel *supervisorSmartLocalControlFallbackLegacyValueLabel = nullptr;
     QLabel *mainwindowSmartStateValueLabel = nullptr;
     QLabel *mainwindowSmartLocalActionValueLabel = nullptr;
     QLabel *mode1MissionEnabledValueLabel = nullptr;
@@ -701,6 +706,12 @@ private:
     bool supervisorSmartActionInProgress = false;
     SmartShadowCompareReason supervisorSmartCompareReason =
         SmartShadowCompareReason::None;
+    bool supervisorSmartLocalControlEnabled = true;
+    bool supervisorSmartLocalControlApplied = false;
+    NavSupervisorRequestedAction supervisorSmartLocalControlAction =
+        NAV_SUPERVISOR_REQUESTED_ACTION_NONE;
+    bool supervisorSmartLocalControlMapOk = false;
+    bool supervisorSmartLocalControlFallbackLegacy = false;
     bool mode1MissionEnabled = true;
     // Vista/cache de telemetria derivada de nav_supervisor; no es fuente de verdad.
     Mode1MissionState mode1MissionState = Mode1MissionState::Disabled;
