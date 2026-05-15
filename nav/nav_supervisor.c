@@ -1,6 +1,10 @@
 #include "nav_supervisor.h"
 
 #define NAV_SUPERVISOR_COST_INF 0xFFFFu
+#define NAV_SUPERVISOR_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS 5
+#define NAV_SUPERVISOR_ROUTE_STATUS_TARGET_NOT_VISITED 6
+#define NAV_SUPERVISOR_ROUTE_STATUS_ROUTE_TOO_LONG 7
+#define NAV_SUPERVISOR_ROUTE_STATUS_QUEUE_OVERFLOW 8
 
 typedef struct NavSupervisorStateData {
     NavSupervisorState state;
@@ -175,6 +179,21 @@ static void sync_input_snapshot(const NavSupervisorInput *input)
     supervisor_state.return_plan_loaded = input->return_plan_loaded;
 }
 
+static NavSupervisorDoneReason done_reason_from_return_route_status(int16_t route_status)
+{
+    switch (route_status) {
+    case NAV_SUPERVISOR_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS:
+    case NAV_SUPERVISOR_ROUTE_STATUS_TARGET_NOT_VISITED:
+        return NAV_SUPERVISOR_DONE_REASON_START_CELL_INVALID;
+    case NAV_SUPERVISOR_ROUTE_STATUS_ROUTE_TOO_LONG:
+        return NAV_SUPERVISOR_DONE_REASON_RETURN_ROUTE_TOO_LONG;
+    case NAV_SUPERVISOR_ROUTE_STATUS_QUEUE_OVERFLOW:
+        return NAV_SUPERVISOR_DONE_REASON_RETURN_QUEUE_OVERFLOW;
+    default:
+        return NAV_SUPERVISOR_DONE_REASON_NO_RETURN_ROUTE;
+    }
+}
+
 void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput *output)
 {
     clear_output(output);
@@ -286,6 +305,15 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
                 if (output != 0) {
                     output->request_execute_return_plan = true;
                 }
+            }
+        } else if (input->return_route_status != 0) {
+            supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+            supervisor_state.done_reason =
+                done_reason_from_return_route_status(input->return_route_status);
+            supervisor_state.return_to_start_active = false;
+            if (output != 0) {
+                output->request_stop_autonomy = true;
+                output->request_stop_motors = true;
             }
         }
         return;

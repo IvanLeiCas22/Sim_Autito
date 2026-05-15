@@ -3139,7 +3139,7 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("supervisor_request_execute_return:",
                    supervisorRequestExecuteReturnValueLabel);
     layout->addRow("supervisor_block_smart_actions:", supervisorBlockSmartActionsValueLabel);
-    layout->addRow("supervisor_shadow_matches_mainwindow:",
+    layout->addRow("supervisor_active_as_source:",
                    supervisorShadowMatchesMainWindowValueLabel);
     layout->addRow("flood_status:", floodStatusValueLabel);
     layout->addRow("flood_valid:", floodValidValueLabel);
@@ -3309,7 +3309,7 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("mode1_return_route_status", mode1ReturnRouteStatusValueLabel);
     addPinnedRow("mode1_done_reason", mode1DoneReasonValueLabel);
     addPinnedRow("supervisor_state", supervisorStateValueLabel);
-    addPinnedRow("supervisor_shadow_matches_mainwindow",
+    addPinnedRow("supervisor_active_as_source",
                  supervisorShadowMatchesMainWindowValueLabel);
     addPinnedRow("supervisor_request_plan_return", supervisorRequestPlanReturnValueLabel);
     addPinnedRow("supervisor_done_reason", supervisorDoneReasonValueLabel);
@@ -5140,11 +5140,18 @@ void MainWindow::cancelPlanExecution()
 void MainWindow::setMode1MissionEnabled(bool enabled)
 {
     mode1MissionEnabled = enabled;
+    if (mode1MissionEnabled) {
+        nav_supervisor_reset();
+        if (mode1StartCellValid) {
+            nav_supervisor_set_start_cell(mode1StartCellX,
+                                          mode1StartCellY,
+                                          static_cast<int8_t>(mode1StartDir));
+        }
+    }
     syncNavSupervisorConfig();
     mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     mode1ReturnPlanLoaded = false;
     if (mode1MissionEnabled) {
-        mode1MissionState = Mode1MissionState::SearchSpecials;
         mode1MissionDoneReason = Mode1MissionDoneReason::None;
         mode1RequiredSpecialsReached = false;
         mode1ReturnRequested = false;
@@ -5159,9 +5166,11 @@ void MainWindow::setMode1MissionEnabled(bool enabled)
             || mode1MissionState == Mode1MissionState::ReturnToStartExecute) {
             cancelPlanExecution();
         }
-        mode1MissionState = Mode1MissionState::Disabled;
         mode1MissionDoneReason = Mode1MissionDoneReason::None;
     }
+    NavSupervisorDebugSnapshot debug = {};
+    nav_supervisor_get_debug(&debug);
+    syncMode1TelemetryFromSupervisor(debug);
 }
 
 void MainWindow::cancelMode1Mission(Mode1MissionDoneReason reason)
@@ -5249,7 +5258,133 @@ bool MainWindow::navSupervisorShadowMatchesMainWindow(
         && supervisorDebug.return_requested == mode1ReturnRequested;
 }
 
-void MainWindow::updateNavSupervisorShadow(bool smartNoFrontier)
+void MainWindow::syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapshot &debug)
+{
+    switch (debug.state) {
+    case NAV_SUPERVISOR_STATE_IDLE:
+    case NAV_SUPERVISOR_STATE_CANCELLED:
+        mode1MissionState = Mode1MissionState::Disabled;
+        break;
+    case NAV_SUPERVISOR_STATE_SEARCH_SPECIALS:
+        mode1MissionState = Mode1MissionState::SearchSpecials;
+        break;
+    case NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE:
+        mode1MissionState = Mode1MissionState::FoundRequiredSpecialsWaitActionDone;
+        break;
+    case NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN:
+        mode1MissionState = Mode1MissionState::ReturnToStartPlan;
+        break;
+    case NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE:
+        mode1MissionState = Mode1MissionState::ReturnToStartExecute;
+        break;
+    case NAV_SUPERVISOR_STATE_DONE:
+        mode1MissionState = Mode1MissionState::Done;
+        break;
+    case NAV_SUPERVISOR_STATE_ERROR:
+        mode1MissionState = Mode1MissionState::Error;
+        break;
+    case NAV_SUPERVISOR_STATE_RETURN_SMART_DECIDE:
+    case NAV_SUPERVISOR_STATE_RETURN_FRONTIER_PLAN:
+    case NAV_SUPERVISOR_STATE_RETURN_FRONTIER_EXECUTE:
+    case NAV_SUPERVISOR_STATE_RETURN_FRONTIER_ENTER:
+        mode1MissionState = Mode1MissionState::ReturnToStartPlan;
+        break;
+    }
+
+    switch (debug.done_reason) {
+    case NAV_SUPERVISOR_DONE_REASON_NONE:
+        mode1MissionDoneReason = Mode1MissionDoneReason::None;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED:
+        mode1MissionDoneReason = Mode1MissionDoneReason::FoundRequiredSpecialsAndReturned;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_RETURN_ROUTE_TOO_LONG:
+        mode1MissionDoneReason = Mode1MissionDoneReason::ReturnRouteTooLong;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_RETURN_QUEUE_OVERFLOW:
+        mode1MissionDoneReason = Mode1MissionDoneReason::ReturnQueueOverflow;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_START_CELL_INVALID:
+        mode1MissionDoneReason = Mode1MissionDoneReason::StartCellInvalid;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS:
+        mode1MissionDoneReason = Mode1MissionDoneReason::NoFrontierBeforeRequiredSpecials;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_CANCELLED:
+        mode1MissionDoneReason = Mode1MissionDoneReason::Cancelled;
+        break;
+    case NAV_SUPERVISOR_DONE_REASON_NO_RETURN_ROUTE:
+    default:
+        mode1MissionDoneReason = Mode1MissionDoneReason::NoReturnRoute;
+        break;
+    }
+
+    mode1FoundSpecialCount = debug.found_special_count;
+    mode1RequiredSpecialsReached = debug.required_specials_reached;
+    mode1ReturnRequested = debug.return_requested;
+    mode1NavReadyForReturn = !debug.waiting_action_done;
+}
+
+void MainWindow::applyNavSupervisorOutput(const NavSupervisorOutput &output)
+{
+    if (output.request_clear_exploration_plan) {
+        NavPlanDebugSnapshot planDebug = {};
+        nav_core_plan_debug_snapshot(&planDebug);
+        mode1PlanWasActiveWhenRequiredFound = planExecutionEnabled;
+        mode1PlanQueueCountWhenRequiredFound = planDebug.count;
+        mode1SearchCompleteLatchedAtCount = mode1FoundSpecialCount;
+        mode1PlanCancelledAfterRequiredFound =
+            mode1PlanWasActiveWhenRequiredFound || mode1PlanQueueCountWhenRequiredFound > 0;
+        planExecutionEnabled = false;
+        planCurrentAction = NAV_PLAN_ACTION_NONE;
+        planNextAdvanceFromCenteredPose = false;
+        nav_core_plan_clear();
+        mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
+        mode1ReturnPlanLoaded = false;
+        routeExecuteStatus = RouteExecuteStatus::Idle;
+    }
+
+    if (output.request_plan_return_to_start) {
+        planExecutionEnabled = false;
+        planCurrentAction = NAV_PLAN_ACTION_NONE;
+        planNextAdvanceFromCenteredPose = false;
+        cancelPlanCompositeAction();
+        nav_core_plan_clear();
+
+        if (mode1StartCellValid) {
+            mode1ReturnRouteStatus =
+                nav_core_route_plan_to_cell(mode1StartCellX, mode1StartCellY);
+        } else {
+            mode1ReturnRouteStatus = NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
+        }
+        NavPlanDebugSnapshot planDebug = {};
+        nav_core_plan_debug_snapshot(&planDebug);
+        mode1ReturnPlanLoaded =
+            mode1ReturnRouteStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
+        nav_supervisor_notify_return_route_status(static_cast<int16_t>(mode1ReturnRouteStatus),
+                                                  mode1ReturnPlanLoaded);
+    }
+
+    if (output.request_execute_return_plan) {
+        NavPlanDebugSnapshot planDebug = {};
+        nav_core_plan_debug_snapshot(&planDebug);
+        if (planDebug.count > 0) {
+            planExecutionEnabled = true;
+            planCurrentAction = NAV_PLAN_ACTION_NONE;
+            routeExecuteStatus = RouteExecuteStatus::Running;
+            advancePlanExecutionIfNeeded();
+        }
+    }
+
+    if (output.request_stop_autonomy) {
+        setBasicNavAutonomyEnabled(false);
+    }
+    if (output.request_stop_motors) {
+        lastNavCommand = {0, 0};
+    }
+}
+
+void MainWindow::updateNavSupervisor(bool smartNoFrontier)
 {
     syncNavSupervisorConfig();
 
@@ -5286,164 +5421,30 @@ void MainWindow::updateNavSupervisorShadow(bool smartNoFrontier)
     input.start_dir = static_cast<int8_t>(mode1StartDir);
 
     nav_supervisor_update(&input, &supervisorShadowOutput);
+    applyNavSupervisorOutput(supervisorShadowOutput);
+
     NavSupervisorDebugSnapshot supervisorDebug = {};
     nav_supervisor_get_debug(&supervisorDebug);
-    supervisorShadowMatchesMainWindow = navSupervisorShadowMatchesMainWindow(supervisorDebug);
+    syncMode1TelemetryFromSupervisor(supervisorDebug);
+    supervisorShadowMatchesMainWindow = mode1MissionEnabled;
 }
 
 bool MainWindow::advanceMode1MissionIfNeeded()
 {
-    updateNavSupervisorShadow(false);
+    updateNavSupervisor(false);
 
     if (!mode1MissionEnabled) {
         return false;
     }
-
-    NavMapDebugSnapshot mapDebug = {};
-    nav_core_get_map_debug(&mapDebug);
-    mode1FoundSpecialCount = mapDebug.special_cells_found_count;
-
-    const bool navReady =
-        (nav_core_action() == NAV_ACTION_NONE)
-        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
-
-    if (mode1MissionState == Mode1MissionState::Disabled) {
-        mode1MissionState = Mode1MissionState::SearchSpecials;
-        mode1MissionDoneReason = Mode1MissionDoneReason::None;
+    if (nav_core_get_policy() != NAV_POLICY_SMART_RECOGNITION) {
+        nav_core_set_policy(NAV_POLICY_SMART_RECOGNITION);
     }
 
-    if (mode1MissionState == Mode1MissionState::SearchSpecials) {
-        if (nav_core_get_policy() != NAV_POLICY_SMART_RECOGNITION) {
-            nav_core_set_policy(NAV_POLICY_SMART_RECOGNITION);
-        }
-        if (mode1FoundSpecialCount < mode1RequiredSpecialCount) {
-            return false;
-        }
-        mode1RequiredSpecialsReached = true;
-        mode1ReturnRequested = true;
-        mode1SearchCompleteLatchedAtCount = mode1FoundSpecialCount;
-        NavPlanDebugSnapshot planDebug = {};
-        nav_core_plan_debug_snapshot(&planDebug);
-        mode1PlanWasActiveWhenRequiredFound = planExecutionEnabled;
-        mode1PlanQueueCountWhenRequiredFound = planDebug.count;
-        planExecutionEnabled = false;
-        planCurrentAction = NAV_PLAN_ACTION_NONE;
-        planNextAdvanceFromCenteredPose = false;
-        nav_core_plan_clear();
-        mode1PlanCancelledAfterRequiredFound =
-            mode1PlanWasActiveWhenRequiredFound || mode1PlanQueueCountWhenRequiredFound > 0;
-        mode1MissionState = Mode1MissionState::FoundRequiredSpecialsWaitActionDone;
-        mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
-        mode1ReturnPlanLoaded = false;
-        routeExecuteStatus = RouteExecuteStatus::Idle;
-        return true;
-    }
-
-    if (mode1MissionState == Mode1MissionState::FoundRequiredSpecialsWaitActionDone) {
-        if (!navReady) {
-            return true;
-        }
-        mode1MissionState = Mode1MissionState::ReturnToStartPlan;
-    }
-
-    if (mode1MissionState == Mode1MissionState::ReturnToStartPlan) {
-        if (!mode1StartCellValid) {
-            mode1MissionState = Mode1MissionState::Error;
-            mode1MissionDoneReason = Mode1MissionDoneReason::StartCellInvalid;
-            setBasicNavAutonomyEnabled(false);
-            lastNavCommand = {0, 0};
-            return true;
-        }
-        if (!navReady) {
-            return true;
-        }
-        if (mode1MissionAtStartCell(mapDebug)) {
-            mode1MissionState = Mode1MissionState::Done;
-            mode1MissionDoneReason =
-                Mode1MissionDoneReason::FoundRequiredSpecialsAndReturned;
-            setBasicNavAutonomyEnabled(false);
-            lastNavCommand = {0, 0};
-            return true;
-        }
-
-        planExecutionEnabled = false;
-        planCurrentAction = NAV_PLAN_ACTION_NONE;
-        planNextAdvanceFromCenteredPose = false;
-        cancelPlanCompositeAction();
-        nav_core_plan_clear();
-
-        mode1ReturnRouteStatus =
-            nav_core_route_plan_to_cell(mode1StartCellX, mode1StartCellY);
-        NavPlanDebugSnapshot planDebug = {};
-        nav_core_plan_debug_snapshot(&planDebug);
-        mode1ReturnPlanLoaded =
-            mode1ReturnRouteStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
-        nav_supervisor_notify_return_route_status(static_cast<int16_t>(mode1ReturnRouteStatus),
-                                                  mode1ReturnPlanLoaded);
-
-        if (mode1ReturnRouteStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0) {
-            planExecutionEnabled = true;
-            routeExecuteStatus = RouteExecuteStatus::Running;
-            mode1MissionState = Mode1MissionState::ReturnToStartExecute;
-            advancePlanExecutionIfNeeded();
-            return true;
-        }
-
-        if (mode1ReturnRouteStatus == NAV_ROUTE_STATUS_FOUND
-            && mode1MissionAtStartCell(mapDebug)) {
-            mode1MissionState = Mode1MissionState::Done;
-            mode1MissionDoneReason =
-                Mode1MissionDoneReason::FoundRequiredSpecialsAndReturned;
-            setBasicNavAutonomyEnabled(false);
-            lastNavCommand = {0, 0};
-            return true;
-        }
-
-        mode1MissionState = Mode1MissionState::Error;
-        switch (mode1ReturnRouteStatus) {
-        case NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS:
-        case NAV_ROUTE_STATUS_TARGET_NOT_VISITED:
-            mode1MissionDoneReason = Mode1MissionDoneReason::StartCellInvalid;
-            break;
-        case NAV_ROUTE_STATUS_ROUTE_TOO_LONG:
-            mode1MissionDoneReason = Mode1MissionDoneReason::ReturnRouteTooLong;
-            break;
-        case NAV_ROUTE_STATUS_QUEUE_OVERFLOW:
-            mode1MissionDoneReason = Mode1MissionDoneReason::ReturnQueueOverflow;
-            break;
-        case NAV_ROUTE_STATUS_IDLE:
-        case NAV_ROUTE_STATUS_FOUND:
-        case NAV_ROUTE_STATUS_FRONTIER_ALREADY_HERE:
-        case NAV_ROUTE_STATUS_NO_PATH:
-        case NAV_ROUTE_STATUS_NO_FRONTIER:
-        default:
-            mode1MissionDoneReason = Mode1MissionDoneReason::NoReturnRoute;
-            break;
-        }
-        setBasicNavAutonomyEnabled(false);
-        lastNavCommand = {0, 0};
-        return true;
-    }
-
-    if (mode1MissionState == Mode1MissionState::ReturnToStartExecute) {
-        advancePlanExecutionIfNeeded();
-        nav_core_get_map_debug(&mapDebug);
-        if (!planExecutionEnabled) {
-            if (mode1MissionAtStartCell(mapDebug)) {
-                mode1MissionState = Mode1MissionState::Done;
-                mode1MissionDoneReason =
-                    Mode1MissionDoneReason::FoundRequiredSpecialsAndReturned;
-            } else {
-                mode1MissionState = Mode1MissionState::Error;
-                mode1MissionDoneReason = Mode1MissionDoneReason::NoReturnRoute;
-            }
-            setBasicNavAutonomyEnabled(false);
-            lastNavCommand = {0, 0};
-        }
-        return true;
-    }
-
-    return mode1MissionState == Mode1MissionState::Done
+    return supervisorShadowOutput.block_smart_actions
+        || mode1MissionState == Mode1MissionState::FoundRequiredSpecialsWaitActionDone
+        || mode1MissionState == Mode1MissionState::ReturnToStartPlan
+        || mode1MissionState == Mode1MissionState::ReturnToStartExecute
+        || mode1MissionState == Mode1MissionState::Done
         || mode1MissionState == Mode1MissionState::Error;
 }
 
@@ -5928,10 +5929,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
             ++smartNoFrontierCount;
             if (mode1MissionEnabled
                 && mode1MissionState == Mode1MissionState::SearchSpecials) {
-                updateNavSupervisorShadow(true);
-                mode1MissionState = Mode1MissionState::Error;
-                mode1MissionDoneReason =
-                    Mode1MissionDoneReason::NoFrontierBeforeRequiredSpecials;
+                updateNavSupervisor(true);
             }
             setBasicNavAutonomyEnabled(false);
             smartRecognitionState = SmartRecognitionState::NoFrontier;

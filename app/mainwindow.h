@@ -181,7 +181,9 @@ private:
     void cancelMode1Mission(Mode1MissionDoneReason reason);
     bool mode1MissionAtStartCell(const NavMapDebugSnapshot &mapDebug) const;
     void syncNavSupervisorConfig();
-    void updateNavSupervisorShadow(bool smartNoFrontier = false);
+    void updateNavSupervisor(bool smartNoFrontier = false);
+    void syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapshot &debug);
+    void applyNavSupervisorOutput(const NavSupervisorOutput &output);
     bool navSupervisorShadowMatchesMainWindow(
         const NavSupervisorDebugSnapshot &supervisorDebug) const;
     bool advanceMode1MissionIfNeeded();
