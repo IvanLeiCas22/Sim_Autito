@@ -184,8 +184,6 @@ private:
     void updateNavSupervisor(bool smartNoFrontier = false);
     void syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapshot &debug);
     void applyNavSupervisorOutput(const NavSupervisorOutput &output);
-    bool navSupervisorShadowMatchesMainWindow(
-        const NavSupervisorDebugSnapshot &supervisorDebug) const;
     bool advanceMode1MissionIfNeeded();
     void resetRobotPoseToWorldStart();
     void initializeNavMapFromWorldStart();
@@ -562,7 +560,7 @@ private:
     QLabel *supervisorRequestPlanReturnValueLabel = nullptr;
     QLabel *supervisorRequestExecuteReturnValueLabel = nullptr;
     QLabel *supervisorBlockSmartActionsValueLabel = nullptr;
-    QLabel *supervisorShadowMatchesMainWindowValueLabel = nullptr;
+    QLabel *supervisorActiveAsSourceValueLabel = nullptr;
     QLabel *floodStatusValueLabel = nullptr;
     QLabel *floodValidValueLabel = nullptr;
     QLabel *floodGoalCellValueLabel = nullptr;
@@ -665,14 +663,12 @@ private:
     uint16_t smartNoFrontierCount = 0;
     NavRecommendedAction smartLocalAction = NAV_RECOMMENDED_NONE;
     bool mode1MissionEnabled = true;
+    // Vista/cache de telemetria derivada de nav_supervisor; no es fuente de verdad.
     Mode1MissionState mode1MissionState = Mode1MissionState::Disabled;
     Mode1MissionDoneReason mode1MissionDoneReason = Mode1MissionDoneReason::None;
     uint16_t mode1RequiredSpecialCount = 3;
     uint16_t mode1FoundSpecialCount = 0;
-    bool mode1RequiredSpecialsReached = false;
-    bool mode1ReturnRequested = false;
     bool mode1PlanCancelledAfterRequiredFound = false;
-    bool mode1NavReadyForReturn = false;
     bool mode1PlanWasActiveWhenRequiredFound = false;
     uint16_t mode1SearchCompleteLatchedAtCount = 0;
     uint8_t mode1PlanQueueCountWhenRequiredFound = 0;
@@ -682,8 +678,8 @@ private:
     bool mode1StartCellValid = false;
     NavRouteStatus mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     bool mode1ReturnPlanLoaded = false;
-    NavSupervisorOutput supervisorShadowOutput = {};
-    bool supervisorShadowMatchesMainWindow = true;
+    NavSupervisorOutput supervisorLastOutput = {};
+    bool supervisorActiveAsSource = false;
     bool floodFrontierEvalValid = false;
     uint16_t floodFrontierCandidateCount = 0;
     uint16_t floodFrontierCandidateEdgeCount = 0;

@@ -2289,7 +2289,7 @@ void MainWindow::createTelemetryPanel()
     supervisorRequestPlanReturnValueLabel = new QLabel(panel);
     supervisorRequestExecuteReturnValueLabel = new QLabel(panel);
     supervisorBlockSmartActionsValueLabel = new QLabel(panel);
-    supervisorShadowMatchesMainWindowValueLabel = new QLabel(panel);
+    supervisorActiveAsSourceValueLabel = new QLabel(panel);
     floodStatusValueLabel = new QLabel(panel);
     floodValidValueLabel = new QLabel(panel);
     floodGoalCellValueLabel = new QLabel(panel);
@@ -2668,7 +2668,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(supervisorRequestPlanReturnValueLabel);
     configureTelemetryValueLabel(supervisorRequestExecuteReturnValueLabel);
     configureTelemetryValueLabel(supervisorBlockSmartActionsValueLabel);
-    configureTelemetryValueLabel(supervisorShadowMatchesMainWindowValueLabel);
+    configureTelemetryValueLabel(supervisorActiveAsSourceValueLabel);
     configureTelemetryValueLabel(floodStatusValueLabel);
     configureTelemetryValueLabel(floodValidValueLabel);
     configureTelemetryValueLabel(floodGoalCellValueLabel);
@@ -3140,7 +3140,7 @@ void MainWindow::createTelemetryPanel()
                    supervisorRequestExecuteReturnValueLabel);
     layout->addRow("supervisor_block_smart_actions:", supervisorBlockSmartActionsValueLabel);
     layout->addRow("supervisor_active_as_source:",
-                   supervisorShadowMatchesMainWindowValueLabel);
+                   supervisorActiveAsSourceValueLabel);
     layout->addRow("flood_status:", floodStatusValueLabel);
     layout->addRow("flood_valid:", floodValidValueLabel);
     layout->addRow("flood_goal_cell:", floodGoalCellValueLabel);
@@ -3310,7 +3310,7 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("mode1_done_reason", mode1DoneReasonValueLabel);
     addPinnedRow("supervisor_state", supervisorStateValueLabel);
     addPinnedRow("supervisor_active_as_source",
-                 supervisorShadowMatchesMainWindowValueLabel);
+                 supervisorActiveAsSourceValueLabel);
     addPinnedRow("supervisor_request_plan_return", supervisorRequestPlanReturnValueLabel);
     addPinnedRow("supervisor_done_reason", supervisorDoneReasonValueLabel);
     addPinnedRow("flood_status", floodStatusValueLabel);
@@ -4612,33 +4612,36 @@ void MainWindow::updateTelemetryPanel()
             mapLastSpecialCellValueLabel->setText("none");
         }
     }
-    mode1FoundSpecialCount = mapDebug.special_cells_found_count;
-    const bool mode1AtStartCell = mode1MissionAtStartCell(mapDebug);
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    syncMode1TelemetryFromSupervisor(supervisorDebug);
+
     if (mode1MissionEnabledValueLabel) {
-        mode1MissionEnabledValueLabel->setText(mode1MissionEnabled ? "true" : "false");
+        mode1MissionEnabledValueLabel->setText(
+            supervisorDebug.mission_enabled ? "true" : "false");
     }
     if (mode1MissionStateValueLabel) {
         mode1MissionStateValueLabel->setText(mode1MissionStateText(mode1MissionState));
     }
     if (mode1RequiredSpecialCountValueLabel) {
         mode1RequiredSpecialCountValueLabel->setText(
-            QString::number(mode1RequiredSpecialCount));
+            QString::number(supervisorDebug.required_special_count));
     }
     if (mode1FoundSpecialCountValueLabel) {
-        mode1FoundSpecialCountValueLabel->setText(QString::number(mode1FoundSpecialCount));
+        mode1FoundSpecialCountValueLabel->setText(
+            QString::number(supervisorDebug.found_special_count));
     }
     if (mode1RequiredSpecialsReachedValueLabel) {
         mode1RequiredSpecialsReachedValueLabel->setText(
-            mode1RequiredSpecialsReached ? "true" : "false");
+            supervisorDebug.required_specials_reached ? "true" : "false");
     }
     if (mode1ReturnRequestedValueLabel) {
-        mode1ReturnRequestedValueLabel->setText(mode1ReturnRequested ? "true" : "false");
+        mode1ReturnRequestedValueLabel->setText(
+            supervisorDebug.return_requested ? "true" : "false");
     }
     if (mode1WaitingActionDoneValueLabel) {
         mode1WaitingActionDoneValueLabel->setText(
-            mode1MissionState == Mode1MissionState::FoundRequiredSpecialsWaitActionDone
-                ? "true"
-                : "false");
+            supervisorDebug.waiting_action_done ? "true" : "false");
     }
     if (mode1SearchCompleteLatchedAtCountValueLabel) {
         mode1SearchCompleteLatchedAtCountValueLabel->setText(
@@ -4650,7 +4653,7 @@ void MainWindow::updateTelemetryPanel()
     }
     if (mode1NavReadyForReturnValueLabel) {
         mode1NavReadyForReturnValueLabel->setText(
-            mode1NavReadyForReturn ? "true" : "false");
+            supervisorDebug.waiting_action_done ? "false" : "true");
     }
     if (mode1PlanWasActiveWhenRequiredFoundValueLabel) {
         mode1PlanWasActiveWhenRequiredFoundValueLabel->setText(
@@ -4662,11 +4665,12 @@ void MainWindow::updateTelemetryPanel()
     }
     if (mode1StartCellValueLabel) {
         mode1StartCellValueLabel->setText(
-            mode1StartCellValid
+            supervisorDebug.start_cell_valid
                 ? QString("(%1,%2) %3")
-                      .arg(mode1StartCellX)
-                      .arg(mode1StartCellY)
-                      .arg(mapDirectionText(mode1StartDir))
+                      .arg(supervisorDebug.start_cell_x)
+                      .arg(supervisorDebug.start_cell_y)
+                      .arg(mapDirectionText(
+                          static_cast<NavMapDirection>(supervisorDebug.start_dir)))
                 : "invalid");
     }
     if (mode1ReturnRouteStatusValueLabel) {
@@ -4677,20 +4681,16 @@ void MainWindow::updateTelemetryPanel()
     }
     if (mode1ReturnToStartActiveValueLabel) {
         mode1ReturnToStartActiveValueLabel->setText(
-            mode1MissionState == Mode1MissionState::ReturnToStartPlan
-                    || mode1MissionState == Mode1MissionState::ReturnToStartExecute
-                ? "true"
-                : "false");
+            supervisorDebug.return_to_start_active ? "true" : "false");
     }
     if (mode1AtStartCellValueLabel) {
-        mode1AtStartCellValueLabel->setText(mode1AtStartCell ? "true" : "false");
+        mode1AtStartCellValueLabel->setText(
+            supervisorDebug.at_start_cell ? "true" : "false");
     }
     if (mode1DoneReasonValueLabel) {
         mode1DoneReasonValueLabel->setText(
             mode1MissionDoneReasonText(mode1MissionDoneReason));
     }
-    NavSupervisorDebugSnapshot supervisorDebug = {};
-    nav_supervisor_get_debug(&supervisorDebug);
     if (supervisorStateValueLabel) {
         supervisorStateValueLabel->setText(supervisorStateText(supervisorDebug.state));
     }
@@ -4712,23 +4712,23 @@ void MainWindow::updateTelemetryPanel()
     }
     if (supervisorRequestClearPlanValueLabel) {
         supervisorRequestClearPlanValueLabel->setText(
-            supervisorShadowOutput.request_clear_exploration_plan ? "true" : "false");
+            supervisorLastOutput.request_clear_exploration_plan ? "true" : "false");
     }
     if (supervisorRequestPlanReturnValueLabel) {
         supervisorRequestPlanReturnValueLabel->setText(
-            supervisorShadowOutput.request_plan_return_to_start ? "true" : "false");
+            supervisorLastOutput.request_plan_return_to_start ? "true" : "false");
     }
     if (supervisorRequestExecuteReturnValueLabel) {
         supervisorRequestExecuteReturnValueLabel->setText(
-            supervisorShadowOutput.request_execute_return_plan ? "true" : "false");
+            supervisorLastOutput.request_execute_return_plan ? "true" : "false");
     }
     if (supervisorBlockSmartActionsValueLabel) {
         supervisorBlockSmartActionsValueLabel->setText(
-            supervisorShadowOutput.block_smart_actions ? "true" : "false");
+            supervisorLastOutput.block_smart_actions ? "true" : "false");
     }
-    if (supervisorShadowMatchesMainWindowValueLabel) {
-        supervisorShadowMatchesMainWindowValueLabel->setText(
-            supervisorShadowMatchesMainWindow ? "true" : "false");
+    if (supervisorActiveAsSourceValueLabel) {
+        supervisorActiveAsSourceValueLabel->setText(
+            supervisorActiveAsSource ? "true" : "false");
     }
     NavFloodDebugSnapshot floodDebug = {};
     nav_core_flood_get_debug(&floodDebug);
@@ -5057,7 +5057,6 @@ void MainWindow::advanceCenterPivotSequenceIfNeeded()
     const bool navReady =
         (nav_core_action() == NAV_ACTION_NONE)
         && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
-    mode1NavReadyForReturn = navReady;
     if (!navReady) {
         return;
     }
@@ -5152,25 +5151,25 @@ void MainWindow::setMode1MissionEnabled(bool enabled)
     mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     mode1ReturnPlanLoaded = false;
     if (mode1MissionEnabled) {
-        mode1MissionDoneReason = Mode1MissionDoneReason::None;
-        mode1RequiredSpecialsReached = false;
-        mode1ReturnRequested = false;
         mode1PlanCancelledAfterRequiredFound = false;
-        mode1NavReadyForReturn = false;
         mode1PlanWasActiveWhenRequiredFound = false;
         mode1SearchCompleteLatchedAtCount = 0;
         mode1PlanQueueCountWhenRequiredFound = 0;
         nav_core_set_policy(NAV_POLICY_SMART_RECOGNITION);
-    } else if (mode1MissionDoneReason != Mode1MissionDoneReason::Cancelled) {
-        if (mode1MissionState == Mode1MissionState::ReturnToStartPlan
-            || mode1MissionState == Mode1MissionState::ReturnToStartExecute) {
+    } else {
+        NavSupervisorDebugSnapshot debug = {};
+        nav_supervisor_get_debug(&debug);
+        if (debug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
+            || debug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE) {
             cancelPlanExecution();
         }
-        mode1MissionDoneReason = Mode1MissionDoneReason::None;
+        nav_supervisor_reset();
+        syncNavSupervisorConfig();
     }
     NavSupervisorDebugSnapshot debug = {};
     nav_supervisor_get_debug(&debug);
     syncMode1TelemetryFromSupervisor(debug);
+    supervisorActiveAsSource = mode1MissionEnabled;
 }
 
 void MainWindow::cancelMode1Mission(Mode1MissionDoneReason reason)
@@ -5178,12 +5177,13 @@ void MainWindow::cancelMode1Mission(Mode1MissionDoneReason reason)
     mode1MissionEnabled = false;
     syncNavSupervisorConfig();
     nav_supervisor_cancel();
-    mode1MissionState = Mode1MissionState::Disabled;
     mode1MissionDoneReason = reason;
     mode1ReturnRouteStatus = NAV_ROUTE_STATUS_IDLE;
     mode1ReturnPlanLoaded = false;
-    mode1ReturnRequested = false;
-    mode1NavReadyForReturn = false;
+    NavSupervisorDebugSnapshot debug = {};
+    nav_supervisor_get_debug(&debug);
+    syncMode1TelemetryFromSupervisor(debug);
+    supervisorActiveAsSource = false;
 }
 
 bool MainWindow::mode1MissionAtStartCell(const NavMapDebugSnapshot &mapDebug) const
@@ -5204,58 +5204,6 @@ void MainWindow::syncNavSupervisorConfig()
                              NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_MAX));
     config.return_strategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
     nav_supervisor_set_config(&config);
-}
-
-bool MainWindow::navSupervisorShadowMatchesMainWindow(
-    const NavSupervisorDebugSnapshot &supervisorDebug) const
-{
-    bool stateMatches = false;
-    switch (mode1MissionState) {
-    case Mode1MissionState::Disabled:
-        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_IDLE
-            || supervisorDebug.state == NAV_SUPERVISOR_STATE_CANCELLED;
-        break;
-    case Mode1MissionState::SearchSpecials:
-        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_SEARCH_SPECIALS;
-        break;
-    case Mode1MissionState::FoundRequiredSpecialsWaitActionDone:
-        stateMatches = supervisorDebug.state
-            == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE;
-        break;
-    case Mode1MissionState::ReturnToStartPlan:
-        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN;
-        break;
-    case Mode1MissionState::ReturnToStartExecute:
-        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE;
-        break;
-    case Mode1MissionState::Done:
-        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_DONE;
-        break;
-    case Mode1MissionState::Error:
-        stateMatches = supervisorDebug.state == NAV_SUPERVISOR_STATE_ERROR;
-        break;
-    }
-
-    bool doneReasonMatches = true;
-    if (mode1MissionDoneReason == Mode1MissionDoneReason::Cancelled) {
-        doneReasonMatches =
-            supervisorDebug.done_reason == NAV_SUPERVISOR_DONE_REASON_CANCELLED;
-    } else if (mode1MissionDoneReason == Mode1MissionDoneReason::FoundRequiredSpecialsAndReturned) {
-        doneReasonMatches = supervisorDebug.done_reason
-            == NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED;
-    } else if (mode1MissionDoneReason == Mode1MissionDoneReason::NoFrontierBeforeRequiredSpecials) {
-        doneReasonMatches = supervisorDebug.done_reason
-            == NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS;
-    } else if (mode1MissionDoneReason == Mode1MissionDoneReason::None) {
-        doneReasonMatches =
-            supervisorDebug.done_reason == NAV_SUPERVISOR_DONE_REASON_NONE;
-    }
-
-    return stateMatches
-        && doneReasonMatches
-        && supervisorDebug.found_special_count == mode1FoundSpecialCount
-        && supervisorDebug.required_specials_reached == mode1RequiredSpecialsReached
-        && supervisorDebug.return_requested == mode1ReturnRequested;
 }
 
 void MainWindow::syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapshot &debug)
@@ -5320,9 +5268,6 @@ void MainWindow::syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapsh
     }
 
     mode1FoundSpecialCount = debug.found_special_count;
-    mode1RequiredSpecialsReached = debug.required_specials_reached;
-    mode1ReturnRequested = debug.return_requested;
-    mode1NavReadyForReturn = !debug.waiting_action_done;
 }
 
 void MainWindow::applyNavSupervisorOutput(const NavSupervisorOutput &output)
@@ -5420,13 +5365,13 @@ void MainWindow::updateNavSupervisor(bool smartNoFrontier)
     input.start_cell_y = mode1StartCellY;
     input.start_dir = static_cast<int8_t>(mode1StartDir);
 
-    nav_supervisor_update(&input, &supervisorShadowOutput);
-    applyNavSupervisorOutput(supervisorShadowOutput);
+    nav_supervisor_update(&input, &supervisorLastOutput);
+    applyNavSupervisorOutput(supervisorLastOutput);
 
     NavSupervisorDebugSnapshot supervisorDebug = {};
     nav_supervisor_get_debug(&supervisorDebug);
     syncMode1TelemetryFromSupervisor(supervisorDebug);
-    supervisorShadowMatchesMainWindow = mode1MissionEnabled;
+    supervisorActiveAsSource = mode1MissionEnabled;
 }
 
 bool MainWindow::advanceMode1MissionIfNeeded()
@@ -5440,12 +5385,16 @@ bool MainWindow::advanceMode1MissionIfNeeded()
         nav_core_set_policy(NAV_POLICY_SMART_RECOGNITION);
     }
 
-    return supervisorShadowOutput.block_smart_actions
-        || mode1MissionState == Mode1MissionState::FoundRequiredSpecialsWaitActionDone
-        || mode1MissionState == Mode1MissionState::ReturnToStartPlan
-        || mode1MissionState == Mode1MissionState::ReturnToStartExecute
-        || mode1MissionState == Mode1MissionState::Done
-        || mode1MissionState == Mode1MissionState::Error;
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    return supervisorLastOutput.block_smart_actions
+        || supervisorDebug.state
+            == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_DONE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_ERROR
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_CANCELLED;
 }
 
 void MainWindow::cancelPlanCompositeAction()
@@ -5748,12 +5697,7 @@ void MainWindow::toggleBasicNavAutonomy()
     }
     if (basicNavAutonomyEnabled) {
         if (mode1MissionEnabled) {
-            mode1MissionState = Mode1MissionState::SearchSpecials;
-            mode1MissionDoneReason = Mode1MissionDoneReason::None;
-            mode1RequiredSpecialsReached = false;
-            mode1ReturnRequested = false;
             mode1PlanCancelledAfterRequiredFound = false;
-            mode1NavReadyForReturn = false;
             mode1PlanWasActiveWhenRequiredFound = false;
             mode1SearchCompleteLatchedAtCount = 0;
             mode1PlanQueueCountWhenRequiredFound = 0;
@@ -5927,8 +5871,10 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         }
         if (frontierStatus == NAV_ROUTE_STATUS_NO_FRONTIER) {
             ++smartNoFrontierCount;
+            NavSupervisorDebugSnapshot supervisorDebug = {};
+            nav_supervisor_get_debug(&supervisorDebug);
             if (mode1MissionEnabled
-                && mode1MissionState == Mode1MissionState::SearchSpecials) {
+                && supervisorDebug.state == NAV_SUPERVISOR_STATE_SEARCH_SPECIALS) {
                 updateNavSupervisor(true);
             }
             setBasicNavAutonomyEnabled(false);
@@ -6000,12 +5946,7 @@ void MainWindow::resetRobotPoseToWorldStart()
     resetNavigationYawReference();
     initializeNavMapFromWorldStart();
     if (mode1MissionEnabled) {
-        mode1MissionState = Mode1MissionState::SearchSpecials;
-        mode1MissionDoneReason = Mode1MissionDoneReason::None;
-        mode1RequiredSpecialsReached = false;
-        mode1ReturnRequested = false;
         mode1PlanCancelledAfterRequiredFound = false;
-        mode1NavReadyForReturn = false;
         mode1PlanWasActiveWhenRequiredFound = false;
         mode1SearchCompleteLatchedAtCount = 0;
         mode1PlanQueueCountWhenRequiredFound = 0;
@@ -6580,8 +6521,10 @@ void MainWindow::showControlTuningDialog()
         wallCautionKdSpin->setValue(wallCautionConfig.kd_pwm_per_mm_per_tick);
         wallCautionLimitSpin->setValue(wallCautionConfig.correction_limit_pwm);
 
-        mode1MissionEnabledCheck->setChecked(mode1MissionEnabled);
-        mode1RequiredSpecialCountSpin->setValue(static_cast<int>(mode1RequiredSpecialCount));
+        const NavSupervisorConfig supervisorConfig = nav_supervisor_get_config();
+        mode1MissionEnabledCheck->setChecked(supervisorConfig.mission_enabled);
+        mode1RequiredSpecialCountSpin->setValue(
+            static_cast<int>(supervisorConfig.required_special_count));
     };
 
     const auto applyValues = [&]() {
