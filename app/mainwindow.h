@@ -286,9 +286,12 @@ private:
     void createFloorSensorItems();
     void updateRobotVisualOnly();
     void updateRobotGraphics();
-    void updateIrSensors();
-    void updateFloorSensors();
-    void updateNavCorePipeline();
+    void updateIrSensors(bool updateGraphics = true);
+    void updateFloorSensors(bool updateGraphics = true);
+    void updateNavCorePipeline(bool updateOverlay = true);
+    void simulationTimerTick();
+    void simulationLogicalTick(bool updateVisualsAndTelemetry);
+    void updateSimulationVisualsAndTelemetry();
     void simulationStep();
     void togglePerformanceDebug();
     void resetPerformanceStats();
@@ -317,6 +320,8 @@ private:
     void finishMode1BatchRunner(Mode1BatchRunnerState state,
                                 Mode1BatchRunnerReason reason);
     void restoreMode1BatchRunnerConfig();
+    bool mode1BatchRunnerIsActive() const;
+    bool batchFastModeActive() const;
     void resetNavigationAutocheckForMap();
     void advanceNavigationAutocheckIfNeeded();
     NavigationAutocheckSnapshot buildNavigationAutocheckSnapshot() const;
@@ -756,6 +761,11 @@ private:
     QLabel *batchRunnerResultsJsonPathValueLabel = nullptr;
     QLabel *batchRunnerExportOkValueLabel = nullptr;
     QLabel *batchRunnerExportErrorValueLabel = nullptr;
+    QLabel *batchFastModeEnabledValueLabel = nullptr;
+    QLabel *batchFastTicksPerUiUpdateValueLabel = nullptr;
+    QLabel *batchFastActiveValueLabel = nullptr;
+    QLabel *batchFastTicksExecutedLastTimerValueLabel = nullptr;
+    QLabel *batchFastUiFlushCountValueLabel = nullptr;
     QLabel *autocheckEnabledValueLabel = nullptr;
     QLabel *autocheckStateValueLabel = nullptr;
     QLabel *autocheckFailureCountValueLabel = nullptr;
@@ -1039,6 +1049,10 @@ private:
     QString batchRunnerResultsJsonPath;
     bool batchRunnerExportOk = false;
     QString batchRunnerExportError;
+    bool batchFastModeEnabled = false;
+    uint16_t batchFastTicksPerUiUpdate = 10;
+    uint16_t batchFastTicksExecutedLastTimer = 0;
+    uint32_t batchFastUiFlushCount = 0;
     bool batchRunnerSavedConfigValid = false;
     bool batchRunnerSavedMissionEnabled = true;
     uint16_t batchRunnerSavedRequiredSpecialCount = 3;

@@ -6,6 +6,10 @@
     "pass_count": 8,
     "results": [
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -20,6 +24,10 @@
             "ticks": 5480
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -34,6 +42,10 @@
             "ticks": 4458
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -48,6 +60,10 @@
             "ticks": 8343
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -62,6 +78,10 @@
             "ticks": 4920
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -76,6 +96,10 @@
             "ticks": 4532
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -90,6 +114,10 @@
             "ticks": 4759
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -104,6 +132,10 @@
             "ticks": 2645
         },
         {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
             "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
             "final_mission_state": "DONE",
             "found_specials": 3,
@@ -120,6 +152,6 @@
     ],
     "runner": "mode1_batch",
     "timeout_count": 0,
-    "timestamp": "2026-05-16T18:12:08",
+    "timestamp": "2026-05-16T20:13:44",
     "total_maps": 8
 }

@@ -1515,7 +1515,7 @@ MainWindow::MainWindow(QWidget *parent)
     perfElapsedTimer.start();
     simulationTimer = new QTimer(this);
     simulationTimer->setInterval(kSimulationIntervalMs);
-    connect(simulationTimer, &QTimer::timeout, this, &MainWindow::simulationStep);
+    connect(simulationTimer, &QTimer::timeout, this, &MainWindow::simulationTimerTick);
 
     initializeIrSensors();
     initializeFloorSensors();
@@ -2773,6 +2773,11 @@ void MainWindow::createTelemetryPanel()
     batchRunnerResultsJsonPathValueLabel = new QLabel(panel);
     batchRunnerExportOkValueLabel = new QLabel(panel);
     batchRunnerExportErrorValueLabel = new QLabel(panel);
+    batchFastModeEnabledValueLabel = new QLabel(panel);
+    batchFastTicksPerUiUpdateValueLabel = new QLabel(panel);
+    batchFastActiveValueLabel = new QLabel(panel);
+    batchFastTicksExecutedLastTimerValueLabel = new QLabel(panel);
+    batchFastUiFlushCountValueLabel = new QLabel(panel);
     autocheckEnabledValueLabel = new QLabel(panel);
     autocheckStateValueLabel = new QLabel(panel);
     autocheckFailureCountValueLabel = new QLabel(panel);
@@ -3235,6 +3240,11 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(batchRunnerResultsJsonPathValueLabel);
     configureTelemetryValueLabel(batchRunnerExportOkValueLabel);
     configureTelemetryValueLabel(batchRunnerExportErrorValueLabel);
+    configureTelemetryValueLabel(batchFastModeEnabledValueLabel);
+    configureTelemetryValueLabel(batchFastTicksPerUiUpdateValueLabel);
+    configureTelemetryValueLabel(batchFastActiveValueLabel);
+    configureTelemetryValueLabel(batchFastTicksExecutedLastTimerValueLabel);
+    configureTelemetryValueLabel(batchFastUiFlushCountValueLabel);
     configureTelemetryValueLabel(autocheckEnabledValueLabel);
     configureTelemetryValueLabel(autocheckStateValueLabel);
     configureTelemetryValueLabel(autocheckFailureCountValueLabel);
@@ -3820,6 +3830,14 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("batch_runner_results_json_path:", batchRunnerResultsJsonPathValueLabel);
     layout->addRow("batch_runner_export_ok:", batchRunnerExportOkValueLabel);
     layout->addRow("batch_runner_export_error:", batchRunnerExportErrorValueLabel);
+    auto *batchFastTitle = new QLabel("<b>Batch fast mode</b>", panel);
+    layout->addRow(batchFastTitle);
+    layout->addRow("batch_fast_mode_enabled:", batchFastModeEnabledValueLabel);
+    layout->addRow("batch_fast_ticks_per_ui_update:", batchFastTicksPerUiUpdateValueLabel);
+    layout->addRow("batch_fast_active:", batchFastActiveValueLabel);
+    layout->addRow("batch_fast_ticks_executed_last_timer:",
+                   batchFastTicksExecutedLastTimerValueLabel);
+    layout->addRow("batch_fast_ui_flush_count:", batchFastUiFlushCountValueLabel);
     auto *autocheckTitle = new QLabel("<b>Navigation autocheck</b>", panel);
     layout->addRow(autocheckTitle);
     layout->addRow("autocheck_enabled:", autocheckEnabledValueLabel);
@@ -4060,6 +4078,8 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("batch_runner_fail_count", batchRunnerFailCountValueLabel);
     addPinnedRow("batch_runner_export_ok", batchRunnerExportOkValueLabel);
     addPinnedRow("batch_runner_results_csv_path", batchRunnerResultsCsvPathValueLabel);
+    addPinnedRow("batch_fast_active", batchFastActiveValueLabel);
+    addPinnedRow("batch_fast_ticks_per_ui_update", batchFastTicksPerUiUpdateValueLabel);
     addPinnedRow("autocheck_failure_count", autocheckFailureCountValueLabel);
     addPinnedRow("autocheck_last_failure", autocheckLastFailureValueLabel);
     addPinnedRow("autocheck_active_pending_count", autocheckActivePendingCountValueLabel);
@@ -5683,6 +5703,23 @@ void MainWindow::updateTelemetryPanel()
     if (batchRunnerExportErrorValueLabel) {
         batchRunnerExportErrorValueLabel->setText(
             batchRunnerExportError.isEmpty() ? "none" : batchRunnerExportError);
+    }
+    if (batchFastModeEnabledValueLabel) {
+        batchFastModeEnabledValueLabel->setText(batchFastModeEnabled ? "true" : "false");
+    }
+    if (batchFastTicksPerUiUpdateValueLabel) {
+        batchFastTicksPerUiUpdateValueLabel->setText(
+            QString::number(batchFastTicksPerUiUpdate));
+    }
+    if (batchFastActiveValueLabel) {
+        batchFastActiveValueLabel->setText(batchFastModeActive() ? "true" : "false");
+    }
+    if (batchFastTicksExecutedLastTimerValueLabel) {
+        batchFastTicksExecutedLastTimerValueLabel->setText(
+            QString::number(batchFastTicksExecutedLastTimer));
+    }
+    if (batchFastUiFlushCountValueLabel) {
+        batchFastUiFlushCountValueLabel->setText(QString::number(batchFastUiFlushCount));
     }
     if (autocheckEnabledValueLabel) {
         autocheckEnabledValueLabel->setText(navigationAutocheckEnabled ? "true" : "false");
@@ -7664,6 +7701,11 @@ void MainWindow::showControlTuningDialog()
     auto *mode1MissionEnabledCheck = new QCheckBox(mode1MissionGroup);
     auto *mode1RequiredSpecialCountSpin = new QSpinBox(mode1MissionGroup);
 
+    auto *batchRunnerGroup = new QGroupBox("Batch runner", &dialog);
+    auto *batchRunnerLayout = new QFormLayout(batchRunnerGroup);
+    auto *batchFastModeEnabledCheck = new QCheckBox(batchRunnerGroup);
+    auto *batchFastTicksPerUiUpdateSpin = new QSpinBox(batchRunnerGroup);
+
     const auto configureGainSpin = [](QDoubleSpinBox *spin) {
         spin->setRange(0.0, 600.0);
         spin->setDecimals(4);
@@ -7716,6 +7758,8 @@ void MainWindow::showControlTuningDialog()
     wallCautionLimitSpin->setRange(0, kWallCorrectionLimitPwmMax);
     wallCautionLimitSpin->setSingleStep(50);
     mode1RequiredSpecialCountSpin->setRange(1, 16);
+    batchFastTicksPerUiUpdateSpin->setRange(1, 50);
+    batchFastTicksPerUiUpdateSpin->setSingleStep(1);
 
     turnLayout->addRow("Kp:", turnKpSpin);
     turnLayout->addRow("Ki:", turnKiSpin);
@@ -7755,6 +7799,9 @@ void MainWindow::showControlTuningDialog()
     wallCautionLayout->addRow("correction_limit_pwm:", wallCautionLimitSpin);
     mode1MissionLayout->addRow("mode1_mission_enabled:", mode1MissionEnabledCheck);
     mode1MissionLayout->addRow("required_special_count:", mode1RequiredSpecialCountSpin);
+    batchRunnerLayout->addRow("batch_fast_mode_enabled:", batchFastModeEnabledCheck);
+    batchRunnerLayout->addRow("batch_fast_ticks_per_ui_update:",
+                              batchFastTicksPerUiUpdateSpin);
 
     scrollLayout->addWidget(turnGroup);
     scrollLayout->addWidget(advanceYawGroup);
@@ -7762,6 +7809,7 @@ void MainWindow::showControlTuningDialog()
     scrollLayout->addWidget(diagGroup);
     scrollLayout->addWidget(wallCautionGroup);
     scrollLayout->addWidget(mode1MissionGroup);
+    scrollLayout->addWidget(batchRunnerGroup);
     scrollLayout->addStretch(1);
     scrollArea->setWidget(scrollContent);
     rootLayout->addWidget(scrollArea, 1);
@@ -7833,6 +7881,8 @@ void MainWindow::showControlTuningDialog()
         mode1MissionEnabledCheck->setChecked(supervisorConfig.mission_enabled);
         mode1RequiredSpecialCountSpin->setValue(
             static_cast<int>(supervisorConfig.required_special_count));
+        batchFastModeEnabledCheck->setChecked(batchFastModeEnabled);
+        batchFastTicksPerUiUpdateSpin->setValue(static_cast<int>(batchFastTicksPerUiUpdate));
     };
 
     const auto applyValues = [&]() {
@@ -7899,6 +7949,9 @@ void MainWindow::showControlTuningDialog()
         mode1RequiredSpecialCount =
             static_cast<uint16_t>(mode1RequiredSpecialCountSpin->value());
         setMode1MissionEnabled(mode1MissionEnabledCheck->isChecked());
+        batchFastModeEnabled = batchFastModeEnabledCheck->isChecked();
+        batchFastTicksPerUiUpdate =
+            static_cast<uint16_t>(batchFastTicksPerUiUpdateSpin->value());
         updateTelemetryPanel();
     };
 
@@ -7912,6 +7965,8 @@ void MainWindow::showControlTuningDialog()
         nav_core_reset_wall_caution_defaults();
         mode1RequiredSpecialCount = 3;
         setMode1MissionEnabled(true);
+        batchFastModeEnabled = false;
+        batchFastTicksPerUiUpdate = 10;
         loadCurrentValues();
         updateTelemetryPanel();
     });
@@ -8053,20 +8108,20 @@ void MainWindow::updateRobotVisualOnly()
 void MainWindow::updateRobotGraphics()
 {
     updateRobotVisualOnly();
-    updateIrSensors();
-    updateFloorSensors();
-    updateNavCorePipeline();
+    updateIrSensors(true);
+    updateFloorSensors(true);
+    updateNavCorePipeline(true);
     updateTelemetryPanel();
 }
 
-void MainWindow::updateIrSensors()
+void MainWindow::updateIrSensors(bool updateGraphics)
 {
     QElapsedTimer timer;
     if (performanceDebugEnabled) {
         timer.start();
     }
     for (IrSensor &sensor : irSensors) {
-        if (!sensor.ray_item || !sensor.hit_item) {
+        if (updateGraphics && (!sensor.ray_item || !sensor.hit_item)) {
             continue;
         }
 
@@ -8080,23 +8135,25 @@ void MainWindow::updateIrSensors()
                                              sensorAngleDeg,
                                              sensor.max_distance_mm);
         sensor.last_distance_mm = hit.hit ? hit.distance_mm : sensor.max_distance_mm;
-        sensor.ray_item->setLine(originX, originY, hit.hit_x_mm, hit.hit_y_mm);
-        sensor.hit_item->setPos(hit.hit_x_mm, hit.hit_y_mm);
-        sensor.hit_item->setVisible(hit.hit);
+        if (updateGraphics && sensor.ray_item && sensor.hit_item) {
+            sensor.ray_item->setLine(originX, originY, hit.hit_x_mm, hit.hit_y_mm);
+            sensor.hit_item->setPos(hit.hit_x_mm, hit.hit_y_mm);
+            sensor.hit_item->setVisible(hit.hit);
+        }
     }
     if (performanceDebugEnabled) {
         perfSensorUpdateMs += timer.nsecsElapsed() / 1000000.0;
     }
 }
 
-void MainWindow::updateFloorSensors()
+void MainWindow::updateFloorSensors(bool updateGraphics)
 {
     QElapsedTimer timer;
     if (performanceDebugEnabled) {
         timer.start();
     }
     for (FloorSensor &sensor : floorSensors) {
-        if (!sensor.marker_item) {
+        if (updateGraphics && !sensor.marker_item) {
             continue;
         }
 
@@ -8106,15 +8163,17 @@ void MainWindow::updateFloorSensors()
 
         sensor.is_black = world.isBlackTapeAt(sensorX, sensorY);
         sensor.debug_kind = world.debugTapeKindAt(sensorX, sensorY);
-        sensor.marker_item->setPos(sensorX, sensorY);
-        sensor.marker_item->setBrush(sensor.is_black ? QBrush(Qt::black) : QBrush(Qt::white));
+        if (updateGraphics && sensor.marker_item) {
+            sensor.marker_item->setPos(sensorX, sensorY);
+            sensor.marker_item->setBrush(sensor.is_black ? QBrush(Qt::black) : QBrush(Qt::white));
+        }
     }
     if (performanceDebugEnabled) {
         perfSensorUpdateMs += timer.nsecsElapsed() / 1000000.0;
     }
 }
 
-void MainWindow::updateNavCorePipeline()
+void MainWindow::updateNavCorePipeline(bool updateOverlay)
 {
     RobotSensors sensors = buildRobotSensorsSnapshot();
     QElapsedTimer timer;
@@ -8125,7 +8184,90 @@ void MainWindow::updateNavCorePipeline()
     if (performanceDebugEnabled) {
         perfNavUpdateMs += timer.nsecsElapsed() / 1000000.0;
     }
+    if (updateOverlay) {
+        updateShadowMapOverlay();
+    }
+}
+
+void MainWindow::updateSimulationVisualsAndTelemetry()
+{
+    updateRobotVisualOnly();
+    updateIrSensors(true);
+    updateFloorSensors(true);
     updateShadowMapOverlay();
+    updateTelemetryPanel();
+}
+
+void MainWindow::simulationLogicalTick(bool updateVisualsAndTelemetry)
+{
+    ++simulationStepCount;
+    simulationTimeS += kSimulationDtS;
+
+    advanceTestSequenceIfNeeded();
+    advanceCenterPivotSequenceIfNeeded();
+    advancePlanExecutionIfNeeded();
+    updateIrSensors(updateVisualsAndTelemetry);
+    updateFloorSensors(updateVisualsAndTelemetry);
+    updateNavCorePipeline(updateVisualsAndTelemetry);
+    advanceTestSequenceIfNeeded();
+    advanceCenterPivotSequenceIfNeeded();
+    advancePlanExecutionIfNeeded();
+    advanceBasicNavAutonomyIfNeeded();
+    advanceMode1TestRunnerIfNeeded();
+    advanceMode1BatchRunnerIfNeeded();
+
+    if (autoModeEnabled) {
+        const RobotCommand command = motorTestModeEnabled ? motorTestCommand : lastNavCommand;
+        robot.applyDifferentialDrive(command.left_motor_pwm,
+                                     command.right_motor_pwm,
+                                     kSimulationDtS);
+        updateIrSensors(updateVisualsAndTelemetry);
+        updateFloorSensors(updateVisualsAndTelemetry);
+    }
+
+    if (updateVisualsAndTelemetry) {
+        updateSimulationVisualsAndTelemetry();
+    }
+}
+
+void MainWindow::simulationTimerTick()
+{
+    if (!batchFastModeActive()) {
+        simulationStep();
+        return;
+    }
+
+    QElapsedTimer stepTimer;
+    if (performanceDebugEnabled) {
+        stepTimer.start();
+        perfNavUpdateMs = 0.0;
+        perfSensorUpdateMs = 0.0;
+        perfVisualUpdateMs = 0.0;
+        perfOverlayUpdateMs = 0.0;
+    }
+
+    batchFastTicksExecutedLastTimer = 0;
+    const uint16_t ticksToRun = std::clamp<uint16_t>(batchFastTicksPerUiUpdate, 1, 50);
+    for (uint16_t i = 0; i < ticksToRun; ++i) {
+        simulationLogicalTick(false);
+        ++batchFastTicksExecutedLastTimer;
+
+        const bool testTerminal =
+            testRunnerState == Mode1TestRunnerState::Pass
+            || testRunnerState == Mode1TestRunnerState::Fail
+            || testRunnerState == Mode1TestRunnerState::Timeout
+            || testRunnerState == Mode1TestRunnerState::Cancelled;
+        if (!batchFastModeActive() || testTerminal) {
+            break;
+        }
+    }
+
+    ++batchFastUiFlushCount;
+    updateSimulationVisualsAndTelemetry();
+
+    if (performanceDebugEnabled) {
+        recordPerformanceStep(stepTimer.nsecsElapsed() / 1000000.0);
+    }
 }
 
 void MainWindow::simulationStep()
@@ -8139,33 +8281,8 @@ void MainWindow::simulationStep()
         perfOverlayUpdateMs = 0.0;
     }
 
-    ++simulationStepCount;
-    simulationTimeS += kSimulationDtS;
-
-    advanceTestSequenceIfNeeded();
-    advanceCenterPivotSequenceIfNeeded();
-    advancePlanExecutionIfNeeded();
-    updateIrSensors();
-    updateFloorSensors();
-    updateNavCorePipeline();
-    advanceTestSequenceIfNeeded();
-    advanceCenterPivotSequenceIfNeeded();
-    advancePlanExecutionIfNeeded();
-    advanceBasicNavAutonomyIfNeeded();
-    advanceMode1TestRunnerIfNeeded();
-    advanceMode1BatchRunnerIfNeeded();
-
-    if (autoModeEnabled) {
-        const RobotCommand command = motorTestModeEnabled ? motorTestCommand : lastNavCommand;
-        robot.applyDifferentialDrive(command.left_motor_pwm,
-                                     command.right_motor_pwm,
-                                     kSimulationDtS);
-        updateRobotVisualOnly();
-        updateIrSensors();
-        updateFloorSensors();
-    }
-
-    updateTelemetryPanel();
+    batchFastTicksExecutedLastTimer = 1;
+    simulationLogicalTick(true);
 
     if (performanceDebugEnabled) {
         recordPerformanceStep(stepTimer.nsecsElapsed() / 1000000.0);
@@ -8724,14 +8841,24 @@ void MainWindow::restoreMode1TestRunnerConfig()
     testRunnerSavedConfigValid = false;
 }
 
-void MainWindow::toggleMode1BatchRunner()
+bool MainWindow::mode1BatchRunnerIsActive() const
 {
-    if (batchRunnerState == Mode1BatchRunnerState::DiscoverMaps
+    return batchRunnerState == Mode1BatchRunnerState::DiscoverMaps
         || batchRunnerState == Mode1BatchRunnerState::LoadMap
         || batchRunnerState == Mode1BatchRunnerState::StartMapTest
         || batchRunnerState == Mode1BatchRunnerState::RunningMap
         || batchRunnerState == Mode1BatchRunnerState::RecordResult
-        || batchRunnerState == Mode1BatchRunnerState::NextMap) {
+        || batchRunnerState == Mode1BatchRunnerState::NextMap;
+}
+
+bool MainWindow::batchFastModeActive() const
+{
+    return batchFastModeEnabled && mode1BatchRunnerIsActive();
+}
+
+void MainWindow::toggleMode1BatchRunner()
+{
+    if (mode1BatchRunnerIsActive()) {
         cancelMode1BatchRunner(Mode1BatchRunnerReason::ManualCancelled);
         return;
     }
@@ -8762,6 +8889,8 @@ void MainWindow::startMode1BatchRunner()
     batchRunnerResultsJsonPath.clear();
     batchRunnerExportOk = false;
     batchRunnerExportError.clear();
+    batchFastTicksExecutedLastTimer = 0;
+    batchFastUiFlushCount = 0;
 
     setSimulationRunning(false);
     setBasicNavAutonomyEnabled(false);
