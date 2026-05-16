@@ -13,11 +13,13 @@
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFormLayout>
 #include <QFont>
 #include <QFontDatabase>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGraphicsEllipseItem>
@@ -32,6 +34,9 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -43,6 +48,7 @@
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStringList>
+#include <QTextStream>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -79,6 +85,16 @@ constexpr TestSequenceStep kTestSequence[kTestSequenceLength] = {
     TestSequenceStep::SmoothTurnLeft,
     TestSequenceStep::AdvanceUntilRearBlack
 };
+
+QString csvEscaped(QString value)
+{
+    const bool needsQuotes = value.contains(',')
+        || value.contains('"')
+        || value.contains('\n')
+        || value.contains('\r');
+    value.replace("\"", "\"\"");
+    return needsQuotes ? QString("\"%1\"").arg(value) : value;
+}
 
 uint8_t mapWallBit(NavMapDirection dir)
 {
@@ -2702,6 +2718,10 @@ void MainWindow::createTelemetryPanel()
     batchRunnerLastResultValueLabel = new QLabel(panel);
     batchRunnerLastReasonValueLabel = new QLabel(panel);
     batchRunnerSummaryValueLabel = new QLabel(panel);
+    batchRunnerResultsCsvPathValueLabel = new QLabel(panel);
+    batchRunnerResultsJsonPathValueLabel = new QLabel(panel);
+    batchRunnerExportOkValueLabel = new QLabel(panel);
+    batchRunnerExportErrorValueLabel = new QLabel(panel);
     supervisorStateValueLabel = new QLabel(panel);
     supervisorDoneReasonValueLabel = new QLabel(panel);
     supervisorRequiredSpecialsReachedValueLabel = new QLabel(panel);
@@ -3153,6 +3173,10 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(batchRunnerLastResultValueLabel);
     configureTelemetryValueLabel(batchRunnerLastReasonValueLabel);
     configureTelemetryValueLabel(batchRunnerSummaryValueLabel);
+    configureTelemetryValueLabel(batchRunnerResultsCsvPathValueLabel);
+    configureTelemetryValueLabel(batchRunnerResultsJsonPathValueLabel);
+    configureTelemetryValueLabel(batchRunnerExportOkValueLabel);
+    configureTelemetryValueLabel(batchRunnerExportErrorValueLabel);
     configureTelemetryValueLabel(supervisorStateValueLabel);
     configureTelemetryValueLabel(supervisorDoneReasonValueLabel);
     configureTelemetryValueLabel(supervisorRequiredSpecialsReachedValueLabel);
@@ -3727,6 +3751,10 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("batch_runner_last_result:", batchRunnerLastResultValueLabel);
     layout->addRow("batch_runner_last_reason:", batchRunnerLastReasonValueLabel);
     layout->addRow("batch_runner_summary:", batchRunnerSummaryValueLabel);
+    layout->addRow("batch_runner_results_csv_path:", batchRunnerResultsCsvPathValueLabel);
+    layout->addRow("batch_runner_results_json_path:", batchRunnerResultsJsonPathValueLabel);
+    layout->addRow("batch_runner_export_ok:", batchRunnerExportOkValueLabel);
+    layout->addRow("batch_runner_export_error:", batchRunnerExportErrorValueLabel);
     layout->addRow("supervisor_state:", supervisorStateValueLabel);
     layout->addRow("supervisor_done_reason:", supervisorDoneReasonValueLabel);
     layout->addRow("supervisor_required_specials_reached:",
@@ -3956,6 +3984,8 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("batch_runner_current_map", batchRunnerCurrentMapValueLabel);
     addPinnedRow("batch_runner_pass_count", batchRunnerPassCountValueLabel);
     addPinnedRow("batch_runner_fail_count", batchRunnerFailCountValueLabel);
+    addPinnedRow("batch_runner_export_ok", batchRunnerExportOkValueLabel);
+    addPinnedRow("batch_runner_results_csv_path", batchRunnerResultsCsvPathValueLabel);
     addPinnedRow("supervisor_state", supervisorStateValueLabel);
     addPinnedRow("supervisor_active_as_source",
                  supervisorActiveAsSourceValueLabel);
@@ -5561,6 +5591,21 @@ void MainWindow::updateTelemetryPanel()
                 .arg(batchRunnerTimeoutCount)
                 .arg(batchRunnerCancelledCount)
                 .arg(batchRunnerMapPaths.size()));
+    }
+    if (batchRunnerResultsCsvPathValueLabel) {
+        batchRunnerResultsCsvPathValueLabel->setText(
+            batchRunnerResultsCsvPath.isEmpty() ? "none" : batchRunnerResultsCsvPath);
+    }
+    if (batchRunnerResultsJsonPathValueLabel) {
+        batchRunnerResultsJsonPathValueLabel->setText(
+            batchRunnerResultsJsonPath.isEmpty() ? "none" : batchRunnerResultsJsonPath);
+    }
+    if (batchRunnerExportOkValueLabel) {
+        batchRunnerExportOkValueLabel->setText(batchRunnerExportOk ? "true" : "false");
+    }
+    if (batchRunnerExportErrorValueLabel) {
+        batchRunnerExportErrorValueLabel->setText(
+            batchRunnerExportError.isEmpty() ? "none" : batchRunnerExportError);
     }
     if (supervisorStateValueLabel) {
         supervisorStateValueLabel->setText(supervisorStateText(supervisorDebug.state));
@@ -8339,6 +8384,10 @@ void MainWindow::startMode1BatchRunner()
     batchRunnerCancelledCount = 0;
     batchRunnerLastResult = Mode1TestRunnerState::Idle;
     batchRunnerLastReason = Mode1TestRunnerReason::None;
+    batchRunnerResultsCsvPath.clear();
+    batchRunnerResultsJsonPath.clear();
+    batchRunnerExportOk = false;
+    batchRunnerExportError.clear();
 
     setSimulationRunning(false);
     setBasicNavAutonomyEnabled(false);
@@ -8481,6 +8530,31 @@ QString MainWindow::mode1BatchTestMapsDirPath() const
     return QString();
 }
 
+QString MainWindow::mode1BatchResultsDirPath() const
+{
+    const QString relative = QStringLiteral("data/test_results");
+    const QString sourcePath =
+        QDir(QStringLiteral(SIM_AUTITO_SOURCE_DIR)).filePath(relative);
+    QDir sourceDir(sourcePath);
+    if (sourceDir.exists() || sourceDir.mkpath(QStringLiteral("."))) {
+        return sourcePath;
+    }
+
+    const QString appPath = QDir(QCoreApplication::applicationDirPath()).filePath(relative);
+    QDir appDir(appPath);
+    if (appDir.exists() || appDir.mkpath(QStringLiteral("."))) {
+        return appPath;
+    }
+
+    const QString cwdPath = QDir(QDir::currentPath()).filePath(relative);
+    QDir cwdDir(cwdPath);
+    if (cwdDir.exists() || cwdDir.mkpath(QStringLiteral("."))) {
+        return cwdPath;
+    }
+
+    return QString();
+}
+
 bool MainWindow::loadCurrentMode1BatchMap()
 {
     if (batchRunnerCurrentIndex < 0
@@ -8538,6 +8612,112 @@ void MainWindow::recordCurrentMode1BatchResult()
     }
 }
 
+bool MainWindow::writeMode1BatchCsv(const QString &path) const
+{
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return false;
+    }
+
+    QTextStream out(&file);
+    out << "index,map_name,map_path,result,reason,ticks,sim_time_s,found_specials,"
+           "required_specials,returned_to_start,final_mission_state,final_done_reason\n";
+    for (int i = 0; i < static_cast<int>(batchRunnerResults.size()); ++i) {
+        const Mode1BatchMapResult &result = batchRunnerResults.at(i);
+        out << (i + 1) << ','
+            << csvEscaped(result.mapName) << ','
+            << csvEscaped(result.mapPath) << ','
+            << csvEscaped(mode1TestRunnerStateText(result.result)) << ','
+            << csvEscaped(mode1TestRunnerReasonText(result.reason)) << ','
+            << result.ticks << ','
+            << QString::number(result.simTimeS, 'f', 2) << ','
+            << result.foundSpecials << ','
+            << result.requiredSpecials << ','
+            << (result.returnedToStart ? "true" : "false") << ','
+            << csvEscaped(mode1MissionStateText(result.finalMissionState)) << ','
+            << csvEscaped(mode1MissionDoneReasonText(result.finalDoneReason)) << '\n';
+    }
+    return file.error() == QFile::NoError;
+}
+
+bool MainWindow::writeMode1BatchJson(const QString &path) const
+{
+    QJsonObject root;
+    root.insert("runner", "mode1_batch");
+    root.insert("timestamp", QDateTime::currentDateTime().toString(Qt::ISODate));
+    root.insert("total_maps", static_cast<int>(batchRunnerMapPaths.size()));
+    root.insert("pass_count", static_cast<int>(batchRunnerPassCount));
+    root.insert("fail_count", static_cast<int>(batchRunnerFailCount));
+    root.insert("timeout_count", static_cast<int>(batchRunnerTimeoutCount));
+    root.insert("cancelled_count", static_cast<int>(batchRunnerCancelledCount));
+    root.insert("batch_state", mode1BatchRunnerStateText(batchRunnerState));
+    root.insert("batch_reason", mode1BatchRunnerReasonText(batchRunnerReason));
+
+    QJsonArray results;
+    for (int i = 0; i < static_cast<int>(batchRunnerResults.size()); ++i) {
+        const Mode1BatchMapResult &result = batchRunnerResults.at(i);
+        QJsonObject item;
+        item.insert("index", i + 1);
+        item.insert("map_name", result.mapName);
+        item.insert("map_path", result.mapPath);
+        item.insert("result", mode1TestRunnerStateText(result.result));
+        item.insert("reason", mode1TestRunnerReasonText(result.reason));
+        item.insert("ticks", static_cast<int>(result.ticks));
+        item.insert("sim_time_s", result.simTimeS);
+        item.insert("found_specials", static_cast<int>(result.foundSpecials));
+        item.insert("required_specials", static_cast<int>(result.requiredSpecials));
+        item.insert("returned_to_start", result.returnedToStart);
+        item.insert("final_mission_state", mode1MissionStateText(result.finalMissionState));
+        item.insert("final_done_reason", mode1MissionDoneReasonText(result.finalDoneReason));
+        results.append(item);
+    }
+    root.insert("results", results);
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return false;
+    }
+    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    return file.error() == QFile::NoError;
+}
+
+bool MainWindow::exportMode1BatchResults()
+{
+    batchRunnerResultsCsvPath.clear();
+    batchRunnerResultsJsonPath.clear();
+    batchRunnerExportOk = false;
+    batchRunnerExportError.clear();
+
+    if (batchRunnerResults.empty()) {
+        batchRunnerExportError = "no results";
+        return false;
+    }
+
+    const QString dirPath = mode1BatchResultsDirPath();
+    if (dirPath.isEmpty()) {
+        batchRunnerExportError = "cannot create results dir";
+        return false;
+    }
+
+    const QString stamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    const QString csvPath = QDir(dirPath).filePath(QString("mode1_batch_%1.csv").arg(stamp));
+    const QString jsonPath = QDir(dirPath).filePath(QString("mode1_batch_%1.json").arg(stamp));
+
+    if (!writeMode1BatchCsv(csvPath)) {
+        batchRunnerExportError = "csv write failed";
+        return false;
+    }
+    if (!writeMode1BatchJson(jsonPath)) {
+        batchRunnerExportError = "json write failed";
+        return false;
+    }
+
+    batchRunnerResultsCsvPath = csvPath;
+    batchRunnerResultsJsonPath = jsonPath;
+    batchRunnerExportOk = true;
+    return true;
+}
+
 void MainWindow::finishMode1BatchRunner(Mode1BatchRunnerState state,
                                         Mode1BatchRunnerReason reason)
 {
@@ -8553,6 +8733,7 @@ void MainWindow::finishMode1BatchRunner(Mode1BatchRunnerState state,
     lastNavCommand = {0, 0};
     setSimulationRunning(false);
     restoreMode1BatchRunnerConfig();
+    exportMode1BatchResults();
     updateNavCorePipeline();
     updateTelemetryPanel();
 }

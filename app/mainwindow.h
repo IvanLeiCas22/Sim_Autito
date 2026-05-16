@@ -275,6 +275,10 @@ private:
     void advanceMode1BatchRunnerIfNeeded();
     bool discoverMode1BatchMaps();
     QString mode1BatchTestMapsDirPath() const;
+    QString mode1BatchResultsDirPath() const;
+    bool exportMode1BatchResults();
+    bool writeMode1BatchCsv(const QString &path) const;
+    bool writeMode1BatchJson(const QString &path) const;
     bool loadCurrentMode1BatchMap();
     void recordCurrentMode1BatchResult();
     void finishMode1BatchRunner(Mode1BatchRunnerState state,
@@ -702,6 +706,10 @@ private:
     QLabel *batchRunnerLastResultValueLabel = nullptr;
     QLabel *batchRunnerLastReasonValueLabel = nullptr;
     QLabel *batchRunnerSummaryValueLabel = nullptr;
+    QLabel *batchRunnerResultsCsvPathValueLabel = nullptr;
+    QLabel *batchRunnerResultsJsonPathValueLabel = nullptr;
+    QLabel *batchRunnerExportOkValueLabel = nullptr;
+    QLabel *batchRunnerExportErrorValueLabel = nullptr;
     QLabel *supervisorStateValueLabel = nullptr;
     QLabel *supervisorDoneReasonValueLabel = nullptr;
     QLabel *supervisorRequiredSpecialsReachedValueLabel = nullptr;
@@ -911,6 +919,10 @@ private:
     uint16_t batchRunnerCancelledCount = 0;
     Mode1TestRunnerState batchRunnerLastResult = Mode1TestRunnerState::Idle;
     Mode1TestRunnerReason batchRunnerLastReason = Mode1TestRunnerReason::None;
+    QString batchRunnerResultsCsvPath;
+    QString batchRunnerResultsJsonPath;
+    bool batchRunnerExportOk = false;
+    QString batchRunnerExportError;
     bool batchRunnerSavedConfigValid = false;
     bool batchRunnerSavedMissionEnabled = true;
     uint16_t batchRunnerSavedRequiredSpecialCount = 3;
