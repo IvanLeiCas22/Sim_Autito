@@ -1107,6 +1107,54 @@ QString mode1MissionDoneReasonText(MainWindow::Mode1MissionDoneReason reason)
     return "UNKNOWN";
 }
 
+QString mode1TestRunnerStateText(MainWindow::Mode1TestRunnerState state)
+{
+    switch (state) {
+    case MainWindow::Mode1TestRunnerState::Idle:
+        return "IDLE";
+    case MainWindow::Mode1TestRunnerState::Prepare:
+        return "PREPARE";
+    case MainWindow::Mode1TestRunnerState::Running:
+        return "RUNNING";
+    case MainWindow::Mode1TestRunnerState::Pass:
+        return "PASS";
+    case MainWindow::Mode1TestRunnerState::Fail:
+        return "FAIL";
+    case MainWindow::Mode1TestRunnerState::Timeout:
+        return "TIMEOUT";
+    case MainWindow::Mode1TestRunnerState::Cancelled:
+        return "CANCELLED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString mode1TestRunnerReasonText(MainWindow::Mode1TestRunnerReason reason)
+{
+    switch (reason) {
+    case MainWindow::Mode1TestRunnerReason::None:
+        return "NONE";
+    case MainWindow::Mode1TestRunnerReason::PassFoundRequiredSpecialsAndReturned:
+        return "PASS_FOUND_REQUIRED_SPECIALS_AND_RETURNED";
+    case MainWindow::Mode1TestRunnerReason::MissionError:
+        return "MISSION_ERROR";
+    case MainWindow::Mode1TestRunnerReason::DoneReasonNotSuccess:
+        return "DONE_REASON_NOT_SUCCESS";
+    case MainWindow::Mode1TestRunnerReason::Timeout:
+        return "TIMEOUT";
+    case MainWindow::Mode1TestRunnerReason::NotEnoughSpecials:
+        return "NOT_ENOUGH_SPECIALS";
+    case MainWindow::Mode1TestRunnerReason::NotAtStart:
+        return "NOT_AT_START";
+    case MainWindow::Mode1TestRunnerReason::ManualCancelled:
+        return "MANUAL_CANCELLED";
+    case MainWindow::Mode1TestRunnerReason::InvalidStart:
+        return "INVALID_START";
+    }
+
+    return "UNKNOWN";
+}
+
 QString supervisorStateText(NavSupervisorState state)
 {
     switch (state) {
@@ -1360,7 +1408,17 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robot.rotate(kManualRotateStepDeg);
         break;
     case Qt::Key_R:
-        resetRobotPoseToWorldStart();
+        if ((event->modifiers() & Qt::ShiftModifier) != 0) {
+            toggleMode1TestRunner();
+            updateTelemetryPanel();
+            robotPoseChanged = false;
+        } else {
+            if (testRunnerState == Mode1TestRunnerState::Prepare
+                || testRunnerState == Mode1TestRunnerState::Running) {
+                cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+            }
+            resetRobotPoseToWorldStart();
+        }
         break;
     case Qt::Key_Space:
         setSimulationRunning(!simulationRunning);
@@ -1488,18 +1546,27 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
-    case Qt::Key_X:
+    case Qt::Key_X: {
+        const bool testRunnerWasActive =
+            testRunnerState == Mode1TestRunnerState::Prepare
+            || testRunnerState == Mode1TestRunnerState::Running;
+        if (testRunnerWasActive) {
+            cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+        }
         cancelTestSequence();
         cancelCenterPivotSequence();
         cancelPlanExecution();
         cancelDeadEndRecovery();
-        cancelMode1Mission(Mode1MissionDoneReason::Cancelled);
+        if (!testRunnerWasActive) {
+            cancelMode1Mission(Mode1MissionDoneReason::Cancelled);
+        }
         setBasicNavAutonomyEnabled(false);
         nav_core_stop();
         updateNavCorePipeline();
         updateTelemetryPanel();
         robotPoseChanged = false;
         break;
+    }
     case Qt::Key_Q: {
         resetNavigationYawReferenceForSmoothStart();
         RobotSensors sensors = buildRobotSensorsSnapshot();
@@ -2104,6 +2171,7 @@ void MainWindow::createTelemetryPanel()
     auto *sequenceTitle = new QLabel("<b>Test sequence</b>", panel);
     auto *planTitle = new QLabel("<b>Planned action queue</b>", panel);
     auto *navAutonomyTitle = new QLabel("<b>Basic nav autonomy</b>", panel);
+    auto *mode1TestRunnerTitle = new QLabel("<b>Mode 1 test runner</b>", panel);
     auto *mapTitle = new QLabel("<b>Shadow logical map</b>", panel);
     auto *motorTestTitle = new QLabel("<b>Motor test command</b>", panel);
 
@@ -2492,6 +2560,16 @@ void MainWindow::createTelemetryPanel()
     mode1ReturnToStartActiveValueLabel = new QLabel(panel);
     mode1AtStartCellValueLabel = new QLabel(panel);
     mode1DoneReasonValueLabel = new QLabel(panel);
+    testRunnerStateValueLabel = new QLabel(panel);
+    testRunnerResultValueLabel = new QLabel(panel);
+    testRunnerReasonValueLabel = new QLabel(panel);
+    testRunnerTicksValueLabel = new QLabel(panel);
+    testRunnerSimTimeValueLabel = new QLabel(panel);
+    testRunnerFoundSpecialsValueLabel = new QLabel(panel);
+    testRunnerRequiredSpecialsValueLabel = new QLabel(panel);
+    testRunnerReturnedToStartValueLabel = new QLabel(panel);
+    testRunnerFinalMissionStateValueLabel = new QLabel(panel);
+    testRunnerFinalDoneReasonValueLabel = new QLabel(panel);
     supervisorStateValueLabel = new QLabel(panel);
     supervisorDoneReasonValueLabel = new QLabel(panel);
     supervisorRequiredSpecialsReachedValueLabel = new QLabel(panel);
@@ -2912,6 +2990,16 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mode1ReturnToStartActiveValueLabel);
     configureTelemetryValueLabel(mode1AtStartCellValueLabel);
     configureTelemetryValueLabel(mode1DoneReasonValueLabel);
+    configureTelemetryValueLabel(testRunnerStateValueLabel);
+    configureTelemetryValueLabel(testRunnerResultValueLabel);
+    configureTelemetryValueLabel(testRunnerReasonValueLabel);
+    configureTelemetryValueLabel(testRunnerTicksValueLabel);
+    configureTelemetryValueLabel(testRunnerSimTimeValueLabel);
+    configureTelemetryValueLabel(testRunnerFoundSpecialsValueLabel);
+    configureTelemetryValueLabel(testRunnerRequiredSpecialsValueLabel);
+    configureTelemetryValueLabel(testRunnerReturnedToStartValueLabel);
+    configureTelemetryValueLabel(testRunnerFinalMissionStateValueLabel);
+    configureTelemetryValueLabel(testRunnerFinalDoneReasonValueLabel);
     configureTelemetryValueLabel(supervisorStateValueLabel);
     configureTelemetryValueLabel(supervisorDoneReasonValueLabel);
     configureTelemetryValueLabel(supervisorRequiredSpecialsReachedValueLabel);
@@ -3442,6 +3530,19 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("mode1_return_to_start_active:", mode1ReturnToStartActiveValueLabel);
     layout->addRow("mode1_at_start_cell:", mode1AtStartCellValueLabel);
     layout->addRow("mode1_done_reason:", mode1DoneReasonValueLabel);
+    layout->addRow(mode1TestRunnerTitle);
+    layout->addRow("test_runner_state:", testRunnerStateValueLabel);
+    layout->addRow("test_runner_result:", testRunnerResultValueLabel);
+    layout->addRow("test_runner_reason:", testRunnerReasonValueLabel);
+    layout->addRow("test_runner_ticks:", testRunnerTicksValueLabel);
+    layout->addRow("test_runner_sim_time_s:", testRunnerSimTimeValueLabel);
+    layout->addRow("test_runner_found_specials:", testRunnerFoundSpecialsValueLabel);
+    layout->addRow("test_runner_required_specials:", testRunnerRequiredSpecialsValueLabel);
+    layout->addRow("test_runner_returned_to_start:", testRunnerReturnedToStartValueLabel);
+    layout->addRow("test_runner_final_mission_state:",
+                   testRunnerFinalMissionStateValueLabel);
+    layout->addRow("test_runner_final_done_reason:",
+                   testRunnerFinalDoneReasonValueLabel);
     layout->addRow("supervisor_state:", supervisorStateValueLabel);
     layout->addRow("supervisor_done_reason:", supervisorDoneReasonValueLabel);
     layout->addRow("supervisor_required_specials_reached:",
@@ -3653,6 +3754,9 @@ void MainWindow::createTelemetryPanel()
                  mode1PlanQueueCountWhenRequiredFoundValueLabel);
     addPinnedRow("mode1_return_route_status", mode1ReturnRouteStatusValueLabel);
     addPinnedRow("mode1_done_reason", mode1DoneReasonValueLabel);
+    addPinnedRow("test_runner_state", testRunnerStateValueLabel);
+    addPinnedRow("test_runner_reason", testRunnerReasonValueLabel);
+    addPinnedRow("test_runner_ticks", testRunnerTicksValueLabel);
     addPinnedRow("supervisor_state", supervisorStateValueLabel);
     addPinnedRow("supervisor_active_as_source",
                  supervisorActiveAsSourceValueLabel);
@@ -5130,6 +5234,46 @@ void MainWindow::updateTelemetryPanel()
         mode1DoneReasonValueLabel->setText(
             mode1MissionDoneReasonText(mode1MissionDoneReason));
     }
+    if (testRunnerStateValueLabel) {
+        testRunnerStateValueLabel->setText(mode1TestRunnerStateText(testRunnerState));
+    }
+    if (testRunnerResultValueLabel) {
+        const bool terminal =
+            testRunnerState == Mode1TestRunnerState::Pass
+            || testRunnerState == Mode1TestRunnerState::Fail
+            || testRunnerState == Mode1TestRunnerState::Timeout
+            || testRunnerState == Mode1TestRunnerState::Cancelled;
+        testRunnerResultValueLabel->setText(terminal ? mode1TestRunnerStateText(testRunnerState)
+                                                     : "NONE");
+    }
+    if (testRunnerReasonValueLabel) {
+        testRunnerReasonValueLabel->setText(mode1TestRunnerReasonText(testRunnerReason));
+    }
+    if (testRunnerTicksValueLabel) {
+        testRunnerTicksValueLabel->setText(QString::number(testRunnerTicks));
+    }
+    if (testRunnerSimTimeValueLabel) {
+        testRunnerSimTimeValueLabel->setText(QString::number(testRunnerSimTimeS, 'f', 2));
+    }
+    if (testRunnerFoundSpecialsValueLabel) {
+        testRunnerFoundSpecialsValueLabel->setText(QString::number(testRunnerFoundSpecials));
+    }
+    if (testRunnerRequiredSpecialsValueLabel) {
+        testRunnerRequiredSpecialsValueLabel->setText(
+            QString::number(testRunnerRequiredSpecialCount));
+    }
+    if (testRunnerReturnedToStartValueLabel) {
+        testRunnerReturnedToStartValueLabel->setText(
+            testRunnerReturnedToStart ? "true" : "false");
+    }
+    if (testRunnerFinalMissionStateValueLabel) {
+        testRunnerFinalMissionStateValueLabel->setText(
+            mode1MissionStateText(testRunnerFinalMissionState));
+    }
+    if (testRunnerFinalDoneReasonValueLabel) {
+        testRunnerFinalDoneReasonValueLabel->setText(
+            mode1MissionDoneReasonText(testRunnerFinalDoneReason));
+    }
     if (supervisorStateValueLabel) {
         supervisorStateValueLabel->setText(supervisorStateText(supervisorDebug.state));
     }
@@ -6235,6 +6379,7 @@ bool MainWindow::loadMazeFile(const QString &path)
         return false;
     }
 
+    cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
     cancelTestSequence();
     cancelCenterPivotSequence();
     cancelPlanExecution();
@@ -7312,6 +7457,7 @@ void MainWindow::showControlsHelp()
         "- B: Toggle basic autonomous navigation; dead-ends use approach-front then PIVOT_180\n"
         "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED / SMART_RECOGNITION\n"
         "- Shift+P: Toggle performance debug telemetry\n"
+        "- Shift+R: Start/cancel assisted Mode 1 test runner for current map\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
         "- Y: Toggle shadow logical map overlay\n"
         "\n"
@@ -7513,6 +7659,7 @@ void MainWindow::simulationStep()
     advanceCenterPivotSequenceIfNeeded();
     advancePlanExecutionIfNeeded();
     advanceBasicNavAutonomyIfNeeded();
+    advanceMode1TestRunnerIfNeeded();
 
     if (autoModeEnabled) {
         const RobotCommand command = motorTestModeEnabled ? motorTestCommand : lastNavCommand;
@@ -7609,6 +7756,204 @@ void MainWindow::recordPerformanceStep(double stepMs)
         perfWindowStepCount = 0;
         perfWindowStartElapsedMs = nowMs;
     }
+}
+
+void MainWindow::toggleMode1TestRunner()
+{
+    if (testRunnerState == Mode1TestRunnerState::Prepare
+        || testRunnerState == Mode1TestRunnerState::Running) {
+        cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+        return;
+    }
+
+    startMode1TestRunner();
+}
+
+void MainWindow::startMode1TestRunner()
+{
+    testRunnerState = Mode1TestRunnerState::Prepare;
+    testRunnerReason = Mode1TestRunnerReason::None;
+    testRunnerTicks = 0;
+    testRunnerSimTimeS = 0.0;
+    testRunnerFoundSpecials = 0;
+    testRunnerReturnedToStart = false;
+    testRunnerFinalMissionState = Mode1MissionState::Disabled;
+    testRunnerFinalDoneReason = Mode1MissionDoneReason::None;
+
+    testRunnerSavedMissionEnabled = mode1MissionEnabled;
+    testRunnerSavedRequiredSpecialCount = mode1RequiredSpecialCount;
+    testRunnerSavedPolicy = nav_core_get_policy();
+    testRunnerSavedConfigValid = true;
+
+    testRunnerRequiredSpecialCount =
+        mode1RequiredSpecialCount > 0 ? mode1RequiredSpecialCount : 3;
+
+    setSimulationRunning(false);
+    setBasicNavAutonomyEnabled(false);
+    cancelTestSequence();
+    cancelCenterPivotSequence();
+    cancelPlanExecution();
+    cancelDeadEndRecovery();
+    nav_core_stop();
+    lastNavCommand = {0, 0};
+
+    resetRobotPoseToWorldStart();
+    if (!mode1StartCellValid) {
+        finishMode1TestRunner(Mode1TestRunnerState::Fail,
+                              Mode1TestRunnerReason::InvalidStart,
+                              true);
+        updateNavCorePipeline();
+        updateTelemetryPanel();
+        return;
+    }
+
+    if (testRunnerForceMissionEnabled) {
+        mode1RequiredSpecialCount = testRunnerRequiredSpecialCount;
+        setMode1MissionEnabled(true);
+    }
+    if (testRunnerForcePolicySmart) {
+        nav_core_set_policy(NAV_POLICY_SMART_RECOGNITION);
+    }
+
+    cancelPlanExecution();
+    routeExecuteStatus = RouteExecuteStatus::Idle;
+    planLastExecutedAction = NAV_PLAN_ACTION_NONE;
+    planActionsExecutedCount = 0;
+    smartLastFrontierStatus = NAV_ROUTE_STATUS_IDLE;
+    smartFrontierPlanRequestedCount = 0;
+    smartFrontierRoutesExecutedCount = 0;
+    smartNoFrontierCount = 0;
+    smartRecognitionState = SmartRecognitionState::Idle;
+    smartLocalAction = NAV_RECOMMENDED_NONE;
+
+    autoModeEnabled = true;
+    setBasicNavAutonomyEnabled(true);
+    updateIrSensors();
+    updateFloorSensors();
+    updateNavCorePipeline();
+    advanceBasicNavAutonomyIfNeeded();
+    testRunnerState = Mode1TestRunnerState::Running;
+    setSimulationRunning(true);
+    updateTelemetryPanel();
+}
+
+void MainWindow::cancelMode1TestRunner(Mode1TestRunnerReason reason)
+{
+    if (testRunnerState != Mode1TestRunnerState::Prepare
+        && testRunnerState != Mode1TestRunnerState::Running) {
+        return;
+    }
+
+    finishMode1TestRunner(Mode1TestRunnerState::Cancelled, reason, true);
+}
+
+void MainWindow::advanceMode1TestRunnerIfNeeded()
+{
+    if (testRunnerState != Mode1TestRunnerState::Running
+        && testRunnerState != Mode1TestRunnerState::Prepare) {
+        return;
+    }
+
+    ++testRunnerTicks;
+    testRunnerSimTimeS += kSimulationDtS;
+
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    syncMode1TelemetryFromSupervisor(supervisorDebug);
+
+    testRunnerFoundSpecials = supervisorDebug.found_special_count;
+    testRunnerReturnedToStart = supervisorDebug.at_start_cell;
+    testRunnerFinalMissionState = mode1MissionState;
+    testRunnerFinalDoneReason = mode1MissionDoneReason;
+
+    if (testRunnerTicks > testRunnerMaxTicks
+        || testRunnerSimTimeS > testRunnerMaxSimTimeS) {
+        finishMode1TestRunner(Mode1TestRunnerState::Timeout,
+                              Mode1TestRunnerReason::Timeout,
+                              true);
+        return;
+    }
+
+    if (supervisorDebug.state == NAV_SUPERVISOR_STATE_ERROR) {
+        finishMode1TestRunner(Mode1TestRunnerState::Fail,
+                              Mode1TestRunnerReason::MissionError,
+                              true);
+        return;
+    }
+
+    if (supervisorDebug.state != NAV_SUPERVISOR_STATE_DONE) {
+        return;
+    }
+
+    if (supervisorDebug.done_reason
+        != NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED) {
+        finishMode1TestRunner(Mode1TestRunnerState::Fail,
+                              Mode1TestRunnerReason::DoneReasonNotSuccess,
+                              true);
+        return;
+    }
+    if (testRunnerFoundSpecials < testRunnerRequiredSpecialCount) {
+        finishMode1TestRunner(Mode1TestRunnerState::Fail,
+                              Mode1TestRunnerReason::NotEnoughSpecials,
+                              true);
+        return;
+    }
+    if (testRunnerExpectedReturnToStart && !testRunnerReturnedToStart) {
+        finishMode1TestRunner(Mode1TestRunnerState::Fail,
+                              Mode1TestRunnerReason::NotAtStart,
+                              true);
+        return;
+    }
+    if (planExecutionEnabled || nav_core_action() != NAV_ACTION_NONE) {
+        return;
+    }
+
+    finishMode1TestRunner(Mode1TestRunnerState::Pass,
+                          Mode1TestRunnerReason::PassFoundRequiredSpecialsAndReturned,
+                          false);
+}
+
+void MainWindow::finishMode1TestRunner(Mode1TestRunnerState state,
+                                       Mode1TestRunnerReason reason,
+                                       bool stopNavAction)
+{
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    syncMode1TelemetryFromSupervisor(supervisorDebug);
+
+    testRunnerState = state;
+    testRunnerReason = reason;
+    testRunnerFoundSpecials = supervisorDebug.found_special_count;
+    testRunnerReturnedToStart = supervisorDebug.at_start_cell;
+    testRunnerFinalMissionState = mode1MissionState;
+    testRunnerFinalDoneReason = mode1MissionDoneReason;
+
+    setBasicNavAutonomyEnabled(false);
+    planExecutionEnabled = false;
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    planNextAdvanceFromCenteredPose = false;
+    cancelPlanCompositeAction();
+    cancelDeadEndRecovery();
+    if (stopNavAction) {
+        nav_core_stop();
+    }
+    lastNavCommand = {0, 0};
+
+    restoreMode1TestRunnerConfig();
+    updateNavCorePipeline();
+    updateTelemetryPanel();
+}
+
+void MainWindow::restoreMode1TestRunnerConfig()
+{
+    if (!testRunnerSavedConfigValid) {
+        return;
+    }
+
+    mode1RequiredSpecialCount = testRunnerSavedRequiredSpecialCount;
+    setMode1MissionEnabled(testRunnerSavedMissionEnabled);
+    nav_core_set_policy(testRunnerSavedPolicy);
+    testRunnerSavedConfigValid = false;
 }
 
 void MainWindow::setSimulationRunning(bool running)

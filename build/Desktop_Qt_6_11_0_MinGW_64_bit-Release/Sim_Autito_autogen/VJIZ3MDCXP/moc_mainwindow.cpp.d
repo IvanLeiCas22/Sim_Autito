@@ -7,6 +7,7 @@ C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_types.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_robot.h \
   C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim/sim_world.h \
+  D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/QElapsedTimer \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/QString \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/q17memory.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/q20bit.h \
@@ -47,6 +48,7 @@ C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qdarwinhelpers.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qdatastream.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qdebug.h \
+  D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qelapsedtimer.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qendian.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qexceptionhandling.h \
   D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore/qflags.h \

@@ -124,6 +124,28 @@ public:
         UnsupportedBackExit
     };
 
+    enum class Mode1TestRunnerState {
+        Idle,
+        Prepare,
+        Running,
+        Pass,
+        Fail,
+        Timeout,
+        Cancelled
+    };
+
+    enum class Mode1TestRunnerReason {
+        None,
+        PassFoundRequiredSpecialsAndReturned,
+        MissionError,
+        DoneReasonNotSuccess,
+        Timeout,
+        NotEnoughSpecials,
+        NotAtStart,
+        ManualCancelled,
+        InvalidStart
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -207,6 +229,14 @@ private:
     void resetPerformanceStats();
     void updatePerformanceSceneItemCounts();
     void recordPerformanceStep(double stepMs);
+    void toggleMode1TestRunner();
+    void startMode1TestRunner();
+    void cancelMode1TestRunner(Mode1TestRunnerReason reason);
+    void advanceMode1TestRunnerIfNeeded();
+    void finishMode1TestRunner(Mode1TestRunnerState state,
+                               Mode1TestRunnerReason reason,
+                               bool stopNavAction);
+    void restoreMode1TestRunnerConfig();
     void setSimulationRunning(bool running);
     void resetNavigationYawReference();
     void resetNavigationYawReferenceForSmoothStart();
@@ -598,6 +628,16 @@ private:
     QLabel *mode1ReturnToStartActiveValueLabel = nullptr;
     QLabel *mode1AtStartCellValueLabel = nullptr;
     QLabel *mode1DoneReasonValueLabel = nullptr;
+    QLabel *testRunnerStateValueLabel = nullptr;
+    QLabel *testRunnerResultValueLabel = nullptr;
+    QLabel *testRunnerReasonValueLabel = nullptr;
+    QLabel *testRunnerTicksValueLabel = nullptr;
+    QLabel *testRunnerSimTimeValueLabel = nullptr;
+    QLabel *testRunnerFoundSpecialsValueLabel = nullptr;
+    QLabel *testRunnerRequiredSpecialsValueLabel = nullptr;
+    QLabel *testRunnerReturnedToStartValueLabel = nullptr;
+    QLabel *testRunnerFinalMissionStateValueLabel = nullptr;
+    QLabel *testRunnerFinalDoneReasonValueLabel = nullptr;
     QLabel *supervisorStateValueLabel = nullptr;
     QLabel *supervisorDoneReasonValueLabel = nullptr;
     QLabel *supervisorRequiredSpecialsReachedValueLabel = nullptr;
@@ -763,6 +803,24 @@ private:
     bool mode1ReturnPlanLoaded = false;
     NavSupervisorOutput supervisorLastOutput = {};
     bool supervisorActiveAsSource = false;
+    Mode1TestRunnerState testRunnerState = Mode1TestRunnerState::Idle;
+    Mode1TestRunnerReason testRunnerReason = Mode1TestRunnerReason::None;
+    uint32_t testRunnerTicks = 0;
+    double testRunnerSimTimeS = 0.0;
+    uint16_t testRunnerRequiredSpecialCount = 3;
+    uint32_t testRunnerMaxTicks = 60000;
+    double testRunnerMaxSimTimeS = 600.0;
+    bool testRunnerExpectedReturnToStart = true;
+    bool testRunnerForceMissionEnabled = true;
+    bool testRunnerForcePolicySmart = true;
+    uint16_t testRunnerFoundSpecials = 0;
+    bool testRunnerReturnedToStart = false;
+    Mode1MissionState testRunnerFinalMissionState = Mode1MissionState::Disabled;
+    Mode1MissionDoneReason testRunnerFinalDoneReason = Mode1MissionDoneReason::None;
+    bool testRunnerSavedConfigValid = false;
+    bool testRunnerSavedMissionEnabled = true;
+    uint16_t testRunnerSavedRequiredSpecialCount = 3;
+    NavPolicy testRunnerSavedPolicy = NAV_POLICY_SMART_RECOGNITION;
     bool floodFrontierEvalValid = false;
     uint16_t floodFrontierCandidateCount = 0;
     uint16_t floodFrontierCandidateEdgeCount = 0;
