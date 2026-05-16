@@ -8,10 +8,12 @@
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFormLayout>
 #include <QFont>
@@ -1155,6 +1157,60 @@ QString mode1TestRunnerReasonText(MainWindow::Mode1TestRunnerReason reason)
     return "UNKNOWN";
 }
 
+QString mode1BatchRunnerStateText(MainWindow::Mode1BatchRunnerState state)
+{
+    switch (state) {
+    case MainWindow::Mode1BatchRunnerState::Idle:
+        return "BATCH_IDLE";
+    case MainWindow::Mode1BatchRunnerState::DiscoverMaps:
+        return "BATCH_DISCOVER_MAPS";
+    case MainWindow::Mode1BatchRunnerState::LoadMap:
+        return "BATCH_LOAD_MAP";
+    case MainWindow::Mode1BatchRunnerState::StartMapTest:
+        return "BATCH_START_MAP_TEST";
+    case MainWindow::Mode1BatchRunnerState::RunningMap:
+        return "BATCH_RUNNING_MAP";
+    case MainWindow::Mode1BatchRunnerState::RecordResult:
+        return "BATCH_RECORD_RESULT";
+    case MainWindow::Mode1BatchRunnerState::NextMap:
+        return "BATCH_NEXT_MAP";
+    case MainWindow::Mode1BatchRunnerState::Done:
+        return "BATCH_DONE";
+    case MainWindow::Mode1BatchRunnerState::Cancelled:
+        return "BATCH_CANCELLED";
+    case MainWindow::Mode1BatchRunnerState::Error:
+        return "BATCH_ERROR";
+    }
+
+    return "UNKNOWN";
+}
+
+QString mode1BatchRunnerReasonText(MainWindow::Mode1BatchRunnerReason reason)
+{
+    switch (reason) {
+    case MainWindow::Mode1BatchRunnerReason::None:
+        return "NONE";
+    case MainWindow::Mode1BatchRunnerReason::NoTestMapsDir:
+        return "NO_TEST_MAPS_DIR";
+    case MainWindow::Mode1BatchRunnerReason::NoTestMapsFound:
+        return "NO_TEST_MAPS_FOUND";
+    case MainWindow::Mode1BatchRunnerReason::MapLoadFailed:
+        return "MAP_LOAD_FAILED";
+    case MainWindow::Mode1BatchRunnerReason::MapTestFailed:
+        return "MAP_TEST_FAILED";
+    case MainWindow::Mode1BatchRunnerReason::MapTestTimeout:
+        return "MAP_TEST_TIMEOUT";
+    case MainWindow::Mode1BatchRunnerReason::MapTestCancelled:
+        return "MAP_TEST_CANCELLED";
+    case MainWindow::Mode1BatchRunnerReason::ManualCancelled:
+        return "MANUAL_CANCELLED";
+    case MainWindow::Mode1BatchRunnerReason::BatchCompleted:
+        return "BATCH_COMPLETED";
+    }
+
+    return "UNKNOWN";
+}
+
 QString supervisorStateText(NavSupervisorState state)
 {
     switch (state) {
@@ -1413,6 +1469,14 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             updateTelemetryPanel();
             robotPoseChanged = false;
         } else {
+            if (batchRunnerState == Mode1BatchRunnerState::DiscoverMaps
+                || batchRunnerState == Mode1BatchRunnerState::LoadMap
+                || batchRunnerState == Mode1BatchRunnerState::StartMapTest
+                || batchRunnerState == Mode1BatchRunnerState::RunningMap
+                || batchRunnerState == Mode1BatchRunnerState::RecordResult
+                || batchRunnerState == Mode1BatchRunnerState::NextMap) {
+                cancelMode1BatchRunner(Mode1BatchRunnerReason::ManualCancelled);
+            }
             if (testRunnerState == Mode1TestRunnerState::Prepare
                 || testRunnerState == Mode1TestRunnerState::Running) {
                 cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
@@ -1510,7 +1574,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_B:
-        toggleBasicNavAutonomy();
+        if ((event->modifiers() & Qt::ShiftModifier) != 0) {
+            toggleMode1BatchRunner();
+        } else {
+            toggleBasicNavAutonomy();
+        }
         robotPoseChanged = false;
         break;
     case Qt::Key_P:
@@ -1547,17 +1615,27 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_X: {
+        const bool batchWasActive =
+            batchRunnerState == Mode1BatchRunnerState::DiscoverMaps
+            || batchRunnerState == Mode1BatchRunnerState::LoadMap
+            || batchRunnerState == Mode1BatchRunnerState::StartMapTest
+            || batchRunnerState == Mode1BatchRunnerState::RunningMap
+            || batchRunnerState == Mode1BatchRunnerState::RecordResult
+            || batchRunnerState == Mode1BatchRunnerState::NextMap;
+        if (batchWasActive) {
+            cancelMode1BatchRunner(Mode1BatchRunnerReason::ManualCancelled);
+        }
         const bool testRunnerWasActive =
             testRunnerState == Mode1TestRunnerState::Prepare
             || testRunnerState == Mode1TestRunnerState::Running;
-        if (testRunnerWasActive) {
+        if (testRunnerWasActive && !batchWasActive) {
             cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
         }
         cancelTestSequence();
         cancelCenterPivotSequence();
         cancelPlanExecution();
         cancelDeadEndRecovery();
-        if (!testRunnerWasActive) {
+        if (!testRunnerWasActive && !batchWasActive) {
             cancelMode1Mission(Mode1MissionDoneReason::Cancelled);
         }
         setBasicNavAutonomyEnabled(false);
@@ -2172,6 +2250,7 @@ void MainWindow::createTelemetryPanel()
     auto *planTitle = new QLabel("<b>Planned action queue</b>", panel);
     auto *navAutonomyTitle = new QLabel("<b>Basic nav autonomy</b>", panel);
     auto *mode1TestRunnerTitle = new QLabel("<b>Mode 1 test runner</b>", panel);
+    auto *mode1BatchRunnerTitle = new QLabel("<b>Mode 1 batch runner</b>", panel);
     auto *mapTitle = new QLabel("<b>Shadow logical map</b>", panel);
     auto *motorTestTitle = new QLabel("<b>Motor test command</b>", panel);
 
@@ -2570,6 +2649,18 @@ void MainWindow::createTelemetryPanel()
     testRunnerReturnedToStartValueLabel = new QLabel(panel);
     testRunnerFinalMissionStateValueLabel = new QLabel(panel);
     testRunnerFinalDoneReasonValueLabel = new QLabel(panel);
+    batchRunnerStateValueLabel = new QLabel(panel);
+    batchRunnerReasonValueLabel = new QLabel(panel);
+    batchRunnerCurrentIndexValueLabel = new QLabel(panel);
+    batchRunnerTotalMapsValueLabel = new QLabel(panel);
+    batchRunnerCurrentMapValueLabel = new QLabel(panel);
+    batchRunnerPassCountValueLabel = new QLabel(panel);
+    batchRunnerFailCountValueLabel = new QLabel(panel);
+    batchRunnerTimeoutCountValueLabel = new QLabel(panel);
+    batchRunnerCancelledCountValueLabel = new QLabel(panel);
+    batchRunnerLastResultValueLabel = new QLabel(panel);
+    batchRunnerLastReasonValueLabel = new QLabel(panel);
+    batchRunnerSummaryValueLabel = new QLabel(panel);
     supervisorStateValueLabel = new QLabel(panel);
     supervisorDoneReasonValueLabel = new QLabel(panel);
     supervisorRequiredSpecialsReachedValueLabel = new QLabel(panel);
@@ -3000,6 +3091,18 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(testRunnerReturnedToStartValueLabel);
     configureTelemetryValueLabel(testRunnerFinalMissionStateValueLabel);
     configureTelemetryValueLabel(testRunnerFinalDoneReasonValueLabel);
+    configureTelemetryValueLabel(batchRunnerStateValueLabel);
+    configureTelemetryValueLabel(batchRunnerReasonValueLabel);
+    configureTelemetryValueLabel(batchRunnerCurrentIndexValueLabel);
+    configureTelemetryValueLabel(batchRunnerTotalMapsValueLabel);
+    configureTelemetryValueLabel(batchRunnerCurrentMapValueLabel);
+    configureTelemetryValueLabel(batchRunnerPassCountValueLabel);
+    configureTelemetryValueLabel(batchRunnerFailCountValueLabel);
+    configureTelemetryValueLabel(batchRunnerTimeoutCountValueLabel);
+    configureTelemetryValueLabel(batchRunnerCancelledCountValueLabel);
+    configureTelemetryValueLabel(batchRunnerLastResultValueLabel);
+    configureTelemetryValueLabel(batchRunnerLastReasonValueLabel);
+    configureTelemetryValueLabel(batchRunnerSummaryValueLabel);
     configureTelemetryValueLabel(supervisorStateValueLabel);
     configureTelemetryValueLabel(supervisorDoneReasonValueLabel);
     configureTelemetryValueLabel(supervisorRequiredSpecialsReachedValueLabel);
@@ -3543,6 +3646,19 @@ void MainWindow::createTelemetryPanel()
                    testRunnerFinalMissionStateValueLabel);
     layout->addRow("test_runner_final_done_reason:",
                    testRunnerFinalDoneReasonValueLabel);
+    layout->addRow(mode1BatchRunnerTitle);
+    layout->addRow("batch_runner_state:", batchRunnerStateValueLabel);
+    layout->addRow("batch_runner_reason:", batchRunnerReasonValueLabel);
+    layout->addRow("batch_runner_current_index:", batchRunnerCurrentIndexValueLabel);
+    layout->addRow("batch_runner_total_maps:", batchRunnerTotalMapsValueLabel);
+    layout->addRow("batch_runner_current_map:", batchRunnerCurrentMapValueLabel);
+    layout->addRow("batch_runner_pass_count:", batchRunnerPassCountValueLabel);
+    layout->addRow("batch_runner_fail_count:", batchRunnerFailCountValueLabel);
+    layout->addRow("batch_runner_timeout_count:", batchRunnerTimeoutCountValueLabel);
+    layout->addRow("batch_runner_cancelled_count:", batchRunnerCancelledCountValueLabel);
+    layout->addRow("batch_runner_last_result:", batchRunnerLastResultValueLabel);
+    layout->addRow("batch_runner_last_reason:", batchRunnerLastReasonValueLabel);
+    layout->addRow("batch_runner_summary:", batchRunnerSummaryValueLabel);
     layout->addRow("supervisor_state:", supervisorStateValueLabel);
     layout->addRow("supervisor_done_reason:", supervisorDoneReasonValueLabel);
     layout->addRow("supervisor_required_specials_reached:",
@@ -3757,6 +3873,11 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("test_runner_state", testRunnerStateValueLabel);
     addPinnedRow("test_runner_reason", testRunnerReasonValueLabel);
     addPinnedRow("test_runner_ticks", testRunnerTicksValueLabel);
+    addPinnedRow("batch_runner_state", batchRunnerStateValueLabel);
+    addPinnedRow("batch_runner_index", batchRunnerCurrentIndexValueLabel);
+    addPinnedRow("batch_runner_current_map", batchRunnerCurrentMapValueLabel);
+    addPinnedRow("batch_runner_pass_count", batchRunnerPassCountValueLabel);
+    addPinnedRow("batch_runner_fail_count", batchRunnerFailCountValueLabel);
     addPinnedRow("supervisor_state", supervisorStateValueLabel);
     addPinnedRow("supervisor_active_as_source",
                  supervisorActiveAsSourceValueLabel);
@@ -5274,6 +5395,54 @@ void MainWindow::updateTelemetryPanel()
         testRunnerFinalDoneReasonValueLabel->setText(
             mode1MissionDoneReasonText(testRunnerFinalDoneReason));
     }
+    if (batchRunnerStateValueLabel) {
+        batchRunnerStateValueLabel->setText(mode1BatchRunnerStateText(batchRunnerState));
+    }
+    if (batchRunnerReasonValueLabel) {
+        batchRunnerReasonValueLabel->setText(mode1BatchRunnerReasonText(batchRunnerReason));
+    }
+    if (batchRunnerCurrentIndexValueLabel) {
+        const int displayIndex = batchRunnerCurrentIndex >= 0 ? batchRunnerCurrentIndex + 1 : 0;
+        batchRunnerCurrentIndexValueLabel->setText(
+            QString("%1 / %2").arg(displayIndex).arg(batchRunnerMapPaths.size()));
+    }
+    if (batchRunnerTotalMapsValueLabel) {
+        batchRunnerTotalMapsValueLabel->setText(QString::number(batchRunnerMapPaths.size()));
+    }
+    if (batchRunnerCurrentMapValueLabel) {
+        batchRunnerCurrentMapValueLabel->setText(
+            batchRunnerCurrentMap.isEmpty() ? "none" : batchRunnerCurrentMap);
+    }
+    if (batchRunnerPassCountValueLabel) {
+        batchRunnerPassCountValueLabel->setText(QString::number(batchRunnerPassCount));
+    }
+    if (batchRunnerFailCountValueLabel) {
+        batchRunnerFailCountValueLabel->setText(QString::number(batchRunnerFailCount));
+    }
+    if (batchRunnerTimeoutCountValueLabel) {
+        batchRunnerTimeoutCountValueLabel->setText(QString::number(batchRunnerTimeoutCount));
+    }
+    if (batchRunnerCancelledCountValueLabel) {
+        batchRunnerCancelledCountValueLabel->setText(
+            QString::number(batchRunnerCancelledCount));
+    }
+    if (batchRunnerLastResultValueLabel) {
+        batchRunnerLastResultValueLabel->setText(
+            mode1TestRunnerStateText(batchRunnerLastResult));
+    }
+    if (batchRunnerLastReasonValueLabel) {
+        batchRunnerLastReasonValueLabel->setText(
+            mode1TestRunnerReasonText(batchRunnerLastReason));
+    }
+    if (batchRunnerSummaryValueLabel) {
+        batchRunnerSummaryValueLabel->setText(
+            QString("pass=%1 fail=%2 timeout=%3 cancelled=%4 total=%5")
+                .arg(batchRunnerPassCount)
+                .arg(batchRunnerFailCount)
+                .arg(batchRunnerTimeoutCount)
+                .arg(batchRunnerCancelledCount)
+                .arg(batchRunnerMapPaths.size()));
+    }
     if (supervisorStateValueLabel) {
         supervisorStateValueLabel->setText(supervisorStateText(supervisorDebug.state));
     }
@@ -6363,7 +6532,7 @@ void MainWindow::loadMazeFromDialog()
     loadMazeFile(path);
 }
 
-bool MainWindow::loadMazeFile(const QString &path)
+bool MainWindow::loadMazeFile(const QString &path, LoadMazeMode mode)
 {
     const bool wasRunning = simulationRunning;
     setSimulationRunning(false);
@@ -6373,13 +6542,18 @@ bool MainWindow::loadMazeFile(const QString &path)
         if (wasRunning) {
             setSimulationRunning(true);
         }
-        QMessageBox::warning(this,
-                             "Load Maze",
-                             QString("Could not load maze JSON:\n%1").arg(path));
+        if (mode == LoadMazeMode::User) {
+            QMessageBox::warning(this,
+                                 "Load Maze",
+                                 QString("Could not load maze JSON:\n%1").arg(path));
+        }
         return false;
     }
 
-    cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+    if (mode == LoadMazeMode::User) {
+        cancelMode1BatchRunner(Mode1BatchRunnerReason::ManualCancelled);
+        cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+    }
     cancelTestSequence();
     cancelCenterPivotSequence();
     cancelPlanExecution();
@@ -7458,6 +7632,7 @@ void MainWindow::showControlsHelp()
         "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED / SMART_RECOGNITION\n"
         "- Shift+P: Toggle performance debug telemetry\n"
         "- Shift+R: Start/cancel assisted Mode 1 test runner for current map\n"
+        "- Shift+B: Start/cancel Mode 1 batch runner from data/test_maps\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
         "- Y: Toggle shadow logical map overlay\n"
         "\n"
@@ -7660,6 +7835,7 @@ void MainWindow::simulationStep()
     advancePlanExecutionIfNeeded();
     advanceBasicNavAutonomyIfNeeded();
     advanceMode1TestRunnerIfNeeded();
+    advanceMode1BatchRunnerIfNeeded();
 
     if (autoModeEnabled) {
         const RobotCommand command = motorTestModeEnabled ? motorTestCommand : lastNavCommand;
@@ -7769,7 +7945,7 @@ void MainWindow::toggleMode1TestRunner()
     startMode1TestRunner();
 }
 
-void MainWindow::startMode1TestRunner()
+void MainWindow::startMode1TestRunner(bool restoreConfigOnFinish)
 {
     testRunnerState = Mode1TestRunnerState::Prepare;
     testRunnerReason = Mode1TestRunnerReason::None;
@@ -7780,10 +7956,14 @@ void MainWindow::startMode1TestRunner()
     testRunnerFinalMissionState = Mode1MissionState::Disabled;
     testRunnerFinalDoneReason = Mode1MissionDoneReason::None;
 
-    testRunnerSavedMissionEnabled = mode1MissionEnabled;
-    testRunnerSavedRequiredSpecialCount = mode1RequiredSpecialCount;
-    testRunnerSavedPolicy = nav_core_get_policy();
-    testRunnerSavedConfigValid = true;
+    if (restoreConfigOnFinish) {
+        testRunnerSavedMissionEnabled = mode1MissionEnabled;
+        testRunnerSavedRequiredSpecialCount = mode1RequiredSpecialCount;
+        testRunnerSavedPolicy = nav_core_get_policy();
+        testRunnerSavedConfigValid = true;
+    } else {
+        testRunnerSavedConfigValid = false;
+    }
 
     testRunnerRequiredSpecialCount =
         mode1RequiredSpecialCount > 0 ? mode1RequiredSpecialCount : 3;
@@ -7954,6 +8134,270 @@ void MainWindow::restoreMode1TestRunnerConfig()
     setMode1MissionEnabled(testRunnerSavedMissionEnabled);
     nav_core_set_policy(testRunnerSavedPolicy);
     testRunnerSavedConfigValid = false;
+}
+
+void MainWindow::toggleMode1BatchRunner()
+{
+    if (batchRunnerState == Mode1BatchRunnerState::DiscoverMaps
+        || batchRunnerState == Mode1BatchRunnerState::LoadMap
+        || batchRunnerState == Mode1BatchRunnerState::StartMapTest
+        || batchRunnerState == Mode1BatchRunnerState::RunningMap
+        || batchRunnerState == Mode1BatchRunnerState::RecordResult
+        || batchRunnerState == Mode1BatchRunnerState::NextMap) {
+        cancelMode1BatchRunner(Mode1BatchRunnerReason::ManualCancelled);
+        return;
+    }
+
+    startMode1BatchRunner();
+}
+
+void MainWindow::startMode1BatchRunner()
+{
+    batchRunnerSavedMissionEnabled = mode1MissionEnabled;
+    batchRunnerSavedRequiredSpecialCount = mode1RequiredSpecialCount;
+    batchRunnerSavedPolicy = nav_core_get_policy();
+    batchRunnerSavedConfigValid = true;
+
+    batchRunnerState = Mode1BatchRunnerState::DiscoverMaps;
+    batchRunnerReason = Mode1BatchRunnerReason::None;
+    batchRunnerMapPaths.clear();
+    batchRunnerResults.clear();
+    batchRunnerCurrentIndex = -1;
+    batchRunnerCurrentMap.clear();
+    batchRunnerPassCount = 0;
+    batchRunnerFailCount = 0;
+    batchRunnerTimeoutCount = 0;
+    batchRunnerCancelledCount = 0;
+    batchRunnerLastResult = Mode1TestRunnerState::Idle;
+    batchRunnerLastReason = Mode1TestRunnerReason::None;
+
+    setSimulationRunning(false);
+    setBasicNavAutonomyEnabled(false);
+    cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+    cancelTestSequence();
+    cancelCenterPivotSequence();
+    cancelPlanExecution();
+    cancelDeadEndRecovery();
+    nav_core_stop();
+    lastNavCommand = {0, 0};
+
+    advanceMode1BatchRunnerIfNeeded();
+    updateTelemetryPanel();
+}
+
+void MainWindow::cancelMode1BatchRunner(Mode1BatchRunnerReason reason)
+{
+    if (batchRunnerState != Mode1BatchRunnerState::DiscoverMaps
+        && batchRunnerState != Mode1BatchRunnerState::LoadMap
+        && batchRunnerState != Mode1BatchRunnerState::StartMapTest
+        && batchRunnerState != Mode1BatchRunnerState::RunningMap
+        && batchRunnerState != Mode1BatchRunnerState::RecordResult
+        && batchRunnerState != Mode1BatchRunnerState::NextMap) {
+        return;
+    }
+
+    if (testRunnerState == Mode1TestRunnerState::Prepare
+        || testRunnerState == Mode1TestRunnerState::Running) {
+        cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+        recordCurrentMode1BatchResult();
+    }
+
+    finishMode1BatchRunner(Mode1BatchRunnerState::Cancelled, reason);
+}
+
+void MainWindow::advanceMode1BatchRunnerIfNeeded()
+{
+    switch (batchRunnerState) {
+    case Mode1BatchRunnerState::DiscoverMaps:
+        if (!discoverMode1BatchMaps()) {
+            finishMode1BatchRunner(Mode1BatchRunnerState::Error, batchRunnerReason);
+            return;
+        }
+        batchRunnerCurrentIndex = 0;
+        batchRunnerState = Mode1BatchRunnerState::LoadMap;
+        [[fallthrough]];
+    case Mode1BatchRunnerState::LoadMap:
+        if (!loadCurrentMode1BatchMap()) {
+            finishMode1BatchRunner(Mode1BatchRunnerState::Error,
+                                   Mode1BatchRunnerReason::MapLoadFailed);
+            return;
+        }
+        batchRunnerState = Mode1BatchRunnerState::StartMapTest;
+        [[fallthrough]];
+    case Mode1BatchRunnerState::StartMapTest:
+        startMode1TestRunner(false);
+        batchRunnerState = Mode1BatchRunnerState::RunningMap;
+        return;
+    case Mode1BatchRunnerState::RunningMap:
+        if (testRunnerState == Mode1TestRunnerState::Pass
+            || testRunnerState == Mode1TestRunnerState::Fail
+            || testRunnerState == Mode1TestRunnerState::Timeout
+            || testRunnerState == Mode1TestRunnerState::Cancelled) {
+            batchRunnerState = Mode1BatchRunnerState::RecordResult;
+        } else {
+            return;
+        }
+        [[fallthrough]];
+    case Mode1BatchRunnerState::RecordResult:
+        recordCurrentMode1BatchResult();
+        if (testRunnerState == Mode1TestRunnerState::Cancelled) {
+            finishMode1BatchRunner(Mode1BatchRunnerState::Cancelled,
+                                   Mode1BatchRunnerReason::MapTestCancelled);
+            return;
+        }
+        batchRunnerState = Mode1BatchRunnerState::NextMap;
+        [[fallthrough]];
+    case Mode1BatchRunnerState::NextMap:
+        ++batchRunnerCurrentIndex;
+        if (batchRunnerCurrentIndex >= batchRunnerMapPaths.size()) {
+            finishMode1BatchRunner(Mode1BatchRunnerState::Done,
+                                   Mode1BatchRunnerReason::BatchCompleted);
+            return;
+        }
+        batchRunnerState = Mode1BatchRunnerState::LoadMap;
+        advanceMode1BatchRunnerIfNeeded();
+        return;
+    case Mode1BatchRunnerState::Idle:
+    case Mode1BatchRunnerState::Done:
+    case Mode1BatchRunnerState::Cancelled:
+    case Mode1BatchRunnerState::Error:
+        return;
+    }
+}
+
+bool MainWindow::discoverMode1BatchMaps()
+{
+    const QString dirPath = mode1BatchTestMapsDirPath();
+    if (dirPath.isEmpty()) {
+        batchRunnerReason = Mode1BatchRunnerReason::NoTestMapsDir;
+        return false;
+    }
+
+    QDir dir(dirPath);
+    const QFileInfoList files =
+        dir.entryInfoList(QStringList() << "*.json",
+                          QDir::Files | QDir::Readable,
+                          QDir::Name | QDir::IgnoreCase);
+    if (files.isEmpty()) {
+        batchRunnerReason = Mode1BatchRunnerReason::NoTestMapsFound;
+        return false;
+    }
+
+    batchRunnerMapPaths.clear();
+    for (const QFileInfo &file : files) {
+        batchRunnerMapPaths.push_back(file.absoluteFilePath());
+    }
+    return true;
+}
+
+QString MainWindow::mode1BatchTestMapsDirPath() const
+{
+    const QString relative = QStringLiteral("data/test_maps");
+    const QString sourcePath =
+        QDir(QStringLiteral(SIM_AUTITO_SOURCE_DIR)).filePath(relative);
+    if (QDir(sourcePath).exists()) {
+        return sourcePath;
+    }
+
+    const QString appPath = QDir(QCoreApplication::applicationDirPath()).filePath(relative);
+    if (QDir(appPath).exists()) {
+        return appPath;
+    }
+
+    const QString cwdPath = QDir(QDir::currentPath()).filePath(relative);
+    if (QDir(cwdPath).exists()) {
+        return cwdPath;
+    }
+
+    return QString();
+}
+
+bool MainWindow::loadCurrentMode1BatchMap()
+{
+    if (batchRunnerCurrentIndex < 0
+        || batchRunnerCurrentIndex >= batchRunnerMapPaths.size()) {
+        return false;
+    }
+
+    const QString path = batchRunnerMapPaths.at(batchRunnerCurrentIndex);
+    batchRunnerCurrentMap = QFileInfo(path).fileName();
+    setSimulationRunning(false);
+    setBasicNavAutonomyEnabled(false);
+    cancelMode1TestRunner(Mode1TestRunnerReason::ManualCancelled);
+    cancelTestSequence();
+    cancelCenterPivotSequence();
+    cancelPlanExecution();
+    cancelDeadEndRecovery();
+    clearFloodFrontierEvaluation();
+    nav_core_flood_clear();
+    nav_core_stop();
+    lastNavCommand = {0, 0};
+    return loadMazeFile(path, LoadMazeMode::Batch);
+}
+
+void MainWindow::recordCurrentMode1BatchResult()
+{
+    if (batchRunnerCurrentIndex < 0
+        || batchRunnerCurrentIndex >= batchRunnerMapPaths.size()) {
+        return;
+    }
+
+    Mode1BatchMapResult result;
+    result.mapPath = batchRunnerMapPaths.at(batchRunnerCurrentIndex);
+    result.mapName = QFileInfo(result.mapPath).fileName();
+    result.result = testRunnerState;
+    result.reason = testRunnerReason;
+    result.ticks = testRunnerTicks;
+    result.simTimeS = testRunnerSimTimeS;
+    result.foundSpecials = testRunnerFoundSpecials;
+    result.requiredSpecials = testRunnerRequiredSpecialCount;
+    result.returnedToStart = testRunnerReturnedToStart;
+    result.finalMissionState = testRunnerFinalMissionState;
+    result.finalDoneReason = testRunnerFinalDoneReason;
+    batchRunnerResults.push_back(result);
+
+    batchRunnerLastResult = result.result;
+    batchRunnerLastReason = result.reason;
+    if (result.result == Mode1TestRunnerState::Pass) {
+        ++batchRunnerPassCount;
+    } else if (result.result == Mode1TestRunnerState::Timeout) {
+        ++batchRunnerTimeoutCount;
+    } else if (result.result == Mode1TestRunnerState::Cancelled) {
+        ++batchRunnerCancelledCount;
+    } else {
+        ++batchRunnerFailCount;
+    }
+}
+
+void MainWindow::finishMode1BatchRunner(Mode1BatchRunnerState state,
+                                        Mode1BatchRunnerReason reason)
+{
+    batchRunnerState = state;
+    batchRunnerReason = reason;
+    setBasicNavAutonomyEnabled(false);
+    planExecutionEnabled = false;
+    planCurrentAction = NAV_PLAN_ACTION_NONE;
+    planNextAdvanceFromCenteredPose = false;
+    cancelPlanCompositeAction();
+    cancelDeadEndRecovery();
+    nav_core_stop();
+    lastNavCommand = {0, 0};
+    setSimulationRunning(false);
+    restoreMode1BatchRunnerConfig();
+    updateNavCorePipeline();
+    updateTelemetryPanel();
+}
+
+void MainWindow::restoreMode1BatchRunnerConfig()
+{
+    if (!batchRunnerSavedConfigValid) {
+        return;
+    }
+
+    mode1RequiredSpecialCount = batchRunnerSavedRequiredSpecialCount;
+    setMode1MissionEnabled(batchRunnerSavedMissionEnabled);
+    nav_core_set_policy(batchRunnerSavedPolicy);
+    batchRunnerSavedConfigValid = false;
 }
 
 void MainWindow::setSimulationRunning(bool running)

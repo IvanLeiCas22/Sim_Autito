@@ -6,6 +6,7 @@
 #include <QMainWindow>
 #include <QElapsedTimer>
 #include <QString>
+#include <QStringList>
 
 #include <cstdint>
 #include <vector>
@@ -146,6 +147,31 @@ public:
         InvalidStart
     };
 
+    enum class Mode1BatchRunnerState {
+        Idle,
+        DiscoverMaps,
+        LoadMap,
+        StartMapTest,
+        RunningMap,
+        RecordResult,
+        NextMap,
+        Done,
+        Cancelled,
+        Error
+    };
+
+    enum class Mode1BatchRunnerReason {
+        None,
+        NoTestMapsDir,
+        NoTestMapsFound,
+        MapLoadFailed,
+        MapTestFailed,
+        MapTestTimeout,
+        MapTestCancelled,
+        ManualCancelled,
+        BatchCompleted
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
@@ -170,7 +196,11 @@ private:
     void showControlsHelp();
     void showControlTuningDialog();
     void loadMazeFromDialog();
-    bool loadMazeFile(const QString &path);
+    enum class LoadMazeMode {
+        User,
+        Batch
+    };
+    bool loadMazeFile(const QString &path, LoadMazeMode mode = LoadMazeMode::User);
     void adjustSmoothTargetYawRate(int delta_deg_s);
     void promptSmoothTargetYawRate();
     void promptRoutePlanToCell();
@@ -230,13 +260,24 @@ private:
     void updatePerformanceSceneItemCounts();
     void recordPerformanceStep(double stepMs);
     void toggleMode1TestRunner();
-    void startMode1TestRunner();
+    void startMode1TestRunner(bool restoreConfigOnFinish = true);
     void cancelMode1TestRunner(Mode1TestRunnerReason reason);
     void advanceMode1TestRunnerIfNeeded();
     void finishMode1TestRunner(Mode1TestRunnerState state,
                                Mode1TestRunnerReason reason,
                                bool stopNavAction);
     void restoreMode1TestRunnerConfig();
+    void toggleMode1BatchRunner();
+    void startMode1BatchRunner();
+    void cancelMode1BatchRunner(Mode1BatchRunnerReason reason);
+    void advanceMode1BatchRunnerIfNeeded();
+    bool discoverMode1BatchMaps();
+    QString mode1BatchTestMapsDirPath() const;
+    bool loadCurrentMode1BatchMap();
+    void recordCurrentMode1BatchResult();
+    void finishMode1BatchRunner(Mode1BatchRunnerState state,
+                                Mode1BatchRunnerReason reason);
+    void restoreMode1BatchRunnerConfig();
     void setSimulationRunning(bool running);
     void resetNavigationYawReference();
     void resetNavigationYawReferenceForSmoothStart();
@@ -638,6 +679,18 @@ private:
     QLabel *testRunnerReturnedToStartValueLabel = nullptr;
     QLabel *testRunnerFinalMissionStateValueLabel = nullptr;
     QLabel *testRunnerFinalDoneReasonValueLabel = nullptr;
+    QLabel *batchRunnerStateValueLabel = nullptr;
+    QLabel *batchRunnerReasonValueLabel = nullptr;
+    QLabel *batchRunnerCurrentIndexValueLabel = nullptr;
+    QLabel *batchRunnerTotalMapsValueLabel = nullptr;
+    QLabel *batchRunnerCurrentMapValueLabel = nullptr;
+    QLabel *batchRunnerPassCountValueLabel = nullptr;
+    QLabel *batchRunnerFailCountValueLabel = nullptr;
+    QLabel *batchRunnerTimeoutCountValueLabel = nullptr;
+    QLabel *batchRunnerCancelledCountValueLabel = nullptr;
+    QLabel *batchRunnerLastResultValueLabel = nullptr;
+    QLabel *batchRunnerLastReasonValueLabel = nullptr;
+    QLabel *batchRunnerSummaryValueLabel = nullptr;
     QLabel *supervisorStateValueLabel = nullptr;
     QLabel *supervisorDoneReasonValueLabel = nullptr;
     QLabel *supervisorRequiredSpecialsReachedValueLabel = nullptr;
@@ -821,6 +874,35 @@ private:
     bool testRunnerSavedMissionEnabled = true;
     uint16_t testRunnerSavedRequiredSpecialCount = 3;
     NavPolicy testRunnerSavedPolicy = NAV_POLICY_SMART_RECOGNITION;
+    struct Mode1BatchMapResult {
+        QString mapPath;
+        QString mapName;
+        Mode1TestRunnerState result = Mode1TestRunnerState::Idle;
+        Mode1TestRunnerReason reason = Mode1TestRunnerReason::None;
+        uint32_t ticks = 0;
+        double simTimeS = 0.0;
+        uint16_t foundSpecials = 0;
+        uint16_t requiredSpecials = 0;
+        bool returnedToStart = false;
+        Mode1MissionState finalMissionState = Mode1MissionState::Disabled;
+        Mode1MissionDoneReason finalDoneReason = Mode1MissionDoneReason::None;
+    };
+    Mode1BatchRunnerState batchRunnerState = Mode1BatchRunnerState::Idle;
+    Mode1BatchRunnerReason batchRunnerReason = Mode1BatchRunnerReason::None;
+    QStringList batchRunnerMapPaths;
+    std::vector<Mode1BatchMapResult> batchRunnerResults;
+    int batchRunnerCurrentIndex = -1;
+    QString batchRunnerCurrentMap;
+    uint16_t batchRunnerPassCount = 0;
+    uint16_t batchRunnerFailCount = 0;
+    uint16_t batchRunnerTimeoutCount = 0;
+    uint16_t batchRunnerCancelledCount = 0;
+    Mode1TestRunnerState batchRunnerLastResult = Mode1TestRunnerState::Idle;
+    Mode1TestRunnerReason batchRunnerLastReason = Mode1TestRunnerReason::None;
+    bool batchRunnerSavedConfigValid = false;
+    bool batchRunnerSavedMissionEnabled = true;
+    uint16_t batchRunnerSavedRequiredSpecialCount = 3;
+    NavPolicy batchRunnerSavedPolicy = NAV_POLICY_SMART_RECOGNITION;
     bool floodFrontierEvalValid = false;
     uint16_t floodFrontierCandidateCount = 0;
     uint16_t floodFrontierCandidateEdgeCount = 0;
