@@ -1072,6 +1072,10 @@ QString mode1MissionStateText(MainWindow::Mode1MissionState state)
         return "SEARCH_SPECIALS";
     case MainWindow::Mode1MissionState::FoundRequiredSpecialsWaitActionDone:
         return "FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE";
+    case MainWindow::Mode1MissionState::FinalSafeScanReturnPlan:
+        return "FINAL_SAFE_SCAN_RETURN_PLAN";
+    case MainWindow::Mode1MissionState::FinalSafeScanReturnExecute:
+        return "FINAL_SAFE_SCAN_RETURN_EXECUTE";
     case MainWindow::Mode1MissionState::ReturnToStartPlan:
         return "RETURN_TO_START_PLAN";
     case MainWindow::Mode1MissionState::ReturnToStartExecute:
@@ -1220,6 +1224,10 @@ QString supervisorStateText(NavSupervisorState state)
         return "SEARCH_SPECIALS";
     case NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE:
         return "FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE";
+    case NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN:
+        return "FINAL_SAFE_SCAN_RETURN_PLAN";
+    case NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE:
+        return "FINAL_SAFE_SCAN_RETURN_EXECUTE";
     case NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN:
         return "RETURN_SAFE_PLAN";
     case NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE:
@@ -1238,6 +1246,30 @@ QString supervisorStateText(NavSupervisorState state)
         return "ERROR";
     case NAV_SUPERVISOR_STATE_CANCELLED:
         return "CANCELLED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString supervisorFinalSafeScanWaitReasonText(NavSupervisorFinalSafeScanReturnWaitReason reason)
+{
+    switch (reason) {
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_ACTION_ENGINE_BUSY:
+        return "WAIT_ACTION_ENGINE_BUSY";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_ACTIVE:
+        return "WAIT_PLAN_ACTIVE";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_COMPOSITE_ACTIVE:
+        return "WAIT_COMPOSITE_ACTIVE";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_READY:
+        return "READY";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_REQUESTED:
+        return "PLAN_REQUESTED";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_LOADED:
+        return "PLAN_LOADED";
+    case NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_FAILED:
+        return "PLAN_FAILED";
     }
 
     return "UNKNOWN";
@@ -2639,6 +2671,15 @@ void MainWindow::createTelemetryPanel()
     mode1ReturnToStartActiveValueLabel = new QLabel(panel);
     mode1AtStartCellValueLabel = new QLabel(panel);
     mode1DoneReasonValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnAttemptedValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnActiveValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnSuccessValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnFoundRequiredValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnPlanRequestedValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnExecuteRequestedValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnReadyValueLabel = new QLabel(panel);
+    mode1FinalSafeScanReturnWaitReasonValueLabel = new QLabel(panel);
+    mode1ConsumedSmartNoFrontierValueLabel = new QLabel(panel);
     testRunnerStateValueLabel = new QLabel(panel);
     testRunnerResultValueLabel = new QLabel(panel);
     testRunnerReasonValueLabel = new QLabel(panel);
@@ -3081,6 +3122,15 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mode1ReturnToStartActiveValueLabel);
     configureTelemetryValueLabel(mode1AtStartCellValueLabel);
     configureTelemetryValueLabel(mode1DoneReasonValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnAttemptedValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnActiveValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnSuccessValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnFoundRequiredValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnPlanRequestedValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnExecuteRequestedValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnReadyValueLabel);
+    configureTelemetryValueLabel(mode1FinalSafeScanReturnWaitReasonValueLabel);
+    configureTelemetryValueLabel(mode1ConsumedSmartNoFrontierValueLabel);
     configureTelemetryValueLabel(testRunnerStateValueLabel);
     configureTelemetryValueLabel(testRunnerResultValueLabel);
     configureTelemetryValueLabel(testRunnerReasonValueLabel);
@@ -3633,6 +3683,24 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("mode1_return_to_start_active:", mode1ReturnToStartActiveValueLabel);
     layout->addRow("mode1_at_start_cell:", mode1AtStartCellValueLabel);
     layout->addRow("mode1_done_reason:", mode1DoneReasonValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_attempted:",
+                   mode1FinalSafeScanReturnAttemptedValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_active:",
+                   mode1FinalSafeScanReturnActiveValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_success:",
+                   mode1FinalSafeScanReturnSuccessValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_found_required:",
+                   mode1FinalSafeScanReturnFoundRequiredValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_plan_requested:",
+                   mode1FinalSafeScanReturnPlanRequestedValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_execute_requested:",
+                   mode1FinalSafeScanReturnExecuteRequestedValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_ready:",
+                   mode1FinalSafeScanReturnReadyValueLabel);
+    layout->addRow("mode1_final_safe_scan_return_wait_reason:",
+                   mode1FinalSafeScanReturnWaitReasonValueLabel);
+    layout->addRow("mode1_consumed_smart_no_frontier:",
+                   mode1ConsumedSmartNoFrontierValueLabel);
     layout->addRow(mode1TestRunnerTitle);
     layout->addRow("test_runner_state:", testRunnerStateValueLabel);
     layout->addRow("test_runner_result:", testRunnerResultValueLabel);
@@ -3860,6 +3928,16 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("mode1_found_special_count", mode1FoundSpecialCountValueLabel);
     addPinnedRow("mode1_required_specials_reached",
                  mode1RequiredSpecialsReachedValueLabel);
+    addPinnedRow("mode1_final_safe_scan_return_attempted",
+                 mode1FinalSafeScanReturnAttemptedValueLabel);
+    addPinnedRow("mode1_final_safe_scan_return_active",
+                 mode1FinalSafeScanReturnActiveValueLabel);
+    addPinnedRow("mode1_final_safe_scan_return_success",
+                 mode1FinalSafeScanReturnSuccessValueLabel);
+    addPinnedRow("mode1_final_safe_scan_return_ready",
+                 mode1FinalSafeScanReturnReadyValueLabel);
+    addPinnedRow("mode1_consumed_smart_no_frontier",
+                 mode1ConsumedSmartNoFrontierValueLabel);
     addPinnedRow("mode1_return_requested", mode1ReturnRequestedValueLabel);
     addPinnedRow("mode1_waiting_action_done", mode1WaitingActionDoneValueLabel);
     addPinnedRow("mode1_plan_cancelled_after_required_found",
@@ -5355,6 +5433,45 @@ void MainWindow::updateTelemetryPanel()
         mode1DoneReasonValueLabel->setText(
             mode1MissionDoneReasonText(mode1MissionDoneReason));
     }
+    if (mode1FinalSafeScanReturnAttemptedValueLabel) {
+        mode1FinalSafeScanReturnAttemptedValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_attempted ? "true" : "false");
+    }
+    if (mode1FinalSafeScanReturnActiveValueLabel) {
+        mode1FinalSafeScanReturnActiveValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_active ? "true" : "false");
+    }
+    if (mode1FinalSafeScanReturnSuccessValueLabel) {
+        mode1FinalSafeScanReturnSuccessValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_success ? "true" : "false");
+    }
+    if (mode1FinalSafeScanReturnFoundRequiredValueLabel) {
+        mode1FinalSafeScanReturnFoundRequiredValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_found_required_during_return
+                ? "true"
+                : "false");
+    }
+    if (mode1FinalSafeScanReturnPlanRequestedValueLabel) {
+        mode1FinalSafeScanReturnPlanRequestedValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_plan_requested ? "true" : "false");
+    }
+    if (mode1FinalSafeScanReturnExecuteRequestedValueLabel) {
+        mode1FinalSafeScanReturnExecuteRequestedValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_execute_requested ? "true" : "false");
+    }
+    if (mode1FinalSafeScanReturnReadyValueLabel) {
+        mode1FinalSafeScanReturnReadyValueLabel->setText(
+            supervisorDebug.final_safe_scan_return_ready ? "true" : "false");
+    }
+    if (mode1FinalSafeScanReturnWaitReasonValueLabel) {
+        mode1FinalSafeScanReturnWaitReasonValueLabel->setText(
+            supervisorFinalSafeScanWaitReasonText(
+                supervisorDebug.final_safe_scan_return_wait_reason));
+    }
+    if (mode1ConsumedSmartNoFrontierValueLabel) {
+        mode1ConsumedSmartNoFrontierValueLabel->setText(
+            mode1ConsumedSmartNoFrontier ? "true" : "false");
+    }
     if (testRunnerStateValueLabel) {
         testRunnerStateValueLabel->setText(mode1TestRunnerStateText(testRunnerState));
     }
@@ -6048,6 +6165,12 @@ void MainWindow::syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapsh
     case NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE:
         mode1MissionState = Mode1MissionState::FoundRequiredSpecialsWaitActionDone;
         break;
+    case NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN:
+        mode1MissionState = Mode1MissionState::FinalSafeScanReturnPlan;
+        break;
+    case NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE:
+        mode1MissionState = Mode1MissionState::FinalSafeScanReturnExecute;
+        break;
     case NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN:
         mode1MissionState = Mode1MissionState::ReturnToStartPlan;
         break;
@@ -6169,6 +6292,27 @@ void MainWindow::updateNavSupervisor(bool smartNoFrontier)
     const bool navReady =
         (nav_core_action() == NAV_ACTION_NONE)
         && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    const bool planCompositeActive =
+        planCompositeActionPhase == CenterPivotSequencePhase::Centering
+        || planCompositeActionPhase == CenterPivotSequencePhase::ApproachFront
+        || planCompositeActionPhase == CenterPivotSequencePhase::Pivot180;
+    const bool centerPivotSequenceActive =
+        centerPivotSequencePhase == CenterPivotSequencePhase::Centering
+        || centerPivotSequencePhase == CenterPivotSequencePhase::ApproachFront
+        || centerPivotSequencePhase == CenterPivotSequencePhase::Pivot180;
+    const bool compositeActive = planCompositeActive || centerPivotSequenceActive;
+    const bool deadEndRecoveryActive = deadEndRecoveryPhase != DeadEndRecoveryPhase::None;
+    NavSupervisorFinalSafeScanReturnWaitReason finalSafeScanWaitReason =
+        NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_READY;
+    if (!navReady) {
+        finalSafeScanWaitReason = NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_ACTION_ENGINE_BUSY;
+    } else if (planExecutionEnabled) {
+        finalSafeScanWaitReason = NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_ACTIVE;
+    } else if (compositeActive || deadEndRecoveryActive) {
+        finalSafeScanWaitReason = NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_COMPOSITE_ACTIVE;
+    }
+    const bool finalSafeScanReturnReady =
+        navReady && !planExecutionEnabled && !compositeActive && !deadEndRecoveryActive;
     const bool atStartCell = mode1MissionAtStartCell(mapDebug);
     NavPlanDebugSnapshot planDebug = {};
     nav_core_plan_debug_snapshot(&planDebug);
@@ -6179,6 +6323,8 @@ void MainWindow::updateNavSupervisor(bool smartNoFrontier)
         std::min<uint16_t>(mode1FoundSpecialCount,
                            std::numeric_limits<uint8_t>::max()));
     input.nav_ready = navReady;
+    input.final_safe_scan_return_ready = finalSafeScanReturnReady;
+    input.final_safe_scan_return_wait_reason = finalSafeScanWaitReason;
     input.at_start_cell = atStartCell;
     input.plan_execution_enabled = planExecutionEnabled;
     input.plan_queue_count = static_cast<uint8_t>(
@@ -6219,6 +6365,8 @@ bool MainWindow::advanceMode1MissionIfNeeded()
     return supervisorLastOutput.block_smart_actions
         || supervisorDebug.state
             == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_DONE
@@ -6682,6 +6830,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     supervisorSmartLocalControlAction = NAV_SUPERVISOR_REQUESTED_ACTION_NONE;
     supervisorSmartLocalControlMapOk = false;
     supervisorSmartLocalControlFallbackLegacy = false;
+    mode1ConsumedSmartNoFrontier = false;
 
     if (!basicNavAutonomyEnabled) {
         return;
@@ -6838,6 +6987,24 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
             if (mode1MissionEnabled
                 && supervisorDebug.state == NAV_SUPERVISOR_STATE_SEARCH_SPECIALS) {
                 updateNavSupervisor(true);
+                nav_supervisor_get_debug(&supervisorDebug);
+                const bool missionConsumedNoFrontier =
+                    supervisorLastOutput.block_smart_actions
+                    || supervisorDebug.state
+                        == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN
+                    || supervisorDebug.state
+                        == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE
+                    || supervisorDebug.state
+                        == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE
+                    || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
+                    || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE
+                    || supervisorDebug.state == NAV_SUPERVISOR_STATE_DONE
+                    || supervisorDebug.state == NAV_SUPERVISOR_STATE_ERROR;
+                if (missionConsumedNoFrontier) {
+                    mode1ConsumedSmartNoFrontier = true;
+                    smartRecognitionState = SmartRecognitionState::NoFrontier;
+                    return;
+                }
             }
             smartRecognitionState = SmartRecognitionState::NoFrontier;
             if (supervisorSmartLastOutput.request_stop_autonomy) {

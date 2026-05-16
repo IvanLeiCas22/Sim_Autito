@@ -77,6 +77,8 @@ public:
         Disabled,
         SearchSpecials,
         FoundRequiredSpecialsWaitActionDone,
+        FinalSafeScanReturnPlan,
+        FinalSafeScanReturnExecute,
         ReturnToStartPlan,
         ReturnToStartExecute,
         Done,
@@ -669,6 +671,15 @@ private:
     QLabel *mode1ReturnToStartActiveValueLabel = nullptr;
     QLabel *mode1AtStartCellValueLabel = nullptr;
     QLabel *mode1DoneReasonValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnAttemptedValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnActiveValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnSuccessValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnFoundRequiredValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnPlanRequestedValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnExecuteRequestedValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnReadyValueLabel = nullptr;
+    QLabel *mode1FinalSafeScanReturnWaitReasonValueLabel = nullptr;
+    QLabel *mode1ConsumedSmartNoFrontierValueLabel = nullptr;
     QLabel *testRunnerStateValueLabel = nullptr;
     QLabel *testRunnerResultValueLabel = nullptr;
     QLabel *testRunnerReasonValueLabel = nullptr;
@@ -856,6 +867,7 @@ private:
     bool mode1ReturnPlanLoaded = false;
     NavSupervisorOutput supervisorLastOutput = {};
     bool supervisorActiveAsSource = false;
+    bool mode1ConsumedSmartNoFrontier = false;
     Mode1TestRunnerState testRunnerState = Mode1TestRunnerState::Idle;
     Mode1TestRunnerReason testRunnerReason = Mode1TestRunnerReason::None;
     uint32_t testRunnerTicks = 0;

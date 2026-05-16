@@ -35,6 +35,15 @@ typedef struct NavSupervisorStateData {
     bool smart_frontier_plan_result_available;
     bool smart_frontier_plan_loaded;
     uint16_t smart_frontier_plan_request_pulse_count;
+    bool final_safe_scan_return_attempted;
+    bool final_safe_scan_return_active;
+    bool final_safe_scan_return_plan_requested;
+    bool final_safe_scan_return_execute_requested;
+    bool final_safe_scan_return_completed;
+    bool final_safe_scan_return_success;
+    bool final_safe_scan_return_found_required_during_return;
+    bool final_safe_scan_return_ready;
+    NavSupervisorFinalSafeScanReturnWaitReason final_safe_scan_return_wait_reason;
 } NavSupervisorStateData;
 
 static NavSupervisorStateData supervisor_state;
@@ -149,6 +158,23 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
     snapshot->smart_frontier_plan_loaded = supervisor_state.smart_frontier_plan_loaded;
     snapshot->smart_frontier_plan_request_pulse_count =
         supervisor_state.smart_frontier_plan_request_pulse_count;
+    snapshot->final_safe_scan_return_attempted =
+        supervisor_state.final_safe_scan_return_attempted;
+    snapshot->final_safe_scan_return_active =
+        supervisor_state.final_safe_scan_return_active;
+    snapshot->final_safe_scan_return_plan_requested =
+        supervisor_state.final_safe_scan_return_plan_requested;
+    snapshot->final_safe_scan_return_execute_requested =
+        supervisor_state.final_safe_scan_return_execute_requested;
+    snapshot->final_safe_scan_return_completed =
+        supervisor_state.final_safe_scan_return_completed;
+    snapshot->final_safe_scan_return_success =
+        supervisor_state.final_safe_scan_return_success;
+    snapshot->final_safe_scan_return_found_required_during_return =
+        supervisor_state.final_safe_scan_return_found_required_during_return;
+    snapshot->final_safe_scan_return_ready = supervisor_state.final_safe_scan_return_ready;
+    snapshot->final_safe_scan_return_wait_reason =
+        supervisor_state.final_safe_scan_return_wait_reason;
 }
 
 void nav_supervisor_cancel(void)
@@ -158,6 +184,7 @@ void nav_supervisor_cancel(void)
     supervisor_state.return_requested = false;
     supervisor_state.waiting_action_done = false;
     supervisor_state.return_to_start_active = false;
+    supervisor_state.final_safe_scan_return_active = false;
 }
 
 void nav_supervisor_set_start_cell(int8_t x, int8_t y, int8_t dir)
@@ -188,6 +215,15 @@ static void set_inactive_state_from_input(const NavSupervisorInput *input)
     supervisor_state.clear_plan_requested = false;
     supervisor_state.return_plan_requested = false;
     supervisor_state.execute_return_requested = false;
+    supervisor_state.final_safe_scan_return_attempted = false;
+    supervisor_state.final_safe_scan_return_active = false;
+    supervisor_state.final_safe_scan_return_plan_requested = false;
+    supervisor_state.final_safe_scan_return_execute_requested = false;
+    supervisor_state.final_safe_scan_return_completed = false;
+    supervisor_state.final_safe_scan_return_success = false;
+    supervisor_state.final_safe_scan_return_found_required_during_return = false;
+    supervisor_state.final_safe_scan_return_ready = false;
+    supervisor_state.final_safe_scan_return_wait_reason = NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_NONE;
 }
 
 static void sync_input_snapshot(const NavSupervisorInput *input)
@@ -200,6 +236,9 @@ static void sync_input_snapshot(const NavSupervisorInput *input)
     supervisor_state.start_cell_valid = input->start_cell_valid;
     supervisor_state.return_route_status = input->return_route_status;
     supervisor_state.return_plan_loaded = input->return_plan_loaded;
+    supervisor_state.final_safe_scan_return_ready = input->final_safe_scan_return_ready;
+    supervisor_state.final_safe_scan_return_wait_reason =
+        input->final_safe_scan_return_wait_reason;
 }
 
 static NavSupervisorDoneReason done_reason_from_return_route_status(int16_t route_status)
@@ -214,6 +253,35 @@ static NavSupervisorDoneReason done_reason_from_return_route_status(int16_t rout
         return NAV_SUPERVISOR_DONE_REASON_RETURN_QUEUE_OVERFLOW;
     default:
         return NAV_SUPERVISOR_DONE_REASON_NO_RETURN_ROUTE;
+    }
+}
+
+static void start_required_specials_return_wait(const NavSupervisorInput *input,
+                                                NavSupervisorOutput *output)
+{
+    supervisor_state.required_specials_reached = true;
+    supervisor_state.return_requested = true;
+    supervisor_state.waiting_action_done = !input->nav_ready;
+    supervisor_state.clear_plan_requested = true;
+    supervisor_state.return_plan_requested = false;
+    supervisor_state.execute_return_requested = false;
+    supervisor_state.final_safe_scan_return_active = false;
+    supervisor_state.state = NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE;
+    if (output != 0) {
+        output->block_smart_actions = true;
+        output->request_clear_exploration_plan = true;
+    }
+}
+
+static void enter_no_frontier_before_required_error(NavSupervisorOutput *output)
+{
+    supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+    supervisor_state.done_reason =
+        NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS;
+    supervisor_state.final_safe_scan_return_active = false;
+    if (output != 0) {
+        output->request_stop_autonomy = true;
+        output->request_stop_motors = true;
     }
 }
 
@@ -243,12 +311,29 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
     if (supervisor_state.state == NAV_SUPERVISOR_STATE_SEARCH_SPECIALS) {
         if (input->smart_no_frontier
             && input->found_special_count < supervisor_state.config.required_special_count) {
-            supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
-            supervisor_state.done_reason =
-                NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS;
+            if (supervisor_state.final_safe_scan_return_attempted) {
+                enter_no_frontier_before_required_error(output);
+                return;
+            }
+
+            supervisor_state.final_safe_scan_return_attempted = true;
+            supervisor_state.final_safe_scan_return_active = true;
+            supervisor_state.final_safe_scan_return_plan_requested = false;
+            supervisor_state.final_safe_scan_return_execute_requested = false;
+            supervisor_state.final_safe_scan_return_completed = false;
+            supervisor_state.final_safe_scan_return_success = false;
+            supervisor_state.final_safe_scan_return_found_required_during_return = false;
+            supervisor_state.final_safe_scan_return_wait_reason =
+                input->final_safe_scan_return_wait_reason;
+            supervisor_state.waiting_action_done = !input->final_safe_scan_return_ready;
+            supervisor_state.clear_plan_requested = true;
+            supervisor_state.return_to_start_active = true;
+            supervisor_state.return_plan_requested = false;
+            supervisor_state.execute_return_requested = false;
+            supervisor_state.state = NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN;
             if (output != 0) {
-                output->request_stop_autonomy = true;
-                output->request_stop_motors = true;
+                output->block_smart_actions = true;
+                output->request_clear_exploration_plan = true;
             }
             return;
         }
@@ -257,16 +342,137 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
             return;
         }
 
-        supervisor_state.required_specials_reached = true;
-        supervisor_state.return_requested = true;
-        supervisor_state.waiting_action_done = !input->nav_ready;
-        supervisor_state.clear_plan_requested = true;
-        supervisor_state.return_plan_requested = false;
-        supervisor_state.execute_return_requested = false;
-        supervisor_state.state = NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE;
+        start_required_specials_return_wait(input, output);
+        return;
+    }
+
+    if (supervisor_state.state == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN) {
+        if (input->found_special_count >= supervisor_state.config.required_special_count) {
+            supervisor_state.final_safe_scan_return_success = true;
+            supervisor_state.final_safe_scan_return_found_required_during_return = true;
+        }
+
+        supervisor_state.waiting_action_done = !input->final_safe_scan_return_ready;
+        supervisor_state.final_safe_scan_return_active = true;
+        supervisor_state.return_to_start_active = true;
         if (output != 0) {
             output->block_smart_actions = true;
-            output->request_clear_exploration_plan = true;
+        }
+
+        if (input->at_start_cell) {
+            supervisor_state.final_safe_scan_return_active = false;
+            supervisor_state.final_safe_scan_return_completed = true;
+            supervisor_state.return_to_start_active = false;
+            if (input->found_special_count >= supervisor_state.config.required_special_count) {
+                supervisor_state.final_safe_scan_return_success = true;
+                supervisor_state.state = NAV_SUPERVISOR_STATE_DONE;
+                supervisor_state.done_reason =
+                    NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED;
+            } else {
+                supervisor_state.final_safe_scan_return_success = false;
+                supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+                supervisor_state.done_reason =
+                    NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS;
+            }
+            if (output != 0) {
+                output->request_stop_autonomy = true;
+                output->request_stop_motors = true;
+            }
+            return;
+        }
+
+        if (!input->final_safe_scan_return_ready) {
+            return;
+        }
+
+        supervisor_state.waiting_action_done = false;
+        if (!input->start_cell_valid) {
+            supervisor_state.final_safe_scan_return_active = false;
+            supervisor_state.return_to_start_active = false;
+            supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+            supervisor_state.done_reason = NAV_SUPERVISOR_DONE_REASON_START_CELL_INVALID;
+            if (output != 0) {
+                output->request_stop_autonomy = true;
+                output->request_stop_motors = true;
+            }
+            return;
+        }
+
+        if (!supervisor_state.final_safe_scan_return_plan_requested) {
+            supervisor_state.final_safe_scan_return_plan_requested = true;
+            supervisor_state.return_plan_requested = true;
+            supervisor_state.final_safe_scan_return_wait_reason =
+                NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_REQUESTED;
+            if (output != 0) {
+                output->request_plan_return_to_start = true;
+            }
+            return;
+        }
+
+        if (input->return_plan_loaded) {
+            supervisor_state.final_safe_scan_return_wait_reason =
+                NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_LOADED;
+            supervisor_state.state = NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE;
+            if (!supervisor_state.final_safe_scan_return_execute_requested) {
+                supervisor_state.final_safe_scan_return_execute_requested = true;
+                supervisor_state.execute_return_requested = true;
+                if (output != 0) {
+                    output->request_execute_return_plan = true;
+                }
+            }
+        } else if (input->return_route_status != 0) {
+            supervisor_state.final_safe_scan_return_wait_reason =
+                NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_FAILED;
+            supervisor_state.final_safe_scan_return_active = false;
+            supervisor_state.return_to_start_active = false;
+            supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+            supervisor_state.done_reason =
+                done_reason_from_return_route_status(input->return_route_status);
+            if (output != 0) {
+                output->request_stop_autonomy = true;
+                output->request_stop_motors = true;
+            }
+        } else {
+            supervisor_state.final_safe_scan_return_wait_reason =
+                NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_REQUESTED;
+        }
+        return;
+    }
+
+    if (supervisor_state.state == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE) {
+        supervisor_state.final_safe_scan_return_active = true;
+        supervisor_state.return_to_start_active = true;
+        if (input->found_special_count >= supervisor_state.config.required_special_count) {
+            supervisor_state.final_safe_scan_return_success = true;
+            supervisor_state.final_safe_scan_return_found_required_during_return = true;
+        }
+        if (output != 0) {
+            output->block_smart_actions = true;
+        }
+        if (!input->plan_execution_enabled) {
+            supervisor_state.final_safe_scan_return_active = false;
+            supervisor_state.final_safe_scan_return_completed = true;
+            supervisor_state.return_to_start_active = false;
+            if (input->at_start_cell
+                && input->found_special_count >= supervisor_state.config.required_special_count) {
+                supervisor_state.final_safe_scan_return_success = true;
+                supervisor_state.state = NAV_SUPERVISOR_STATE_DONE;
+                supervisor_state.done_reason =
+                    NAV_SUPERVISOR_DONE_REASON_FOUND_REQUIRED_SPECIALS_AND_RETURNED;
+            } else if (input->at_start_cell) {
+                supervisor_state.final_safe_scan_return_success = false;
+                supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+                supervisor_state.done_reason =
+                    NAV_SUPERVISOR_DONE_REASON_NO_FRONTIER_BEFORE_REQUIRED_SPECIALS;
+            } else {
+                supervisor_state.final_safe_scan_return_success = false;
+                supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
+                supervisor_state.done_reason = NAV_SUPERVISOR_DONE_REASON_NO_RETURN_ROUTE;
+            }
+            if (output != 0) {
+                output->request_stop_autonomy = true;
+                output->request_stop_motors = true;
+            }
         }
         return;
     }

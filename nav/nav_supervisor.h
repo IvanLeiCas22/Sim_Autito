@@ -17,6 +17,8 @@ typedef enum NavSupervisorState {
     NAV_SUPERVISOR_STATE_IDLE = 0,
     NAV_SUPERVISOR_STATE_SEARCH_SPECIALS,
     NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE,
+    NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN,
+    NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE,
     NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN,
     NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE,
     NAV_SUPERVISOR_STATE_RETURN_SMART_DECIDE,
@@ -43,6 +45,17 @@ typedef enum NavSupervisorReturnStrategy {
     NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN = 0,
     NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN
 } NavSupervisorReturnStrategy;
+
+typedef enum NavSupervisorFinalSafeScanReturnWaitReason {
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_NONE = 0,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_ACTION_ENGINE_BUSY,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_ACTIVE,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_COMPOSITE_ACTIVE,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_READY,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_REQUESTED,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_LOADED,
+    NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_PLAN_FAILED
+} NavSupervisorFinalSafeScanReturnWaitReason;
 
 typedef enum NavSupervisorSmartState {
     NAV_SUPERVISOR_SMART_STATE_IDLE = 0,
@@ -117,12 +130,23 @@ typedef struct NavSupervisorDebugSnapshot {
     bool smart_frontier_plan_notified;
     bool smart_frontier_plan_loaded;
     uint16_t smart_frontier_plan_request_pulse_count;
+    bool final_safe_scan_return_attempted;
+    bool final_safe_scan_return_active;
+    bool final_safe_scan_return_plan_requested;
+    bool final_safe_scan_return_execute_requested;
+    bool final_safe_scan_return_completed;
+    bool final_safe_scan_return_success;
+    bool final_safe_scan_return_found_required_during_return;
+    bool final_safe_scan_return_ready;
+    NavSupervisorFinalSafeScanReturnWaitReason final_safe_scan_return_wait_reason;
 } NavSupervisorDebugSnapshot;
 
 typedef struct NavSupervisorInput {
     bool mission_enabled;
     uint8_t found_special_count;
     bool nav_ready;
+    bool final_safe_scan_return_ready;
+    NavSupervisorFinalSafeScanReturnWaitReason final_safe_scan_return_wait_reason;
     bool at_start_cell;
     bool plan_execution_enabled;
     uint8_t plan_queue_count;
