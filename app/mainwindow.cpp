@@ -5402,9 +5402,11 @@ void MainWindow::updateTelemetryPanel()
         batchRunnerReasonValueLabel->setText(mode1BatchRunnerReasonText(batchRunnerReason));
     }
     if (batchRunnerCurrentIndexValueLabel) {
-        const int displayIndex = batchRunnerCurrentIndex >= 0 ? batchRunnerCurrentIndex + 1 : 0;
+        const int total = batchRunnerMapPaths.size();
+        const int rawDisplayIndex = batchRunnerCurrentIndex >= 0 ? batchRunnerCurrentIndex + 1 : 0;
+        const int displayIndex = total > 0 ? std::clamp(rawDisplayIndex, 0, total) : 0;
         batchRunnerCurrentIndexValueLabel->setText(
-            QString("%1 / %2").arg(displayIndex).arg(batchRunnerMapPaths.size()));
+            QString("%1 / %2").arg(displayIndex).arg(total));
     }
     if (batchRunnerTotalMapsValueLabel) {
         batchRunnerTotalMapsValueLabel->setText(QString::number(batchRunnerMapPaths.size()));
