@@ -1174,6 +1174,55 @@ QString mode1TestRunnerReasonText(MainWindow::Mode1TestRunnerReason reason)
         return "MANUAL_CANCELLED";
     case MainWindow::Mode1TestRunnerReason::InvalidStart:
         return "INVALID_START";
+    case MainWindow::Mode1TestRunnerReason::AutocheckFail:
+        return "AUTOCHECK_FAIL";
+    }
+
+    return "UNKNOWN";
+}
+
+QString navigationAutocheckStateText(MainWindow::NavigationAutocheckState state)
+{
+    switch (state) {
+    case MainWindow::NavigationAutocheckState::Idle:
+        return "IDLE";
+    case MainWindow::NavigationAutocheckState::Active:
+        return "ACTIVE";
+    case MainWindow::NavigationAutocheckState::Failed:
+        return "FAILED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString navigationAutocheckSeverityText(MainWindow::NavigationAutocheckSeverity severity)
+{
+    switch (severity) {
+    case MainWindow::NavigationAutocheckSeverity::Info:
+        return "INFO";
+    case MainWindow::NavigationAutocheckSeverity::Warning:
+        return "WARNING";
+    case MainWindow::NavigationAutocheckSeverity::Error:
+        return "ERROR";
+    }
+
+    return "UNKNOWN";
+}
+
+QString navigationAutocheckFailureReasonText(
+    MainWindow::NavigationAutocheckFailureReason reason)
+{
+    switch (reason) {
+    case MainWindow::NavigationAutocheckFailureReason::None:
+        return "NONE";
+    case MainWindow::NavigationAutocheckFailureReason::FinalScanReadyNoPlanRequest:
+        return "FINAL_SCAN_READY_NO_PLAN_REQUEST";
+    case MainWindow::NavigationAutocheckFailureReason::ReturnPlanRequestNoEffect:
+        return "RETURN_PLAN_REQUEST_NO_EFFECT";
+    case MainWindow::NavigationAutocheckFailureReason::ReturnExecuteRequestNoEffect:
+        return "RETURN_EXECUTE_REQUEST_NO_EFFECT";
+    case MainWindow::NavigationAutocheckFailureReason::MissionConsumedNoFrontierButAutonomyStopped:
+        return "MISSION_CONSUMED_NO_FRONTIER_BUT_AUTONOMY_STOPPED";
     }
 
     return "UNKNOWN";
@@ -2724,6 +2773,13 @@ void MainWindow::createTelemetryPanel()
     batchRunnerResultsJsonPathValueLabel = new QLabel(panel);
     batchRunnerExportOkValueLabel = new QLabel(panel);
     batchRunnerExportErrorValueLabel = new QLabel(panel);
+    autocheckEnabledValueLabel = new QLabel(panel);
+    autocheckStateValueLabel = new QLabel(panel);
+    autocheckFailureCountValueLabel = new QLabel(panel);
+    autocheckWarningCountValueLabel = new QLabel(panel);
+    autocheckLastFailureValueLabel = new QLabel(panel);
+    autocheckLastFailureTickValueLabel = new QLabel(panel);
+    autocheckActivePendingCountValueLabel = new QLabel(panel);
     supervisorStateValueLabel = new QLabel(panel);
     supervisorDoneReasonValueLabel = new QLabel(panel);
     supervisorRequiredSpecialsReachedValueLabel = new QLabel(panel);
@@ -3179,6 +3235,13 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(batchRunnerResultsJsonPathValueLabel);
     configureTelemetryValueLabel(batchRunnerExportOkValueLabel);
     configureTelemetryValueLabel(batchRunnerExportErrorValueLabel);
+    configureTelemetryValueLabel(autocheckEnabledValueLabel);
+    configureTelemetryValueLabel(autocheckStateValueLabel);
+    configureTelemetryValueLabel(autocheckFailureCountValueLabel);
+    configureTelemetryValueLabel(autocheckWarningCountValueLabel);
+    configureTelemetryValueLabel(autocheckLastFailureValueLabel);
+    configureTelemetryValueLabel(autocheckLastFailureTickValueLabel);
+    configureTelemetryValueLabel(autocheckActivePendingCountValueLabel);
     configureTelemetryValueLabel(supervisorStateValueLabel);
     configureTelemetryValueLabel(supervisorDoneReasonValueLabel);
     configureTelemetryValueLabel(supervisorRequiredSpecialsReachedValueLabel);
@@ -3757,6 +3820,15 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("batch_runner_results_json_path:", batchRunnerResultsJsonPathValueLabel);
     layout->addRow("batch_runner_export_ok:", batchRunnerExportOkValueLabel);
     layout->addRow("batch_runner_export_error:", batchRunnerExportErrorValueLabel);
+    auto *autocheckTitle = new QLabel("<b>Navigation autocheck</b>", panel);
+    layout->addRow(autocheckTitle);
+    layout->addRow("autocheck_enabled:", autocheckEnabledValueLabel);
+    layout->addRow("autocheck_state:", autocheckStateValueLabel);
+    layout->addRow("autocheck_failure_count:", autocheckFailureCountValueLabel);
+    layout->addRow("autocheck_warning_count:", autocheckWarningCountValueLabel);
+    layout->addRow("autocheck_last_failure:", autocheckLastFailureValueLabel);
+    layout->addRow("autocheck_last_failure_tick:", autocheckLastFailureTickValueLabel);
+    layout->addRow("autocheck_active_pending_count:", autocheckActivePendingCountValueLabel);
     layout->addRow("supervisor_state:", supervisorStateValueLabel);
     layout->addRow("supervisor_done_reason:", supervisorDoneReasonValueLabel);
     layout->addRow("supervisor_required_specials_reached:",
@@ -3988,6 +4060,9 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("batch_runner_fail_count", batchRunnerFailCountValueLabel);
     addPinnedRow("batch_runner_export_ok", batchRunnerExportOkValueLabel);
     addPinnedRow("batch_runner_results_csv_path", batchRunnerResultsCsvPathValueLabel);
+    addPinnedRow("autocheck_failure_count", autocheckFailureCountValueLabel);
+    addPinnedRow("autocheck_last_failure", autocheckLastFailureValueLabel);
+    addPinnedRow("autocheck_active_pending_count", autocheckActivePendingCountValueLabel);
     addPinnedRow("supervisor_state", supervisorStateValueLabel);
     addPinnedRow("supervisor_active_as_source",
                  supervisorActiveAsSourceValueLabel);
@@ -5608,6 +5683,33 @@ void MainWindow::updateTelemetryPanel()
     if (batchRunnerExportErrorValueLabel) {
         batchRunnerExportErrorValueLabel->setText(
             batchRunnerExportError.isEmpty() ? "none" : batchRunnerExportError);
+    }
+    if (autocheckEnabledValueLabel) {
+        autocheckEnabledValueLabel->setText(navigationAutocheckEnabled ? "true" : "false");
+    }
+    if (autocheckStateValueLabel) {
+        autocheckStateValueLabel->setText(
+            navigationAutocheckStateText(navigationAutocheckState));
+    }
+    if (autocheckFailureCountValueLabel) {
+        autocheckFailureCountValueLabel->setText(
+            QString::number(navigationAutocheckErrorCount()));
+    }
+    if (autocheckWarningCountValueLabel) {
+        autocheckWarningCountValueLabel->setText(
+            QString::number(navigationAutocheckWarningCount));
+    }
+    if (autocheckLastFailureValueLabel) {
+        autocheckLastFailureValueLabel->setText(
+            navigationAutocheckFailureReasonText(navigationAutocheckLastFailure));
+    }
+    if (autocheckLastFailureTickValueLabel) {
+        autocheckLastFailureTickValueLabel->setText(
+            QString::number(navigationAutocheckLastFailureTick));
+    }
+    if (autocheckActivePendingCountValueLabel) {
+        autocheckActivePendingCountValueLabel->setText(
+            QString::number(navigationAutocheckActivePendingCount()));
     }
     if (supervisorStateValueLabel) {
         supervisorStateValueLabel->setText(supervisorStateText(supervisorDebug.state));
@@ -8150,6 +8252,264 @@ void MainWindow::recordPerformanceStep(double stepMs)
     }
 }
 
+MainWindow::NavigationAutocheckSnapshot MainWindow::buildNavigationAutocheckSnapshot() const
+{
+    NavSupervisorDebugSnapshot supervisorDebug = {};
+    nav_supervisor_get_debug(&supervisorDebug);
+    NavPlanDebugSnapshot planDebug = {};
+    nav_core_plan_debug_snapshot(&planDebug);
+
+    NavigationAutocheckSnapshot snapshot;
+    snapshot.tick = testRunnerTicks;
+    snapshot.simTimeS = testRunnerSimTimeS;
+    snapshot.supervisorState = supervisorDebug.state;
+    snapshot.supervisorDoneReason = supervisorDebug.done_reason;
+    snapshot.requestPlanReturnToStart = supervisorLastOutput.request_plan_return_to_start;
+    snapshot.requestExecuteReturnPlan = supervisorLastOutput.request_execute_return_plan;
+    snapshot.blockSmartActions = supervisorLastOutput.block_smart_actions;
+    snapshot.mode1MissionState = mode1MissionState;
+    snapshot.foundSpecials = supervisorDebug.found_special_count;
+    snapshot.requiredSpecials = mode1RequiredSpecialCount;
+    snapshot.atStartCell = supervisorDebug.at_start_cell;
+    snapshot.finalSafeScanReturnReady = supervisorDebug.final_safe_scan_return_ready;
+    snapshot.finalSafeScanReturnPlanRequested =
+        supervisorDebug.final_safe_scan_return_plan_requested;
+    snapshot.finalSafeScanReturnExecuteRequested =
+        supervisorDebug.final_safe_scan_return_execute_requested;
+    snapshot.returnRouteStatus = mode1ReturnRouteStatus;
+    snapshot.returnPlanLoaded = mode1ReturnPlanLoaded;
+    snapshot.planExecutionEnabled = planExecutionEnabled;
+    snapshot.planQueueCount = planDebug.count;
+    snapshot.planCurrentAction = planCurrentAction;
+    snapshot.planNextAction = planDebug.next_action;
+    snapshot.navCoreState = nav_core_state();
+    snapshot.navCoreAction = nav_core_action();
+    snapshot.basicNavAutonomyEnabled = basicNavAutonomyEnabled;
+    snapshot.autoModeEnabled = autoModeEnabled;
+    snapshot.mode1ConsumedSmartNoFrontier = mode1ConsumedSmartNoFrontier;
+    snapshot.supervisorSmartState = supervisorSmartLastOutput.smart_state;
+    snapshot.supervisorSmartDecisionReason = supervisorSmartLastOutput.decision_reason;
+    snapshot.testRunnerState = testRunnerState;
+    snapshot.batchRunnerState = batchRunnerState;
+    return snapshot;
+}
+
+void MainWindow::resetNavigationAutocheckForMap()
+{
+    navigationAutocheckState =
+        navigationAutocheckEnabled ? NavigationAutocheckState::Active
+                                   : NavigationAutocheckState::Idle;
+    for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+        navigationAutocheckPendingChecks[i] = NavigationAutocheckPendingCheck{};
+    }
+    navigationAutocheckFailures.clear();
+    navigationAutocheckWarningCount = 0;
+    navigationAutocheckLastFailure = NavigationAutocheckFailureReason::None;
+    navigationAutocheckLastFailureTick = 0;
+    navigationAutocheckCriticalFailurePending = false;
+}
+
+uint8_t MainWindow::navigationAutocheckActivePendingCount() const
+{
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+        if (navigationAutocheckPendingChecks[i].active) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+uint16_t MainWindow::navigationAutocheckErrorCount() const
+{
+    uint16_t count = 0;
+    for (const NavigationAutocheckFailureRecord &record : navigationAutocheckFailures) {
+        if (record.severity == NavigationAutocheckSeverity::Error
+            && count < std::numeric_limits<uint16_t>::max()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void MainWindow::startNavigationAutocheckPending(NavigationAutocheckPendingKind kind,
+                                                 uint32_t createdTick,
+                                                 uint32_t deadlineTick)
+{
+    if (kind == NavigationAutocheckPendingKind::None) {
+        return;
+    }
+    for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+        if (navigationAutocheckPendingChecks[i].active
+            && navigationAutocheckPendingChecks[i].kind == kind) {
+            return;
+        }
+    }
+    for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+        if (!navigationAutocheckPendingChecks[i].active) {
+            navigationAutocheckPendingChecks[i].active = true;
+            navigationAutocheckPendingChecks[i].kind = kind;
+            navigationAutocheckPendingChecks[i].createdTick = createdTick;
+            navigationAutocheckPendingChecks[i].deadlineTick = deadlineTick;
+            return;
+        }
+    }
+}
+
+void MainWindow::closeNavigationAutocheckPending(NavigationAutocheckPendingKind kind)
+{
+    for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+        if (navigationAutocheckPendingChecks[i].active
+            && navigationAutocheckPendingChecks[i].kind == kind) {
+            navigationAutocheckPendingChecks[i] = NavigationAutocheckPendingCheck{};
+        }
+    }
+}
+
+void MainWindow::registerNavigationAutocheckFailure(
+    NavigationAutocheckFailureReason reason,
+    NavigationAutocheckSeverity severity,
+    const NavigationAutocheckSnapshot &snapshot,
+    const QString &message)
+{
+    NavigationAutocheckFailureRecord record;
+    record.tick = snapshot.tick;
+    record.simTimeS = snapshot.simTimeS;
+    record.severity = severity;
+    record.reason = reason;
+    record.supervisorState = snapshot.supervisorState;
+    record.navAction = snapshot.navCoreAction;
+    record.planExecutionEnabled = snapshot.planExecutionEnabled;
+    record.message = message;
+    navigationAutocheckFailures.push_back(record);
+
+    if (severity == NavigationAutocheckSeverity::Warning) {
+        ++navigationAutocheckWarningCount;
+    }
+    if (severity == NavigationAutocheckSeverity::Error) {
+        navigationAutocheckLastFailure = reason;
+        navigationAutocheckLastFailureTick = snapshot.tick;
+        navigationAutocheckCriticalFailurePending = true;
+        navigationAutocheckState = NavigationAutocheckState::Failed;
+    }
+}
+
+void MainWindow::advanceNavigationAutocheckIfNeeded()
+{
+    if (!navigationAutocheckEnabled
+        || (testRunnerState != Mode1TestRunnerState::Prepare
+            && testRunnerState != Mode1TestRunnerState::Running)) {
+        return;
+    }
+
+    const NavigationAutocheckSnapshot snapshot = buildNavigationAutocheckSnapshot();
+    const bool supervisorTerminal =
+        snapshot.supervisorState == NAV_SUPERVISOR_STATE_DONE
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_ERROR
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_CANCELLED;
+    if (supervisorTerminal) {
+        for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+            navigationAutocheckPendingChecks[i] = NavigationAutocheckPendingCheck{};
+        }
+        return;
+    }
+
+    if (snapshot.supervisorState == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN
+        && snapshot.finalSafeScanReturnReady
+        && !snapshot.atStartCell
+        && !snapshot.finalSafeScanReturnPlanRequested) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::FinalScanReadyWaitingPlanRequest,
+            snapshot.tick,
+            snapshot.tick + 3u);
+    }
+    if (snapshot.requestPlanReturnToStart) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::ReturnPlanRequestWaitingResult,
+            snapshot.tick,
+            snapshot.tick + 5u);
+    }
+    if (snapshot.requestExecuteReturnPlan) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::ReturnExecuteRequestWaitingPlanExecution,
+            snapshot.tick,
+            snapshot.tick + 5u);
+    }
+    if (snapshot.mode1ConsumedSmartNoFrontier) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::MissionConsumedNoFrontierWaitingAutonomyAlive,
+            snapshot.tick,
+            snapshot.tick + 2u);
+    }
+
+    if (snapshot.requestPlanReturnToStart || snapshot.finalSafeScanReturnPlanRequested) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::FinalScanReadyWaitingPlanRequest);
+    }
+    if (snapshot.returnRouteStatus != NAV_ROUTE_STATUS_IDLE || snapshot.returnPlanLoaded) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::ReturnPlanRequestWaitingResult);
+    }
+    if (snapshot.planExecutionEnabled || snapshot.supervisorState == NAV_SUPERVISOR_STATE_ERROR) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::ReturnExecuteRequestWaitingPlanExecution);
+    }
+
+    const bool noFrontierConsumedStateOk =
+        snapshot.supervisorState == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE
+        || snapshot.supervisorState
+            == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_DONE
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_ERROR;
+    if (snapshot.basicNavAutonomyEnabled && noFrontierConsumedStateOk) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::MissionConsumedNoFrontierWaitingAutonomyAlive);
+    }
+
+    for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
+        NavigationAutocheckPendingCheck &pending = navigationAutocheckPendingChecks[i];
+        if (!pending.active || snapshot.tick <= pending.deadlineTick) {
+            continue;
+        }
+
+        NavigationAutocheckFailureReason reason =
+            NavigationAutocheckFailureReason::None;
+        QString message;
+        switch (pending.kind) {
+        case NavigationAutocheckPendingKind::FinalScanReadyWaitingPlanRequest:
+            reason = NavigationAutocheckFailureReason::FinalScanReadyNoPlanRequest;
+            message = "final safe scan ready but no return plan request was observed";
+            break;
+        case NavigationAutocheckPendingKind::ReturnPlanRequestWaitingResult:
+            reason = NavigationAutocheckFailureReason::ReturnPlanRequestNoEffect;
+            message = "return plan request did not update route status or plan loaded flag";
+            break;
+        case NavigationAutocheckPendingKind::ReturnExecuteRequestWaitingPlanExecution:
+            reason = NavigationAutocheckFailureReason::ReturnExecuteRequestNoEffect;
+            message = "return execute request did not enable plan execution";
+            break;
+        case NavigationAutocheckPendingKind::MissionConsumedNoFrontierWaitingAutonomyAlive:
+            reason =
+                NavigationAutocheckFailureReason::MissionConsumedNoFrontierButAutonomyStopped;
+            message = "mission consumed SMART NO_FRONTIER but autonomy/state did not remain valid";
+            break;
+        case NavigationAutocheckPendingKind::None:
+            break;
+        }
+
+        pending = NavigationAutocheckPendingCheck{};
+        if (reason != NavigationAutocheckFailureReason::None) {
+            registerNavigationAutocheckFailure(reason,
+                                               NavigationAutocheckSeverity::Error,
+                                               snapshot,
+                                               message);
+        }
+    }
+}
+
 void MainWindow::toggleMode1TestRunner()
 {
     if (testRunnerState == Mode1TestRunnerState::Prepare
@@ -8171,6 +8531,7 @@ void MainWindow::startMode1TestRunner(bool restoreConfigOnFinish)
     testRunnerReturnedToStart = false;
     testRunnerFinalMissionState = Mode1MissionState::Disabled;
     testRunnerFinalDoneReason = Mode1MissionDoneReason::None;
+    resetNavigationAutocheckForMap();
 
     if (restoreConfigOnFinish) {
         testRunnerSavedMissionEnabled = mode1MissionEnabled;
@@ -8262,6 +8623,14 @@ void MainWindow::advanceMode1TestRunnerIfNeeded()
     testRunnerFinalMissionState = mode1MissionState;
     testRunnerFinalDoneReason = mode1MissionDoneReason;
 
+    advanceNavigationAutocheckIfNeeded();
+    if (navigationAutocheckCriticalFailurePending) {
+        finishMode1TestRunner(Mode1TestRunnerState::Fail,
+                              Mode1TestRunnerReason::AutocheckFail,
+                              true);
+        return;
+    }
+
     if (testRunnerTicks > testRunnerMaxTicks
         || testRunnerSimTimeS > testRunnerMaxSimTimeS) {
         finishMode1TestRunner(Mode1TestRunnerState::Timeout,
@@ -8319,6 +8688,9 @@ void MainWindow::finishMode1TestRunner(Mode1TestRunnerState state,
 
     testRunnerState = state;
     testRunnerReason = reason;
+    if (navigationAutocheckState != NavigationAutocheckState::Failed) {
+        navigationAutocheckState = NavigationAutocheckState::Idle;
+    }
     testRunnerFoundSpecials = supervisorDebug.found_special_count;
     testRunnerReturnedToStart = supervisorDebug.at_start_cell;
     testRunnerFinalMissionState = mode1MissionState;
@@ -8599,6 +8971,11 @@ void MainWindow::recordCurrentMode1BatchResult()
     result.returnedToStart = testRunnerReturnedToStart;
     result.finalMissionState = testRunnerFinalMissionState;
     result.finalDoneReason = testRunnerFinalDoneReason;
+    result.autocheckFailureCount = navigationAutocheckErrorCount();
+    result.autocheckWarningCount = navigationAutocheckWarningCount;
+    result.autocheckLastFailure =
+        navigationAutocheckFailureReasonText(navigationAutocheckLastFailure);
+    result.autocheckFailures = navigationAutocheckFailures;
     batchRunnerResults.push_back(result);
 
     batchRunnerLastResult = result.result;
@@ -8623,7 +9000,8 @@ bool MainWindow::writeMode1BatchCsv(const QString &path) const
 
     QTextStream out(&file);
     out << "index,map_name,map_path,result,reason,ticks,sim_time_s,found_specials,"
-           "required_specials,returned_to_start,final_mission_state,final_done_reason\n";
+           "required_specials,returned_to_start,final_mission_state,final_done_reason,"
+           "autocheck_failure_count,autocheck_last_failure\n";
     for (int i = 0; i < static_cast<int>(batchRunnerResults.size()); ++i) {
         const Mode1BatchMapResult &result = batchRunnerResults.at(i);
         out << (i + 1) << ','
@@ -8637,7 +9015,9 @@ bool MainWindow::writeMode1BatchCsv(const QString &path) const
             << result.requiredSpecials << ','
             << (result.returnedToStart ? "true" : "false") << ','
             << csvEscaped(mode1MissionStateText(result.finalMissionState)) << ','
-            << csvEscaped(mode1MissionDoneReasonText(result.finalDoneReason)) << '\n';
+            << csvEscaped(mode1MissionDoneReasonText(result.finalDoneReason)) << ','
+            << result.autocheckFailureCount << ','
+            << csvEscaped(result.autocheckLastFailure) << '\n';
     }
     return file.error() == QFile::NoError;
 }
@@ -8671,6 +9051,22 @@ bool MainWindow::writeMode1BatchJson(const QString &path) const
         item.insert("returned_to_start", result.returnedToStart);
         item.insert("final_mission_state", mode1MissionStateText(result.finalMissionState));
         item.insert("final_done_reason", mode1MissionDoneReasonText(result.finalDoneReason));
+        item.insert("autocheck_failure_count", static_cast<int>(result.autocheckFailureCount));
+        item.insert("autocheck_warning_count", static_cast<int>(result.autocheckWarningCount));
+        QJsonArray failures;
+        for (const NavigationAutocheckFailureRecord &failure : result.autocheckFailures) {
+            QJsonObject failureItem;
+            failureItem.insert("tick", static_cast<int>(failure.tick));
+            failureItem.insert("sim_time_s", failure.simTimeS);
+            failureItem.insert("severity", navigationAutocheckSeverityText(failure.severity));
+            failureItem.insert("reason", navigationAutocheckFailureReasonText(failure.reason));
+            failureItem.insert("supervisor_state", supervisorStateText(failure.supervisorState));
+            failureItem.insert("nav_action", navActionText(failure.navAction));
+            failureItem.insert("plan_execution_enabled", failure.planExecutionEnabled);
+            failureItem.insert("message", failure.message);
+            failures.append(failureItem);
+        }
+        item.insert("autocheck_failures", failures);
         results.append(item);
     }
     root.insert("results", results);

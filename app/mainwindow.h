@@ -146,7 +146,36 @@ public:
         NotEnoughSpecials,
         NotAtStart,
         ManualCancelled,
-        InvalidStart
+        InvalidStart,
+        AutocheckFail
+    };
+
+    enum class NavigationAutocheckState {
+        Idle,
+        Active,
+        Failed
+    };
+
+    enum class NavigationAutocheckSeverity {
+        Info,
+        Warning,
+        Error
+    };
+
+    enum class NavigationAutocheckFailureReason {
+        None,
+        FinalScanReadyNoPlanRequest,
+        ReturnPlanRequestNoEffect,
+        ReturnExecuteRequestNoEffect,
+        MissionConsumedNoFrontierButAutonomyStopped
+    };
+
+    enum class NavigationAutocheckPendingKind {
+        None,
+        FinalScanReadyWaitingPlanRequest,
+        ReturnPlanRequestWaitingResult,
+        ReturnExecuteRequestWaitingPlanExecution,
+        MissionConsumedNoFrontierWaitingAutonomyAlive
     };
 
     enum class Mode1BatchRunnerState {
@@ -181,6 +210,10 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    struct NavigationAutocheckSnapshot;
+    struct NavigationAutocheckPendingCheck;
+    struct NavigationAutocheckFailureRecord;
+
     void setupScene();
     void drawReferenceGrid();
     void drawBlackTape();
@@ -284,6 +317,19 @@ private:
     void finishMode1BatchRunner(Mode1BatchRunnerState state,
                                 Mode1BatchRunnerReason reason);
     void restoreMode1BatchRunnerConfig();
+    void resetNavigationAutocheckForMap();
+    void advanceNavigationAutocheckIfNeeded();
+    NavigationAutocheckSnapshot buildNavigationAutocheckSnapshot() const;
+    void startNavigationAutocheckPending(NavigationAutocheckPendingKind kind,
+                                         uint32_t createdTick,
+                                         uint32_t deadlineTick);
+    void closeNavigationAutocheckPending(NavigationAutocheckPendingKind kind);
+    void registerNavigationAutocheckFailure(NavigationAutocheckFailureReason reason,
+                                            NavigationAutocheckSeverity severity,
+                                            const NavigationAutocheckSnapshot &snapshot,
+                                            const QString &message);
+    uint8_t navigationAutocheckActivePendingCount() const;
+    uint16_t navigationAutocheckErrorCount() const;
     void setSimulationRunning(bool running);
     void resetNavigationYawReference();
     void resetNavigationYawReferenceForSmoothStart();
@@ -710,6 +756,13 @@ private:
     QLabel *batchRunnerResultsJsonPathValueLabel = nullptr;
     QLabel *batchRunnerExportOkValueLabel = nullptr;
     QLabel *batchRunnerExportErrorValueLabel = nullptr;
+    QLabel *autocheckEnabledValueLabel = nullptr;
+    QLabel *autocheckStateValueLabel = nullptr;
+    QLabel *autocheckFailureCountValueLabel = nullptr;
+    QLabel *autocheckWarningCountValueLabel = nullptr;
+    QLabel *autocheckLastFailureValueLabel = nullptr;
+    QLabel *autocheckLastFailureTickValueLabel = nullptr;
+    QLabel *autocheckActivePendingCountValueLabel = nullptr;
     QLabel *supervisorStateValueLabel = nullptr;
     QLabel *supervisorDoneReasonValueLabel = nullptr;
     QLabel *supervisorRequiredSpecialsReachedValueLabel = nullptr;
@@ -894,6 +947,54 @@ private:
     bool testRunnerSavedMissionEnabled = true;
     uint16_t testRunnerSavedRequiredSpecialCount = 3;
     NavPolicy testRunnerSavedPolicy = NAV_POLICY_SMART_RECOGNITION;
+    struct NavigationAutocheckSnapshot {
+        uint32_t tick = 0;
+        double simTimeS = 0.0;
+        NavSupervisorState supervisorState = NAV_SUPERVISOR_STATE_IDLE;
+        NavSupervisorDoneReason supervisorDoneReason = NAV_SUPERVISOR_DONE_REASON_NONE;
+        bool requestPlanReturnToStart = false;
+        bool requestExecuteReturnPlan = false;
+        bool blockSmartActions = false;
+        Mode1MissionState mode1MissionState = Mode1MissionState::Disabled;
+        uint16_t foundSpecials = 0;
+        uint16_t requiredSpecials = 0;
+        bool atStartCell = false;
+        bool finalSafeScanReturnReady = false;
+        bool finalSafeScanReturnPlanRequested = false;
+        bool finalSafeScanReturnExecuteRequested = false;
+        NavRouteStatus returnRouteStatus = NAV_ROUTE_STATUS_IDLE;
+        bool returnPlanLoaded = false;
+        bool planExecutionEnabled = false;
+        uint8_t planQueueCount = 0;
+        NavPlanAction planCurrentAction = NAV_PLAN_ACTION_NONE;
+        NavPlanAction planNextAction = NAV_PLAN_ACTION_NONE;
+        NavState navCoreState = NAV_STATE_IDLE;
+        NavAction navCoreAction = NAV_ACTION_NONE;
+        bool basicNavAutonomyEnabled = false;
+        bool autoModeEnabled = false;
+        bool mode1ConsumedSmartNoFrontier = false;
+        NavSupervisorSmartState supervisorSmartState = NAV_SUPERVISOR_SMART_STATE_IDLE;
+        NavSupervisorSmartDecisionReason supervisorSmartDecisionReason =
+            NAV_SUPERVISOR_SMART_DECISION_REASON_NONE;
+        Mode1TestRunnerState testRunnerState = Mode1TestRunnerState::Idle;
+        Mode1BatchRunnerState batchRunnerState = Mode1BatchRunnerState::Idle;
+    };
+    struct NavigationAutocheckPendingCheck {
+        NavigationAutocheckPendingKind kind = NavigationAutocheckPendingKind::None;
+        uint32_t createdTick = 0;
+        uint32_t deadlineTick = 0;
+        bool active = false;
+    };
+    struct NavigationAutocheckFailureRecord {
+        uint32_t tick = 0;
+        double simTimeS = 0.0;
+        NavigationAutocheckSeverity severity = NavigationAutocheckSeverity::Info;
+        NavigationAutocheckFailureReason reason = NavigationAutocheckFailureReason::None;
+        NavSupervisorState supervisorState = NAV_SUPERVISOR_STATE_IDLE;
+        NavAction navAction = NAV_ACTION_NONE;
+        bool planExecutionEnabled = false;
+        QString message;
+    };
     struct Mode1BatchMapResult {
         QString mapPath;
         QString mapName;
@@ -906,7 +1007,22 @@ private:
         bool returnedToStart = false;
         Mode1MissionState finalMissionState = Mode1MissionState::Disabled;
         Mode1MissionDoneReason finalDoneReason = Mode1MissionDoneReason::None;
+        uint16_t autocheckFailureCount = 0;
+        uint16_t autocheckWarningCount = 0;
+        QString autocheckLastFailure;
+        std::vector<NavigationAutocheckFailureRecord> autocheckFailures;
     };
+    static constexpr uint8_t kNavigationAutocheckMaxPendingChecks = 8;
+    bool navigationAutocheckEnabled = true;
+    NavigationAutocheckState navigationAutocheckState = NavigationAutocheckState::Idle;
+    NavigationAutocheckPendingCheck navigationAutocheckPendingChecks
+        [kNavigationAutocheckMaxPendingChecks] = {};
+    std::vector<NavigationAutocheckFailureRecord> navigationAutocheckFailures;
+    uint16_t navigationAutocheckWarningCount = 0;
+    NavigationAutocheckFailureReason navigationAutocheckLastFailure =
+        NavigationAutocheckFailureReason::None;
+    uint32_t navigationAutocheckLastFailureTick = 0;
+    bool navigationAutocheckCriticalFailurePending = false;
     Mode1BatchRunnerState batchRunnerState = Mode1BatchRunnerState::Idle;
     Mode1BatchRunnerReason batchRunnerReason = Mode1BatchRunnerReason::None;
     QStringList batchRunnerMapPaths;
