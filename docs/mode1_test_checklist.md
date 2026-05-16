@@ -2,6 +2,100 @@
 
 Este checklist apunta a validar el modo 1 inteligente sin modificar codigo.
 
+## Teclas y herramientas actuales
+
+- `Shift+R`: corre/cancela el Mode 1 Test Runner sobre el mapa actual.
+- `Shift+B`: corre/cancela el Batch Runner sobre todos los JSON de `data/test_maps`.
+- `X`: cancela autonomia, acciones, planes, runner y batch activo.
+- `Shift+P`: activa/desactiva telemetria de performance.
+- `Y`: activa/desactiva overlay logico.
+- `I`: calcula flood fill hacia la celda inicial.
+- `Shift+F`: evalua fronteras candidatas con flood para debug.
+- `F3`: abre tuning, mision modo 1 y configuracion de Fast Batch Mode.
+
+## Flujo recomendado de pruebas automaticas
+
+Despues de cambios de navegacion:
+
+1. Ejecutar `Shift+B`.
+2. Revisar `batch_runner_state`, `pass/fail/timeout/cancelled` y `autocheck_failure_count`.
+3. Revisar los archivos exportados en `data/test_results/`.
+4. Si falla un mapa, correrlo aislado con `Shift+R`.
+5. Para debugging visual, activar `Y`, `Shift+P`, `I` o `Shift+F` segun corresponda.
+
+Los mapas dentro de `data/test_maps` deben ser mapas esperados a `PASS`. Los casos
+`expected_fail`, experimentales o de desarrollo deberian vivir en otra carpeta o estar
+documentados explicitamente.
+
+## Fast Batch Mode
+
+Fast Batch Mode acelera solo `Shift+B`. No cambia `kSimulationDtS`, no multiplica
+velocidades y no cambia control/PID. Ejecuta varios ticks logicos por cada actualizacion
+visual/UI.
+
+En cada tick logico siguen corriendo:
+
+- sensores;
+- `nav_core`;
+- `nav_supervisor`;
+- test runner;
+- batch runner;
+- autocheck;
+- movimiento fisico con el mismo `dt` logico.
+
+Solo se reduce la frecuencia de:
+
+- escena/robot visual;
+- overlay;
+- labels de telemetria;
+- pinned debug;
+- performance UI.
+
+Configuracion:
+
+- `batch_fast_mode_enabled`.
+- `batch_fast_ticks_per_ui_update`.
+
+Si un batch normal y un batch fast producen resultados distintos para los mismos mapas,
+investigar antes de confiar en el resultado fast.
+
+## Navigation Autocheck Monitor
+
+El autocheck corre durante `Shift+R` y `Shift+B`. Observa coherencia interna; no corrige
+navegacion. Si detecta una falla critica, el mapa actual termina como
+`FAIL / AUTOCHECK_FAIL` y el batch sigue con el siguiente mapa.
+
+Revisar:
+
+- `autocheck_failure_count`;
+- `autocheck_last_failure`;
+- `autocheck_active_pending_count`.
+
+Los failures tambien quedan en el JSON exportado.
+
+## Export de resultados
+
+El Batch Runner exporta CSV y JSON en `data/test_results/`.
+
+CSV:
+
+- una fila por mapa;
+- resultado, reason, ticks, `sim_time_s`, especiales encontradas y estado final;
+- contadores basicos de autocheck;
+- configuracion fast y resumen batch repetido por fila:
+  `batch_fast_mode_enabled`, `batch_fast_ticks_per_ui_update`,
+  `batch_wall_time_s`, `batch_sim_time_s`, `batch_speedup`.
+
+JSON:
+
+- resumen del batch;
+- resultados por mapa;
+- failures de autocheck;
+- metricas de tiempo:
+  `batch_wall_time_s`, `batch_sim_time_s`, `batch_speedup`;
+- configuracion fast:
+  `batch_fast_mode_enabled`, `batch_fast_ticks_per_ui_update`.
+
 ## Preparacion general
 
 Para cada mapa:

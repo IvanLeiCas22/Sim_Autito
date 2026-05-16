@@ -2778,6 +2778,9 @@ void MainWindow::createTelemetryPanel()
     batchFastActiveValueLabel = new QLabel(panel);
     batchFastTicksExecutedLastTimerValueLabel = new QLabel(panel);
     batchFastUiFlushCountValueLabel = new QLabel(panel);
+    batchWallTimeValueLabel = new QLabel(panel);
+    batchSimTimeValueLabel = new QLabel(panel);
+    batchSpeedupValueLabel = new QLabel(panel);
     autocheckEnabledValueLabel = new QLabel(panel);
     autocheckStateValueLabel = new QLabel(panel);
     autocheckFailureCountValueLabel = new QLabel(panel);
@@ -3245,6 +3248,9 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(batchFastActiveValueLabel);
     configureTelemetryValueLabel(batchFastTicksExecutedLastTimerValueLabel);
     configureTelemetryValueLabel(batchFastUiFlushCountValueLabel);
+    configureTelemetryValueLabel(batchWallTimeValueLabel);
+    configureTelemetryValueLabel(batchSimTimeValueLabel);
+    configureTelemetryValueLabel(batchSpeedupValueLabel);
     configureTelemetryValueLabel(autocheckEnabledValueLabel);
     configureTelemetryValueLabel(autocheckStateValueLabel);
     configureTelemetryValueLabel(autocheckFailureCountValueLabel);
@@ -3838,6 +3844,9 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("batch_fast_ticks_executed_last_timer:",
                    batchFastTicksExecutedLastTimerValueLabel);
     layout->addRow("batch_fast_ui_flush_count:", batchFastUiFlushCountValueLabel);
+    layout->addRow("batch_wall_time_s:", batchWallTimeValueLabel);
+    layout->addRow("batch_sim_time_s:", batchSimTimeValueLabel);
+    layout->addRow("batch_speedup:", batchSpeedupValueLabel);
     auto *autocheckTitle = new QLabel("<b>Navigation autocheck</b>", panel);
     layout->addRow(autocheckTitle);
     layout->addRow("autocheck_enabled:", autocheckEnabledValueLabel);
@@ -4080,6 +4089,8 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("batch_runner_results_csv_path", batchRunnerResultsCsvPathValueLabel);
     addPinnedRow("batch_fast_active", batchFastActiveValueLabel);
     addPinnedRow("batch_fast_ticks_per_ui_update", batchFastTicksPerUiUpdateValueLabel);
+    addPinnedRow("batch_speedup", batchSpeedupValueLabel);
+    addPinnedRow("batch_wall_time_s", batchWallTimeValueLabel);
     addPinnedRow("autocheck_failure_count", autocheckFailureCountValueLabel);
     addPinnedRow("autocheck_last_failure", autocheckLastFailureValueLabel);
     addPinnedRow("autocheck_active_pending_count", autocheckActivePendingCountValueLabel);
@@ -5720,6 +5731,19 @@ void MainWindow::updateTelemetryPanel()
     }
     if (batchFastUiFlushCountValueLabel) {
         batchFastUiFlushCountValueLabel->setText(QString::number(batchFastUiFlushCount));
+    }
+    const double displayBatchWallTimeS = currentMode1BatchWallTimeS();
+    const double displayBatchSimTimeS = currentMode1BatchSimTimeS();
+    const double displayBatchSpeedup =
+        displayBatchWallTimeS > 0.0 ? displayBatchSimTimeS / displayBatchWallTimeS : 0.0;
+    if (batchWallTimeValueLabel) {
+        batchWallTimeValueLabel->setText(QString::number(displayBatchWallTimeS, 'f', 2));
+    }
+    if (batchSimTimeValueLabel) {
+        batchSimTimeValueLabel->setText(QString::number(displayBatchSimTimeS, 'f', 2));
+    }
+    if (batchSpeedupValueLabel) {
+        batchSpeedupValueLabel->setText(QString("%1x").arg(displayBatchSpeedup, 0, 'f', 2));
     }
     if (autocheckEnabledValueLabel) {
         autocheckEnabledValueLabel->setText(navigationAutocheckEnabled ? "true" : "false");
@@ -8006,6 +8030,7 @@ void MainWindow::showControlsHelp()
         "- Shift+P: Toggle performance debug telemetry\n"
         "- Shift+R: Start/cancel assisted Mode 1 test runner for current map\n"
         "- Shift+B: Start/cancel Mode 1 batch runner from data/test_maps\n"
+        "- F3: configure Mode 1 mission and batch fast mode\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
         "- Y: Toggle shadow logical map overlay\n"
         "\n"
@@ -8891,6 +8916,10 @@ void MainWindow::startMode1BatchRunner()
     batchRunnerExportError.clear();
     batchFastTicksExecutedLastTimer = 0;
     batchFastUiFlushCount = 0;
+    batchRunnerWallTimeS = 0.0;
+    batchRunnerSimTimeS = 0.0;
+    batchRunnerSpeedup = 0.0;
+    batchRunnerWallTimer.start();
 
     setSimulationRunning(false);
     setBasicNavAutonomyEnabled(false);
@@ -9120,6 +9149,46 @@ void MainWindow::recordCurrentMode1BatchResult()
     }
 }
 
+double MainWindow::currentMode1BatchWallTimeS() const
+{
+    if (mode1BatchRunnerIsActive() && batchRunnerWallTimer.isValid()) {
+        return batchRunnerWallTimer.elapsed() / 1000.0;
+    }
+    return batchRunnerWallTimeS;
+}
+
+double MainWindow::currentMode1BatchSimTimeS() const
+{
+    double simTimeS = 0.0;
+    for (const Mode1BatchMapResult &result : batchRunnerResults) {
+        simTimeS += result.simTimeS;
+    }
+    if (batchRunnerState == Mode1BatchRunnerState::RunningMap
+        && (testRunnerState == Mode1TestRunnerState::Prepare
+            || testRunnerState == Mode1TestRunnerState::Running
+            || testRunnerState == Mode1TestRunnerState::Pass
+            || testRunnerState == Mode1TestRunnerState::Fail
+            || testRunnerState == Mode1TestRunnerState::Timeout
+            || testRunnerState == Mode1TestRunnerState::Cancelled)) {
+        simTimeS += testRunnerSimTimeS;
+    }
+    return simTimeS;
+}
+
+void MainWindow::updateMode1BatchTimingSummary()
+{
+    batchRunnerWallTimeS =
+        batchRunnerWallTimer.isValid() ? batchRunnerWallTimer.elapsed() / 1000.0 : 0.0;
+
+    batchRunnerSimTimeS = 0.0;
+    for (const Mode1BatchMapResult &result : batchRunnerResults) {
+        batchRunnerSimTimeS += result.simTimeS;
+    }
+
+    batchRunnerSpeedup =
+        batchRunnerWallTimeS > 0.0 ? batchRunnerSimTimeS / batchRunnerWallTimeS : 0.0;
+}
+
 bool MainWindow::writeMode1BatchCsv(const QString &path) const
 {
     QFile file(path);
@@ -9130,7 +9199,9 @@ bool MainWindow::writeMode1BatchCsv(const QString &path) const
     QTextStream out(&file);
     out << "index,map_name,map_path,result,reason,ticks,sim_time_s,found_specials,"
            "required_specials,returned_to_start,final_mission_state,final_done_reason,"
-           "autocheck_failure_count,autocheck_last_failure\n";
+           "autocheck_failure_count,autocheck_last_failure,batch_fast_mode_enabled,"
+           "batch_fast_ticks_per_ui_update,batch_wall_time_s,batch_sim_time_s,"
+           "batch_speedup\n";
     for (int i = 0; i < static_cast<int>(batchRunnerResults.size()); ++i) {
         const Mode1BatchMapResult &result = batchRunnerResults.at(i);
         out << (i + 1) << ','
@@ -9146,7 +9217,12 @@ bool MainWindow::writeMode1BatchCsv(const QString &path) const
             << csvEscaped(mode1MissionStateText(result.finalMissionState)) << ','
             << csvEscaped(mode1MissionDoneReasonText(result.finalDoneReason)) << ','
             << result.autocheckFailureCount << ','
-            << csvEscaped(result.autocheckLastFailure) << '\n';
+            << csvEscaped(result.autocheckLastFailure) << ','
+            << (batchFastModeEnabled ? "true" : "false") << ','
+            << batchFastTicksPerUiUpdate << ','
+            << QString::number(batchRunnerWallTimeS, 'f', 2) << ','
+            << QString::number(batchRunnerSimTimeS, 'f', 2) << ','
+            << QString::number(batchRunnerSpeedup, 'f', 2) << '\n';
     }
     return file.error() == QFile::NoError;
 }
@@ -9163,6 +9239,11 @@ bool MainWindow::writeMode1BatchJson(const QString &path) const
     root.insert("cancelled_count", static_cast<int>(batchRunnerCancelledCount));
     root.insert("batch_state", mode1BatchRunnerStateText(batchRunnerState));
     root.insert("batch_reason", mode1BatchRunnerReasonText(batchRunnerReason));
+    root.insert("batch_wall_time_s", batchRunnerWallTimeS);
+    root.insert("batch_sim_time_s", batchRunnerSimTimeS);
+    root.insert("batch_speedup", batchRunnerSpeedup);
+    root.insert("batch_fast_mode_enabled", batchFastModeEnabled);
+    root.insert("batch_fast_ticks_per_ui_update", static_cast<int>(batchFastTicksPerUiUpdate));
 
     QJsonArray results;
     for (int i = 0; i < static_cast<int>(batchRunnerResults.size()); ++i) {
@@ -9259,6 +9340,7 @@ void MainWindow::finishMode1BatchRunner(Mode1BatchRunnerState state,
     nav_core_stop();
     lastNavCommand = {0, 0};
     setSimulationRunning(false);
+    updateMode1BatchTimingSummary();
     restoreMode1BatchRunnerConfig();
     exportMode1BatchResults();
     updateNavCorePipeline();

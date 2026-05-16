@@ -317,6 +317,9 @@ private:
     bool writeMode1BatchJson(const QString &path) const;
     bool loadCurrentMode1BatchMap();
     void recordCurrentMode1BatchResult();
+    double currentMode1BatchWallTimeS() const;
+    double currentMode1BatchSimTimeS() const;
+    void updateMode1BatchTimingSummary();
     void finishMode1BatchRunner(Mode1BatchRunnerState state,
                                 Mode1BatchRunnerReason reason);
     void restoreMode1BatchRunnerConfig();
@@ -766,6 +769,9 @@ private:
     QLabel *batchFastActiveValueLabel = nullptr;
     QLabel *batchFastTicksExecutedLastTimerValueLabel = nullptr;
     QLabel *batchFastUiFlushCountValueLabel = nullptr;
+    QLabel *batchWallTimeValueLabel = nullptr;
+    QLabel *batchSimTimeValueLabel = nullptr;
+    QLabel *batchSpeedupValueLabel = nullptr;
     QLabel *autocheckEnabledValueLabel = nullptr;
     QLabel *autocheckStateValueLabel = nullptr;
     QLabel *autocheckFailureCountValueLabel = nullptr;
@@ -1053,6 +1059,10 @@ private:
     uint16_t batchFastTicksPerUiUpdate = 10;
     uint16_t batchFastTicksExecutedLastTimer = 0;
     uint32_t batchFastUiFlushCount = 0;
+    QElapsedTimer batchRunnerWallTimer;
+    double batchRunnerWallTimeS = 0.0;
+    double batchRunnerSimTimeS = 0.0;
+    double batchRunnerSpeedup = 0.0;
     bool batchRunnerSavedConfigValid = false;
     bool batchRunnerSavedMissionEnabled = true;
     uint16_t batchRunnerSavedRequiredSpecialCount = 3;
