@@ -63,12 +63,32 @@ Estado:
 
 - no implementado en `nav_core`.
 
-## Migrar mas orquestacion desde MainWindow
+## Retorno inteligente `GOAL_DIRECTED_RETURN`
 
-Hoy `MainWindow` maneja:
+La mision modo 1 ya tiene retorno seguro conocido controlado por `nav_supervisor`.
+La estrategia inteligente todavia no esta implementada como control real.
+
+Ideas:
+
+- usar `nav_flood` para calcular costo hacia inicio;
+- evaluar fronteras candidatas desde `nav_supervisor`;
+- comparar `best_frontier_score` contra retorno seguro;
+- planificar hasta la frontera con BFS orientado;
+- entrar a la vecina no visitada solo si la orientacion/accion de entrada es viable;
+- usar presupuesto de exploracion, limite de intentos y blacklist;
+- fallback obligatorio a `SAFE_KNOWN_RETURN`.
+
+Estado:
+
+- debug de fronteras existe en `MainWindow` con `Shift+F`;
+- no ejecuta acciones;
+- no esta integrado a la mision.
+
+## Migrar mas adaptacion desde MainWindow
+
+`nav_supervisor` ya controla mision modo 1 segura y SMART. `MainWindow` todavia maneja:
 
 - ejecucion de cola;
-- SMART_RECOGNITION;
 - secuencias compuestas;
 - seleccion `FRONT_LINE` vs `FRONT_WALL`;
 - validaciones de `J`;
@@ -76,13 +96,14 @@ Hoy `MainWindow` maneja:
 
 Idea:
 
-- crear un supervisor portable de alto nivel;
-- dejar a la app Qt solo UI/sim;
-- permitir reusar ese supervisor en STM32.
+- evaluar si el ejecutor de cola debe tener una capa portable;
+- mover la evaluacion flood frontier desde debug Qt a `nav_supervisor`;
+- mantener a la app Qt solo como UI/simulacion/HAL.
 
 Estado:
 
-- pendiente.
+- parcialmente implementado: `nav_supervisor` ya existe y controla mision/SMART;
+- pendiente: retorno inteligente, HAL y posible ejecutor portable.
 
 ## Modo 2
 
@@ -99,18 +120,41 @@ Estado:
 - no implementado;
 - el planner actual es base para esto, pero todavia es modo 1.
 
-## Flood fill o Dijkstra
+## Flood fill avanzado, Dijkstra o costos por accion
 
-Ideas:
+Actual:
 
-- flood fill para micromouse clasico;
+- `nav_flood` ya existe como capa portable de costos por celda;
+- `I` calcula costos hacia inicio;
+- overlay muestra costos;
+- `Shift+F` evalua fronteras candidatas como debug.
+
+Ideas futuras:
+
 - Dijkstra/A* con costos por tipo de accion;
 - penalizar `CENTER_AND_PIVOT_180` por duracion;
 - preferir smooths consecutivos cuando sean fisicamente estables.
 
 Estado:
 
-- no implementado.
+- flood fill basico implementado;
+- costos por accion/Dijkstra/A* no implementados.
+
+## Planner a celda con orientacion objetivo
+
+Para entrar a una frontera no visitada de forma controlada, puede convenir planificar
+hasta `best_cell` con una orientacion especifica.
+
+Ideas:
+
+- extender API del planner orientado para target `(cell_x, cell_y, dir)`;
+- reutilizar BFS actual;
+- usarlo en `GOAL_DIRECTED_RETURN`;
+- mantener fallback a planner a celda actual.
+
+Estado:
+
+- no implementado como API publica dedicada.
 
 ## Pivots 90 generales
 
@@ -185,3 +229,19 @@ Ideas:
 Estado:
 
 - no implementado para STM32.
+
+## HAL STM32
+
+Para portar a Bluepill falta una interfaz clara entre firmware y navegacion portable.
+
+Ideas:
+
+- HAL de sensores IR, piso, yaw y tiempo;
+- salida de motores/PWM;
+- telemetria serial compacta;
+- configuracion de tuning sin Qt;
+- build separado sin `MainWindow`, `SimWorld` ni `SimRobot`.
+
+Estado:
+
+- no implementado.

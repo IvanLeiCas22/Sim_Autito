@@ -477,8 +477,8 @@ static void set_frontier_result_from_input_if_present(const NavSupervisorSmartIn
     supervisor_state.smart_frontier_plan_loaded = input->frontier_plan_loaded;
 }
 
-void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
-                                        NavSupervisorSmartOutput *output)
+void nav_supervisor_update_smart(const NavSupervisorSmartInput *input,
+                                 NavSupervisorSmartOutput *output)
 {
     clear_smart_output(output);
     if (input == 0) {

@@ -11,9 +11,14 @@ El modo 1 busca reconocer el laberinto de forma incremental:
 - detectar celdas especiales por sensores de piso;
 - explorar celdas no visitadas;
 - volver automaticamente a una frontera de exploracion cuando queda rodeado de celdas ya visitadas;
-- terminar cuando no quedan fronteras alcanzables (`NO_FRONTIER`).
+- terminar cuando no quedan fronteras alcanzables (`NO_FRONTIER`) si la mision esta
+  desactivada;
+- si la mision modo 1 esta activada, buscar N celdas especiales y volver a la celda
+  inicial por retorno seguro conocido.
 
-El mapa logico ya se usa para algunas decisiones de exploracion y planificacion, pero no existe todavia flood fill ni modo 2.
+El mapa logico se usa para decisiones de exploracion y planificacion. `nav_flood`
+existe como capa portable de costos/debug, pero todavia no controla el retorno
+inteligente ni reemplaza al planner BFS orientado.
 
 ## Arquitectura general
 
@@ -24,20 +29,44 @@ Archivos principales:
 - `app/mainwindow.h`
 - `app/mainwindow.cpp`
 
-`MainWindow` no es portable. Orquesta:
+`MainWindow` no es portable. Actualmente funciona como adaptador Qt/fisico:
 
 - ciclo de simulacion;
 - lectura de `SimRobot` y `SimWorld`;
 - construccion de `RobotSensors`;
 - llamadas a `nav_core_update`;
 - arranque de primitivas con `nav_core_start_*`;
+- aplicacion de requests de `nav_supervisor`;
+- llamadas reales al planner cuando el supervisor las pide;
 - reseteo de referencia de yaw del simulador;
 - ejecucion de planes;
 - secuencias compuestas;
-- autonomia basica;
 - overlay del mapa;
 - telemetria;
 - ventana `Control Tuning`.
+
+`MainWindow` ya no es la fuente principal de decision para la mision modo 1 segura ni
+para `SMART_RECOGNITION`.
+
+### nav_supervisor portable
+
+Archivos:
+
+- `nav/nav_supervisor.h`
+- `nav/nav_supervisor.c`
+
+`nav_supervisor` controla actualmente:
+
+- mision modo 1 segura;
+- latch al encontrar el numero requerido de celdas especiales;
+- bloqueo de SMART durante retorno;
+- planificacion segura al inicio mediante requests a `MainWindow`;
+- acciones locales de `SMART_RECOGNITION`;
+- planificacion a frontera de `SMART_RECOGNITION`;
+- estados SMART principales y debug portable.
+
+`MainWindow` traduce las salidas del supervisor a llamadas reales de `nav_core` y
+ejecucion fisica de la cola.
 
 ### nav_core portable
 
@@ -88,6 +117,24 @@ Archivos:
 
 Usa fixed-point Q16.16 (`q16_16_t`) y operaciones con `int64_t` para multiplicacion/division intermedia.
 
+### nav_flood portable
+
+Archivos:
+
+- `nav/nav_flood.h`
+- `nav/nav_flood.c`
+
+`nav_flood` calcula costos por celda hacia un objetivo unico. Respeta:
+
+- celdas visitadas;
+- paredes conocidas;
+- paredes presentes;
+- limites del mapa.
+
+La tecla `I` calcula flood hacia la celda inicial. El overlay muestra costos cuando
+hay flood valido. `Shift+F` evalua fronteras candidatas como debug, sin ejecutar
+acciones.
+
 ### SimWorld y SimRobot
 
 Archivos:
@@ -112,10 +159,12 @@ Son simulacion no portable:
 2. Construye `RobotSensors`.
 3. Llama a `nav_core_update(...)`.
 4. Si una accion termina, `nav_core` aplica la politica de actualizacion de mapa.
-5. `MainWindow` mira estado/action y decide si debe arrancar otra accion.
-6. En autonomia (`B`), `MainWindow::advanceBasicNavAutonomyIfNeeded()` usa la politica actual.
-7. Antes de arrancar una primitiva, `MainWindow` ajusta la referencia de yaw del simulador.
-8. `X` cancela autonomia, plan, secuencias compuestas y accion actual.
+5. `MainWindow` construye inputs para `nav_supervisor`.
+6. `nav_supervisor` decide mision/SMART y emite requests.
+7. `MainWindow` aplica esos requests como adaptador: arranca primitivas, planifica,
+   ejecuta cola o detiene autonomia.
+8. Antes de arrancar una primitiva, `MainWindow` ajusta la referencia de yaw del simulador.
+9. `X` cancela autonomia, plan, secuencias compuestas, supervisor y accion actual.
 
 Atajos importantes:
 
@@ -136,7 +185,7 @@ Enum real: `NavPolicy`.
 | --- | --- |
 | `NAV_POLICY_RIGHT_HAND_RULE` | Implementada. Regla mano derecha con percepcion actual. |
 | `NAV_POLICY_MAP_PREFER_UNVISITED` | Implementada. Prefiere vecinas libres no visitadas en orden derecha, frente, izquierda. Si no encuentra, cae a mano derecha. |
-| `NAV_POLICY_SMART_RECOGNITION` | Implementada en orquestacion de `MainWindow`. Usa accion local hacia no visitada; si no hay, planifica a frontera y ejecuta la cola. |
+| `NAV_POLICY_SMART_RECOGNITION` | Implementada con decision en `nav_supervisor`. Usa accion local hacia no visitada; si no hay, pide plan a frontera y ejecucion de cola. |
 
 ### RIGHT_HAND_RULE
 
@@ -164,16 +213,26 @@ Solo elige una salida si esta libre, la vecina esta dentro del mapa y `visited =
 
 ### SMART_RECOGNITION
 
-Estado debug: `smart_recognition_state`.
+Estados/debug principales:
+
+- `supervisor_smart_state`;
+- `supervisor_smart_decision_reason`;
+- `supervisor_requested_action`;
+- `supervisor_request_plan_to_frontier`;
+- `supervisor_request_execute_plan`;
+- `smart_recognition_state` como vista/cache de `MainWindow`.
 
 Flujo:
 
-1. Si hay plan en ejecucion, lo deja avanzar.
-2. Si hay accion local hacia vecina no visitada, la ejecuta.
-3. Si no hay vecina no visitada inmediata, llama a `nav_core_route_plan_to_nearest_frontier()`.
-4. Si hay ruta, activa `plan_execution_enabled` y ejecuta la cola.
-5. Al llegar a la frontera, vuelve a decidir localmente.
-6. Si no hay frontera, detiene autonomia con estado `NO_FRONTIER`.
+1. Si hay plan en ejecucion, el supervisor queda en `EXECUTING_FRONTIER_ROUTE`.
+2. Si hay accion local hacia vecina no visitada, el supervisor pide iniciar esa accion.
+3. Si no hay vecina no visitada inmediata, el supervisor pide plan a frontera.
+4. `MainWindow` llama a `nav_core_route_plan_to_nearest_frontier()` solo por request.
+5. Si hay ruta, el supervisor pide ejecutar la cola.
+6. Al llegar a la frontera, vuelve a decidir localmente.
+7. Si no hay frontera, detiene autonomia con estado `NO_FRONTIER`.
+
+La mision modo 1 puede bloquear SMART al encontrar las N especiales requeridas.
 
 ## Mapa logico
 
@@ -205,6 +264,36 @@ El mapa se inicializa con `nav_core_map_init(...)` y `nav_map_init(...)`:
 - deja pendiente snapshot inicial de especial.
 
 El mapa sombra se muestra en overlay desde `MainWindow`.
+
+## Mision modo 1 segura
+
+La mision modo 1 vive en `nav_supervisor` y esta activada por defecto en la
+configuracion actual del simulador.
+
+Estados principales:
+
+- `NAV_SUPERVISOR_STATE_SEARCH_SPECIALS`;
+- `NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE`;
+- `NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN`;
+- `NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE`;
+- `NAV_SUPERVISOR_STATE_DONE`;
+- `NAV_SUPERVISOR_STATE_ERROR`;
+- `NAV_SUPERVISOR_STATE_CANCELLED`.
+
+Flujo:
+
+1. En `SEARCH_SPECIALS`, SMART explora normalmente.
+2. Si `special_cells_found_count >= required_special_count`, el supervisor latchea la
+   condicion inmediatamente.
+3. Pide limpiar exploracion pendiente sin cortar la accion fisica actual.
+4. Espera `nav_ready`.
+5. Pide a `MainWindow` planificar retorno seguro con
+   `nav_core_route_plan_to_cell(start_x, start_y)`.
+6. Si hay plan, pide ejecutar la cola.
+7. Al llegar a la celda inicial, termina en `DONE`.
+
+Si SMART llega a `NO_FRONTIER` antes de encontrar las especiales requeridas, la mision
+termina en `ERROR` con reason equivalente a `NO_FRONTIER_BEFORE_REQUIRED_SPECIALS`.
 
 ## Cola FIFO de acciones planificadas
 
@@ -301,6 +390,29 @@ Limitaciones actuales:
 - no hay pivots 90 generales;
 - `CENTER_AND_PIVOT_180` es la unica reorientacion general en ruta;
 - despues de `CENTER_AND_PIVOT_180`, el planner evita `SMOOTH_LEFT/RIGHT` inmediatamente y permite `ADVANCE_LINE` o terminar.
+
+## Flood fill y debug de fronteras
+
+`nav_flood` esta implementado como capa portable de costos. No modifica la cola ni la
+navegacion actual.
+
+Uso actual:
+
+- `I`: calcula flood hacia la celda inicial guardada;
+- overlay logico: muestra costos flood si hay flood valido;
+- `Shift+F`: evalua fronteras candidatas con el flood vigente.
+
+La evaluacion de fronteras calcula:
+
+- cantidad de salidas candidatas;
+- cantidad de celdas frontera visitadas unicas;
+- cantidad de vecinas no visitadas unicas;
+- mejor frontera por score;
+- comparacion debug contra retorno seguro;
+- accion de entrada sugerida segun orientacion.
+
+Todo esto sigue siendo debug en `MainWindow`. No ejecuta acciones y no forma parte de
+`GOAL_DIRECTED_RETURN` todavia.
 
 ## Acciones y primitivas
 
@@ -548,6 +660,14 @@ Variables clave:
 - `nav_action`.
 - `nav_recommended_action`.
 - `nav_last_decision`.
+- `supervisor_state`.
+- `supervisor_done_reason`.
+- `supervisor_active_as_source`.
+- `supervisor_smart_state`.
+- `supervisor_smart_decision_reason`.
+- `supervisor_smart_active_as_source`.
+- `supervisor_request_plan_to_frontier`.
+- `supervisor_request_execute_plan`.
 - `smart_recognition_state`.
 - `logical_cell_x`, `logical_cell_y`, `logical_dir`.
 - `map_update_count`, `map_wall_update_count`.
@@ -572,19 +692,24 @@ Variables clave:
 
 Todavia esta en `MainWindow`:
 
-- orquestacion completa de `SMART_RECOGNITION`;
 - ejecucion fisica de la cola;
 - secuencias compuestas;
 - seleccion de preparacion para `CENTER_AND_PIVOT_180`;
 - reseteo/aplicacion de referencia de yaw del simulador;
+- lectura de sensores simulados y adaptacion a `RobotSensors`;
+- llamadas reales a planner cuando el supervisor las pide;
+- debug de flood frontier;
 - ayuda de controles y telemetria UI.
 
-Esto funciona para simulador, pero una parte deberia migrarse a una capa portable antes del firmware final.
+Esto funciona para simulador. La parte pendiente mas importante para portabilidad es
+definir una HAL STM32 y decidir cuanto del ejecutor de cola/secuencias compuestas debe
+migrar fuera de `MainWindow`.
 
 ## Limitaciones conocidas
 
-- No hay flood fill.
 - No hay modo 2 final.
+- `GOAL_DIRECTED_RETURN` no esta implementado como control real.
+- La evaluacion de fronteras con flood es debug en `MainWindow`.
 - El planner usa BFS de costo uniforme.
 - No hay pivots 90 generales en rutas.
 - `CENTER_AND_PIVOT_180` es robusto, pero fisicamente mas lento que una ruta con turns suaves.

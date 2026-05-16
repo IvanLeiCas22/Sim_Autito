@@ -17,7 +17,8 @@ Para cada mapa:
 
 Resultado esperado general:
 
-- `smart_recognition_state = NO_FRONTIER` al completar lo alcanzable.
+- con mision desactivada, `supervisor_smart_state = NO_FRONTIER` al completar lo alcanzable.
+- con mision activada, `supervisor_state = DONE` al volver a la celda inicial.
 - El overlay coincide con la pose logica.
 - No atraviesa paredes.
 - No queda en loop.
@@ -86,6 +87,11 @@ Esperado:
 
 Variables utiles:
 
+- `supervisor_smart_state`.
+- `supervisor_smart_decision_reason`.
+- `supervisor_smart_active_as_source`.
+- `supervisor_request_plan_to_frontier`.
+- `supervisor_request_execute_plan`.
 - `smart_recognition_state`.
 - `smart_frontier_plan_requested_count`.
 - `smart_frontier_routes_executed_count`.
@@ -93,6 +99,52 @@ Variables utiles:
 - `frontier_route_status`.
 - `plan_execution_enabled`.
 - `plan_queue_count`.
+
+## Supervisor modo 1
+
+### Mision activada
+
+Pasos:
+
+1. Activar `mode1_mission_enabled`.
+2. Dejar `mode1_required_special_count` en el valor deseado.
+3. Seleccionar `NAV_POLICY_SMART_RECOGNITION`.
+4. Activar `B`.
+
+Esperado:
+
+- `supervisor_active_as_source = true`;
+- `supervisor_state = SEARCH_SPECIALS` mientras busca;
+- SMART explora normalmente hasta encontrar N especiales;
+- al encontrar N, `supervisor_state = FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE`;
+- `supervisor_block_smart_actions = true`;
+- no se planifican nuevas fronteras;
+- la accion fisica actual termina sin ser cortada;
+- luego pasa por `RETURN_SAFE_PLAN` y `RETURN_SAFE_EXECUTE`;
+- termina en `DONE` al llegar a la celda inicial.
+
+### Mision desactivada
+
+Pasos:
+
+1. Desactivar `mode1_mission_enabled`.
+2. Activar SMART con `B`.
+
+Esperado:
+
+- `supervisor_active_as_source = false` para mision;
+- SMART sigue controlado por `nav_supervisor`;
+- explora hasta `NO_FRONTIER`;
+- no intenta volver al inicio por mision.
+
+### Bloqueo de SMART por mision
+
+Esperado al alcanzar N especiales:
+
+- `supervisor_smart_state = BLOCKED_BY_MISSION` o SMART sin nuevos requests;
+- `supervisor_request_plan_to_frontier = false`;
+- `plan_execution_enabled` de exploracion queda limpio;
+- retorno seguro conserva prioridad.
 
 ## Planificacion manual K/J
 
@@ -325,6 +377,8 @@ Probar durante:
 
 - autonomia local;
 - ruta planificada;
+- espera de retorno de mision;
+- retorno seguro al inicio;
 - secuencia compuesta;
 - smooth;
 - center;
@@ -336,6 +390,7 @@ Esperado:
 - se detiene accion actual;
 - `plan_execution_enabled = false`;
 - secuencias pendientes canceladas;
+- `nav_supervisor` queda cancelado si habia mision activa;
 - motores en cero;
 - no queda cola ejecutandose.
 
@@ -356,6 +411,37 @@ Esperado:
 - cambios se reflejan en telemetria/control;
 - reset vuelve a defaults de codigo.
 
+## Flood fill y fronteras debug
+
+### Flood hacia inicio
+
+Pasos:
+
+1. Explorar algunas celdas.
+2. Presionar `I`.
+
+Esperado:
+
+- `flood_status = OK`;
+- el overlay muestra costos si `Y` esta activo;
+- la celda inicial tiene costo `0`;
+- celdas no visitadas no reciben costo util.
+
+### Evaluacion de fronteras
+
+Pasos:
+
+1. Presionar `I`.
+2. Presionar `Shift+F`.
+
+Esperado:
+
+- `flood_fr_candidate_edge_count` cuenta salidas candidatas;
+- `flood_fr_candidate_cell_count` cuenta celdas visitadas frontera unicas;
+- `flood_fr_candidate_neighbor_cell_count` cuenta vecinas no visitadas unicas;
+- el overlay marca `best_cell` y `best_neighbor_cell`;
+- no se carga plan ni se ejecuta accion.
+
 ## Criterios de falla
 
 Considerar falla si:
@@ -369,5 +455,7 @@ Considerar falla si:
 - no detecta especiales alcanzables en avance/smooth/auxiliar;
 - SMART queda en loop sin llegar a `NO_FRONTIER`;
 - `J` ejecuta una ruta desde arranque fisico invalido;
+- `supervisor_smart_active_as_source` queda falso durante SMART activo;
+- la mision activa no bloquea SMART al encontrar N especiales;
 - smooth consecutivos generan giro brusco por perdida de yaw carry;
 - wall caution domina cuando deberia caer a `LOST`.

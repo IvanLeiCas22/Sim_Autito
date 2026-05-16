@@ -4,6 +4,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QMainWindow>
+#include <QElapsedTimer>
 #include <QString>
 
 #include <cstdint>
@@ -71,17 +72,6 @@ public:
         Error
     };
 
-    enum class SmartShadowCompareReason {
-        None,
-        MatchDecisionPoint,
-        MatchWaitNavReady,
-        MatchPlanExecution,
-        MatchBlockedByMission,
-        MismatchAction,
-        MismatchState,
-        MismatchPlanRequest
-    };
-
     enum class Mode1MissionState {
         Disabled,
         SearchSpecials,
@@ -145,9 +135,10 @@ private:
     void drawReferenceGrid();
     void drawBlackTape();
     void drawWorldWalls();
-    void clearShadowMapOverlay();
+    int clearShadowMapOverlay();
     void updateShadowMapOverlay();
     void drawShadowMapOverlay();
+    void markShadowMapOverlayDirty();
     void rebuildSceneItems();
     void initializeIrSensors();
     void initializeFloorSensors();
@@ -196,12 +187,11 @@ private:
     void syncMode1TelemetryFromSupervisor(const NavSupervisorDebugSnapshot &debug);
     void applyNavSupervisorOutput(const NavSupervisorOutput &output);
     bool advanceMode1MissionIfNeeded();
-    void updateSmartRecognitionShadow(NavRecommendedAction recommendedAction,
-                                      bool navReady,
-                                      bool missionBlocked,
-                                      NavRouteStatus frontierStatus,
-                                      bool frontierPlanLoaded);
-    bool smartShadowMatchesMainWindow();
+    void updateSmartRecognitionSupervisor(NavRecommendedAction recommendedAction,
+                                          bool navReady,
+                                          bool missionBlocked,
+                                          NavRouteStatus frontierStatus,
+                                          bool frontierPlanLoaded);
     void resetRobotPoseToWorldStart();
     void initializeNavMapFromWorldStart();
     void createRobotItem();
@@ -213,6 +203,10 @@ private:
     void updateFloorSensors();
     void updateNavCorePipeline();
     void simulationStep();
+    void togglePerformanceDebug();
+    void resetPerformanceStats();
+    void updatePerformanceSceneItemCounts();
+    void recordPerformanceStep(double stepMs);
     void setSimulationRunning(bool running);
     void resetNavigationYawReference();
     void resetNavigationYawReferenceForSmoothStart();
@@ -478,6 +472,20 @@ private:
     QLabel *autoModeValueLabel = nullptr;
     QLabel *simulationStepCountValueLabel = nullptr;
     QLabel *simulationTimeValueLabel = nullptr;
+    QLabel *performanceDebugEnabledValueLabel = nullptr;
+    QLabel *perfSceneItemCountValueLabel = nullptr;
+    QLabel *perfSceneOverlayItemCountValueLabel = nullptr;
+    QLabel *perfSceneTextItemCountValueLabel = nullptr;
+    QLabel *perfSceneStaticOtherItemCountValueLabel = nullptr;
+    QLabel *perfSimulationStepMsValueLabel = nullptr;
+    QLabel *perfSimulationStepAvgMsValueLabel = nullptr;
+    QLabel *perfSimulationStepMaxMsValueLabel = nullptr;
+    QLabel *perfNavUpdateMsValueLabel = nullptr;
+    QLabel *perfSensorUpdateMsValueLabel = nullptr;
+    QLabel *perfVisualUpdateMsValueLabel = nullptr;
+    QLabel *perfOverlayUpdateMsValueLabel = nullptr;
+    QLabel *perfTelemetryUpdateMsValueLabel = nullptr;
+    QLabel *perfFpsEstimateValueLabel = nullptr;
     QLabel *motorTestModeValueLabel = nullptr;
     QLabel *sequenceEnabledValueLabel = nullptr;
     QLabel *sequenceIndexValueLabel = nullptr;
@@ -561,8 +569,7 @@ private:
     QLabel *supervisorSmartNavReadyValueLabel = nullptr;
     QLabel *supervisorSmartPlanExecutionEnabledValueLabel = nullptr;
     QLabel *supervisorSmartActionInProgressValueLabel = nullptr;
-    QLabel *supervisorSmartCompareReasonValueLabel = nullptr;
-    QLabel *supervisorSmartShadowMatchesMainWindowValueLabel = nullptr;
+    QLabel *supervisorSmartActiveAsSourceValueLabel = nullptr;
     QLabel *supervisorSmartLocalControlEnabledValueLabel = nullptr;
     QLabel *supervisorSmartLocalControlAppliedValueLabel = nullptr;
     QLabel *supervisorSmartLocalControlActionValueLabel = nullptr;
@@ -654,6 +661,11 @@ private:
     QLabel *mapSpecialCellsFoundCountValueLabel = nullptr;
     QLabel *mapLastSpecialCellValueLabel = nullptr;
     QLabel *mapOverlayEnabledValueLabel = nullptr;
+    QLabel *overlayItemsCreatedLastUpdateValueLabel = nullptr;
+    QLabel *overlayItemsDeletedLastUpdateValueLabel = nullptr;
+    QLabel *overlayItemsCurrentValueLabel = nullptr;
+    QLabel *overlayRebuildCountValueLabel = nullptr;
+    QLabel *overlayDirtyValueLabel = nullptr;
     QLabel *simLeftMotorGainValueLabel = nullptr;
     QLabel *simRightMotorGainValueLabel = nullptr;
     QLabel *simPivotCenterCorrectionEnabledValueLabel = nullptr;
@@ -668,6 +680,25 @@ private:
     bool simulationRunning = false;
     bool autoModeEnabled = false;
     bool motorTestModeEnabled = false;
+    bool performanceDebugEnabled = false;
+    int perfSceneItemCount = 0;
+    int perfSceneOverlayItemCount = 0;
+    int perfSceneTextItemCount = 0;
+    int perfSceneStaticOtherItemCount = 0;
+    double perfSimulationStepMs = 0.0;
+    double perfSimulationStepAvgMs = 0.0;
+    double perfSimulationStepMaxMs = 0.0;
+    double perfNavUpdateMs = 0.0;
+    double perfSensorUpdateMs = 0.0;
+    double perfVisualUpdateMs = 0.0;
+    double perfOverlayUpdateMs = 0.0;
+    double perfTelemetryUpdateMs = 0.0;
+    double perfFpsEstimate = 0.0;
+    double perfWindowStepAccumMs = 0.0;
+    double perfWindowStepMaxMs = 0.0;
+    int perfWindowStepCount = 0;
+    qint64 perfWindowStartElapsedMs = 0;
+    QElapsedTimer perfElapsedTimer;
     bool testSequenceEnabled = false;
     bool testSequenceWaitingNextTick = false;
     int testSequenceIndex = 0;
@@ -696,6 +727,7 @@ private:
     bool basicNavDecisionWallLeft = false;
     bool basicNavDecisionWallRight = false;
     bool basicNavDecisionPointValid = false;
+    // Vista/cache de telemetria SMART derivada de nav_supervisor; MainWindow solo adapta.
     SmartRecognitionState smartRecognitionState = SmartRecognitionState::Idle;
     NavRouteStatus smartLastFrontierStatus = NAV_ROUTE_STATUS_IDLE;
     uint16_t smartFrontierPlanRequestedCount = 0;
@@ -703,12 +735,10 @@ private:
     uint16_t smartNoFrontierCount = 0;
     NavRecommendedAction smartLocalAction = NAV_RECOMMENDED_NONE;
     NavSupervisorSmartOutput supervisorSmartLastOutput = {};
-    bool supervisorSmartShadowMatchesMainWindow = true;
+    bool supervisorSmartActiveAsSource = false;
     bool supervisorSmartLastNavReady = false;
     bool supervisorSmartLastPlanExecutionEnabled = false;
     bool supervisorSmartActionInProgress = false;
-    SmartShadowCompareReason supervisorSmartCompareReason =
-        SmartShadowCompareReason::None;
     bool supervisorSmartLocalControlEnabled = true;
     bool supervisorSmartLocalControlApplied = false;
     NavSupervisorRequestedAction supervisorSmartLocalControlAction =
@@ -779,6 +809,19 @@ private:
     NavApproachFrontDoneReason deadEndRecoveryLastApproachReason = NAV_APPROACH_FRONT_DONE_NONE;
     bool deadEndRecoveryPendingPivot = false;
     bool shadowMapOverlayEnabled = true;
+    bool shadowMapOverlayDirty = true;
+    uint32_t shadowMapOverlayLastMapUpdateCount = UINT32_MAX;
+    uint32_t shadowMapOverlayLastWallUpdateCount = UINT32_MAX;
+    uint16_t shadowMapOverlayLastSpecialCount = UINT16_MAX;
+    bool shadowMapOverlayLastFloodValid = false;
+    uint32_t floodOverlayRevision = 0;
+    uint32_t shadowMapOverlayLastFloodRevision = UINT32_MAX;
+    uint32_t frontierOverlayRevision = 0;
+    uint32_t shadowMapOverlayLastFrontierRevision = UINT32_MAX;
+    uint32_t overlayRebuildCount = 0;
+    int overlayItemsCreatedLastUpdate = 0;
+    int overlayItemsDeletedLastUpdate = 0;
+    int overlayItemsCurrent = 0;
     uint64_t simulationStepCount = 0;
     double simulationTimeS = 0.0;
     double navYawZeroDeg = 0.0;

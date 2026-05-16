@@ -13,6 +13,10 @@ La logica portable esta principalmente en:
 - `nav/nav_types.h`
 - `nav/pid_controller.h`
 - `nav/pid_controller.c`
+- `nav/nav_flood.h`
+- `nav/nav_flood.c`
+- `nav/nav_supervisor.h`
+- `nav/nav_supervisor.c`
 
 Caracteristicas actuales:
 
@@ -23,7 +27,9 @@ Caracteristicas actuales:
 - sin funciones matematicas pesadas tipo `sin`, `cos`, `sqrt`, `atan2`;
 - arrays fijos;
 - tipos de ancho fijo donde corresponde;
-- fixed-point Q16.16 para PID.
+- fixed-point Q16.16 para PID;
+- supervisor portable para mision modo 1 segura y SMART;
+- flood fill portable para costos/debug.
 
 ## Archivos no portables
 
@@ -41,7 +47,9 @@ No deberian ir directo al firmware:
 - telemetria UI;
 - logica de teclado.
 
-`MainWindow` aun contiene orquestacion importante que conviene migrar gradualmente a una capa portable antes del firmware final.
+`MainWindow` aun contiene adaptacion importante que no es portable. Ya no es la fuente
+principal de decision de mision modo 1 segura ni de SMART, pero todavia aplica requests
+del supervisor y ejecuta la parte fisica en Qt.
 
 ## Estado actual del codigo portable
 
@@ -77,6 +85,33 @@ El workspace es compartido por:
 - `nav_core_route_plan_to_nearest_frontier()`.
 
 No es reentrante. Es aceptable para el flujo actual de control single-thread y para STM32.
+
+### `nav_supervisor`
+
+`nav_supervisor` ya es parte del codigo portable.
+
+Controla:
+
+- mision modo 1 segura;
+- bloqueo de SMART al completar busqueda de especiales;
+- retorno seguro al inicio mediante requests;
+- acciones locales de `SMART_RECOGNITION`;
+- planificacion a frontera de `SMART_RECOGNITION`;
+- estados y debug portable.
+
+No llama directamente a Qt ni a `SimWorld`/`SimRobot`. Produce requests que hoy aplica
+`MainWindow`; en firmware deberia aplicarlos una capa HAL/adaptador.
+
+### `nav_flood`
+
+`nav_flood` calcula costos por celda con arrays fijos y workspace estatico. Hoy se usa
+para debug/costos:
+
+- tecla `I`: flood hacia inicio;
+- overlay: costos por celda;
+- `Shift+F`: evaluacion experimental de fronteras desde `MainWindow`.
+
+No controla todavia el retorno inteligente.
 
 ### Memoria maxima del mapa
 
@@ -169,25 +204,27 @@ Recomendacion:
 - agregar filtros simples;
 - validar umbrales con datos reales antes de activar SMART.
 
-### Orquestacion aun en MainWindow
+### Adaptacion aun en MainWindow
 
 Actualmente `MainWindow` conserva:
 
 - ejecucion de cola;
-- SMART_RECOGNITION;
 - secuencias compuestas;
 - seleccion `FRONT_LINE` vs `FRONT_WALL`;
 - validaciones de `J`;
 - referencias de yaw del simulador.
+- debug experimental de flood frontier;
+- UI/overlay/teclado/telemetria.
 
 Riesgo:
 
-- port directo incompleto si solo se copia `nav_core`.
+- port directo incompleto si solo se copia `nav_core`;
+- todavia falta una HAL STM32 que aplique los requests de `nav_supervisor`.
 
 Recomendacion:
 
-- crear una capa portable de supervisor;
-- mover gradualmente decisiones de ejecucion de plan;
+- mantener `nav_supervisor` como fuente de decision de mision/SMART;
+- mover o redisenar gradualmente ejecucion de cola si hace falta;
 - dejar HAL/firmware solo para sensores, motores y tiempo.
 
 ## Recomendaciones para firmware real
@@ -210,7 +247,8 @@ Recomendacion:
   5. Deteccion de especiales.
   6. Plan queue.
   7. Planner BFS.
-  8. SMART_RECOGNITION.
+  8. `nav_supervisor` con SMART.
+- Mantener `GOAL_DIRECTED_RETURN` deshabilitado hasta validar flood frontier en firmware.
 - Considerar compilacion condicional para telemetria pesada.
 - Revisar watchdog y timeout de primitivas.
 
@@ -218,7 +256,7 @@ Recomendacion:
 
 Antes del firmware:
 
-- aislar una interfaz portable de supervisor;
+- conservar `nav_supervisor` como interfaz portable de decision;
 - definir HAL minima para sensores y motores;
 - definir formato de telemetria serial liviano;
 - medir SRAM;

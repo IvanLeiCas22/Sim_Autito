@@ -12,6 +12,7 @@
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
 #include <QFormLayout>
 #include <QFont>
 #include <QFontDatabase>
@@ -29,6 +30,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QInputDialog>
+#include <QList>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
@@ -1029,52 +1031,6 @@ QString supervisorRequestedActionText(NavSupervisorRequestedAction action)
     return "UNKNOWN";
 }
 
-QString smartShadowCompareReasonText(MainWindow::SmartShadowCompareReason reason)
-{
-    switch (reason) {
-    case MainWindow::SmartShadowCompareReason::None:
-        return "NONE";
-    case MainWindow::SmartShadowCompareReason::MatchDecisionPoint:
-        return "MATCH_DECISION_POINT";
-    case MainWindow::SmartShadowCompareReason::MatchWaitNavReady:
-        return "MATCH_WAIT_NAV_READY";
-    case MainWindow::SmartShadowCompareReason::MatchPlanExecution:
-        return "MATCH_PLAN_EXECUTION";
-    case MainWindow::SmartShadowCompareReason::MatchBlockedByMission:
-        return "MATCH_BLOCKED_BY_MISSION";
-    case MainWindow::SmartShadowCompareReason::MismatchAction:
-        return "MISMATCH_ACTION";
-    case MainWindow::SmartShadowCompareReason::MismatchState:
-        return "MISMATCH_STATE";
-    case MainWindow::SmartShadowCompareReason::MismatchPlanRequest:
-        return "MISMATCH_PLAN_REQUEST";
-    }
-
-    return "UNKNOWN";
-}
-
-NavSupervisorRequestedAction supervisorRequestedActionFromRecommended(
-    NavRecommendedAction action)
-{
-    switch (action) {
-    case NAV_RECOMMENDED_ACQUIRE_REAR_LINE:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_ACQUIRE_REAR_LINE;
-    case NAV_RECOMMENDED_ADVANCE_LINE:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_ADVANCE_LINE;
-    case NAV_RECOMMENDED_SMOOTH_LEFT:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_LEFT;
-    case NAV_RECOMMENDED_SMOOTH_RIGHT:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_SMOOTH_RIGHT;
-    case NAV_RECOMMENDED_PIVOT_180:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_PIVOT_180;
-    case NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_RECOVERY_PIVOT_180_FRONT_BLOCKED;
-    case NAV_RECOMMENDED_NONE:
-    default:
-        return NAV_SUPERVISOR_REQUESTED_ACTION_NONE;
-    }
-}
-
 NavRecommendedAction recommendedActionFromSupervisorRequestedAction(
     NavSupervisorRequestedAction action,
     bool *ok)
@@ -1353,6 +1309,7 @@ MainWindow::MainWindow(QWidget *parent)
     nav_core_init();
     nav_supervisor_init();
     syncNavSupervisorConfig();
+    perfElapsedTimer.start();
     simulationTimer = new QTimer(this);
     simulationTimer->setInterval(kSimulationIntervalMs);
     connect(simulationTimer, &QTimer::timeout, this, &MainWindow::simulationStep);
@@ -1481,6 +1438,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     case Qt::Key_Y:
         shadowMapOverlayEnabled = !shadowMapOverlayEnabled;
+        markShadowMapOverlayDirty();
         updateShadowMapOverlay();
         updateTelemetryPanel();
         robotPoseChanged = false;
@@ -1498,7 +1456,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         robotPoseChanged = false;
         break;
     case Qt::Key_P:
-        toggleNavPolicy();
+        if ((event->modifiers() & Qt::ShiftModifier) != 0) {
+            togglePerformanceDebug();
+        } else {
+            toggleNavPolicy();
+        }
         robotPoseChanged = false;
         break;
     case Qt::Key_G:
@@ -1630,6 +1592,7 @@ void MainWindow::setupScene()
     drawReferenceGrid();
     drawBlackTape();
     drawWorldWalls();
+    markShadowMapOverlayDirty();
     updateShadowMapOverlay();
     createRobotItem();
     createIrSensorItems();
@@ -1645,6 +1608,7 @@ void MainWindow::rebuildSceneItems()
 
     scene->clear();
     shadowMapOverlayItems.clear();
+    overlayItemsCurrent = 0;
     robotItem = nullptr;
     for (IrSensor &sensor : irSensors) {
         sensor.ray_item = nullptr;
@@ -1657,6 +1621,7 @@ void MainWindow::rebuildSceneItems()
     drawReferenceGrid();
     drawBlackTape();
     drawWorldWalls();
+    markShadowMapOverlayDirty();
     updateShadowMapOverlay();
     createRobotItem();
     createIrSensorItems();
@@ -1745,28 +1710,82 @@ void MainWindow::drawWorldWalls()
     }
 }
 
-void MainWindow::clearShadowMapOverlay()
+int MainWindow::clearShadowMapOverlay()
 {
+    int deletedCount = 0;
     if (!scene) {
+        deletedCount = static_cast<int>(shadowMapOverlayItems.size());
         shadowMapOverlayItems.clear();
-        return;
+        overlayItemsCurrent = 0;
+        return deletedCount;
     }
 
     for (QGraphicsItem *item : shadowMapOverlayItems) {
         if (item && item->scene() == scene) {
             scene->removeItem(item);
             delete item;
+            ++deletedCount;
         }
     }
     shadowMapOverlayItems.clear();
+    overlayItemsCurrent = 0;
+    return deletedCount;
 }
 
 void MainWindow::updateShadowMapOverlay()
 {
-    clearShadowMapOverlay();
-    if (shadowMapOverlayEnabled) {
-        drawShadowMapOverlay();
+    QElapsedTimer timer;
+    if (performanceDebugEnabled) {
+        timer.start();
     }
+
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
+    const bool floodValid = nav_core_flood_is_valid();
+    const bool signatureChanged =
+        shadowMapOverlayLastMapUpdateCount != mapDebug.update_count
+        || shadowMapOverlayLastWallUpdateCount != mapDebug.wall_update_count
+        || shadowMapOverlayLastSpecialCount != mapDebug.special_cells_found_count
+        || shadowMapOverlayLastFloodValid != floodValid
+        || shadowMapOverlayLastFloodRevision != floodOverlayRevision
+        || shadowMapOverlayLastFrontierRevision != frontierOverlayRevision;
+    const bool rebuildNeeded = shadowMapOverlayDirty || signatureChanged;
+
+    if (!shadowMapOverlayEnabled) {
+        if (!shadowMapOverlayItems.empty() || rebuildNeeded) {
+            overlayItemsDeletedLastUpdate = clearShadowMapOverlay();
+            overlayItemsCreatedLastUpdate = 0;
+            ++overlayRebuildCount;
+        }
+        shadowMapOverlayLastMapUpdateCount = mapDebug.update_count;
+        shadowMapOverlayLastWallUpdateCount = mapDebug.wall_update_count;
+        shadowMapOverlayLastSpecialCount = mapDebug.special_cells_found_count;
+        shadowMapOverlayLastFloodValid = floodValid;
+        shadowMapOverlayLastFloodRevision = floodOverlayRevision;
+        shadowMapOverlayLastFrontierRevision = frontierOverlayRevision;
+        shadowMapOverlayDirty = false;
+    } else if (rebuildNeeded) {
+        overlayItemsDeletedLastUpdate = clearShadowMapOverlay();
+        drawShadowMapOverlay();
+        overlayItemsCreatedLastUpdate = static_cast<int>(shadowMapOverlayItems.size());
+        overlayItemsCurrent = overlayItemsCreatedLastUpdate;
+        ++overlayRebuildCount;
+        shadowMapOverlayLastMapUpdateCount = mapDebug.update_count;
+        shadowMapOverlayLastWallUpdateCount = mapDebug.wall_update_count;
+        shadowMapOverlayLastSpecialCount = mapDebug.special_cells_found_count;
+        shadowMapOverlayLastFloodValid = floodValid;
+        shadowMapOverlayLastFloodRevision = floodOverlayRevision;
+        shadowMapOverlayLastFrontierRevision = frontierOverlayRevision;
+        shadowMapOverlayDirty = false;
+    }
+    if (performanceDebugEnabled) {
+        perfOverlayUpdateMs += timer.nsecsElapsed() / 1000000.0;
+    }
+}
+
+void MainWindow::markShadowMapOverlayDirty()
+{
+    shadowMapOverlayDirty = true;
 }
 
 void MainWindow::drawShadowMapOverlay()
@@ -2081,6 +2100,7 @@ void MainWindow::createTelemetryPanel()
     auto *turnDebugTitle = new QLabel("<b>Turn PI debug</b>", panel);
     auto *navCommandTitle = new QLabel("<b>Nav command</b>", panel);
     auto *simulationTitle = new QLabel("<b>Simulation</b>", panel);
+    auto *performanceTitle = new QLabel("<b>Performance debug</b>", panel);
     auto *sequenceTitle = new QLabel("<b>Test sequence</b>", panel);
     auto *planTitle = new QLabel("<b>Planned action queue</b>", panel);
     auto *navAutonomyTitle = new QLabel("<b>Basic nav autonomy</b>", panel);
@@ -2346,6 +2366,20 @@ void MainWindow::createTelemetryPanel()
     autoModeValueLabel = new QLabel(panel);
     simulationStepCountValueLabel = new QLabel(panel);
     simulationTimeValueLabel = new QLabel(panel);
+    performanceDebugEnabledValueLabel = new QLabel(panel);
+    perfSceneItemCountValueLabel = new QLabel(panel);
+    perfSceneOverlayItemCountValueLabel = new QLabel(panel);
+    perfSceneTextItemCountValueLabel = new QLabel(panel);
+    perfSceneStaticOtherItemCountValueLabel = new QLabel(panel);
+    perfSimulationStepMsValueLabel = new QLabel(panel);
+    perfSimulationStepAvgMsValueLabel = new QLabel(panel);
+    perfSimulationStepMaxMsValueLabel = new QLabel(panel);
+    perfNavUpdateMsValueLabel = new QLabel(panel);
+    perfSensorUpdateMsValueLabel = new QLabel(panel);
+    perfVisualUpdateMsValueLabel = new QLabel(panel);
+    perfOverlayUpdateMsValueLabel = new QLabel(panel);
+    perfTelemetryUpdateMsValueLabel = new QLabel(panel);
+    perfFpsEstimateValueLabel = new QLabel(panel);
     motorTestModeValueLabel = new QLabel(panel);
     sequenceEnabledValueLabel = new QLabel(panel);
     sequenceIndexValueLabel = new QLabel(panel);
@@ -2429,8 +2463,7 @@ void MainWindow::createTelemetryPanel()
     supervisorSmartNavReadyValueLabel = new QLabel(panel);
     supervisorSmartPlanExecutionEnabledValueLabel = new QLabel(panel);
     supervisorSmartActionInProgressValueLabel = new QLabel(panel);
-    supervisorSmartCompareReasonValueLabel = new QLabel(panel);
-    supervisorSmartShadowMatchesMainWindowValueLabel = new QLabel(panel);
+    supervisorSmartActiveAsSourceValueLabel = new QLabel(panel);
     supervisorSmartLocalControlEnabledValueLabel = new QLabel(panel);
     supervisorSmartLocalControlAppliedValueLabel = new QLabel(panel);
     supervisorSmartLocalControlActionValueLabel = new QLabel(panel);
@@ -2522,6 +2555,11 @@ void MainWindow::createTelemetryPanel()
     mapSpecialCellsFoundCountValueLabel = new QLabel(panel);
     mapLastSpecialCellValueLabel = new QLabel(panel);
     mapOverlayEnabledValueLabel = new QLabel(panel);
+    overlayItemsCreatedLastUpdateValueLabel = new QLabel(panel);
+    overlayItemsDeletedLastUpdateValueLabel = new QLabel(panel);
+    overlayItemsCurrentValueLabel = new QLabel(panel);
+    overlayRebuildCountValueLabel = new QLabel(panel);
+    overlayDirtyValueLabel = new QLabel(panel);
     simLeftMotorGainValueLabel = new QLabel(panel);
     simRightMotorGainValueLabel = new QLabel(panel);
     simPivotCenterCorrectionEnabledValueLabel = new QLabel(panel);
@@ -2748,6 +2786,20 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(autoModeValueLabel);
     configureTelemetryValueLabel(simulationStepCountValueLabel);
     configureTelemetryValueLabel(simulationTimeValueLabel);
+    configureTelemetryValueLabel(performanceDebugEnabledValueLabel);
+    configureTelemetryValueLabel(perfSceneItemCountValueLabel);
+    configureTelemetryValueLabel(perfSceneOverlayItemCountValueLabel);
+    configureTelemetryValueLabel(perfSceneTextItemCountValueLabel);
+    configureTelemetryValueLabel(perfSceneStaticOtherItemCountValueLabel);
+    configureTelemetryValueLabel(perfSimulationStepMsValueLabel);
+    configureTelemetryValueLabel(perfSimulationStepAvgMsValueLabel);
+    configureTelemetryValueLabel(perfSimulationStepMaxMsValueLabel);
+    configureTelemetryValueLabel(perfNavUpdateMsValueLabel);
+    configureTelemetryValueLabel(perfSensorUpdateMsValueLabel);
+    configureTelemetryValueLabel(perfVisualUpdateMsValueLabel);
+    configureTelemetryValueLabel(perfOverlayUpdateMsValueLabel);
+    configureTelemetryValueLabel(perfTelemetryUpdateMsValueLabel);
+    configureTelemetryValueLabel(perfFpsEstimateValueLabel);
     configureTelemetryValueLabel(motorTestModeValueLabel);
     configureTelemetryValueLabel(sequenceEnabledValueLabel);
     configureTelemetryValueLabel(sequenceIndexValueLabel);
@@ -2831,8 +2883,7 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(supervisorSmartNavReadyValueLabel);
     configureTelemetryValueLabel(supervisorSmartPlanExecutionEnabledValueLabel);
     configureTelemetryValueLabel(supervisorSmartActionInProgressValueLabel);
-    configureTelemetryValueLabel(supervisorSmartCompareReasonValueLabel);
-    configureTelemetryValueLabel(supervisorSmartShadowMatchesMainWindowValueLabel);
+    configureTelemetryValueLabel(supervisorSmartActiveAsSourceValueLabel);
     configureTelemetryValueLabel(supervisorSmartLocalControlEnabledValueLabel);
     configureTelemetryValueLabel(supervisorSmartLocalControlAppliedValueLabel);
     configureTelemetryValueLabel(supervisorSmartLocalControlActionValueLabel);
@@ -2924,6 +2975,11 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(mapSpecialCellsFoundCountValueLabel);
     configureTelemetryValueLabel(mapLastSpecialCellValueLabel);
     configureTelemetryValueLabel(mapOverlayEnabledValueLabel);
+    configureTelemetryValueLabel(overlayItemsCreatedLastUpdateValueLabel);
+    configureTelemetryValueLabel(overlayItemsDeletedLastUpdateValueLabel);
+    configureTelemetryValueLabel(overlayItemsCurrentValueLabel);
+    configureTelemetryValueLabel(overlayRebuildCountValueLabel);
+    configureTelemetryValueLabel(overlayDirtyValueLabel);
     configureTelemetryValueLabel(simLeftMotorGainValueLabel);
     configureTelemetryValueLabel(simRightMotorGainValueLabel);
     configureTelemetryValueLabel(simPivotCenterCorrectionEnabledValueLabel);
@@ -3220,6 +3276,23 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("floor_rear_global_x:", simFloorRearGlobalXValueLabel);
     layout->addRow("floor_rear_global_y:", simFloorRearGlobalYValueLabel);
 
+    layout->addRow(performanceTitle);
+    layout->addRow("performance_debug_enabled:", performanceDebugEnabledValueLabel);
+    layout->addRow("perf_scene_item_count:", perfSceneItemCountValueLabel);
+    layout->addRow("perf_scene_overlay_item_count:", perfSceneOverlayItemCountValueLabel);
+    layout->addRow("perf_scene_text_item_count:", perfSceneTextItemCountValueLabel);
+    layout->addRow("perf_scene_static_other_item_count:",
+                   perfSceneStaticOtherItemCountValueLabel);
+    layout->addRow("perf_sim_step_ms:", perfSimulationStepMsValueLabel);
+    layout->addRow("perf_sim_step_avg_ms:", perfSimulationStepAvgMsValueLabel);
+    layout->addRow("perf_sim_step_max_ms:", perfSimulationStepMaxMsValueLabel);
+    layout->addRow("perf_nav_update_ms:", perfNavUpdateMsValueLabel);
+    layout->addRow("perf_sensor_update_ms:", perfSensorUpdateMsValueLabel);
+    layout->addRow("perf_visual_update_ms:", perfVisualUpdateMsValueLabel);
+    layout->addRow("perf_overlay_update_ms:", perfOverlayUpdateMsValueLabel);
+    layout->addRow("perf_telemetry_update_ms:", perfTelemetryUpdateMsValueLabel);
+    layout->addRow("perf_fps_estimate:", perfFpsEstimateValueLabel);
+
     layout->addRow(sequenceTitle);
     layout->addRow("sequence_enabled:", sequenceEnabledValueLabel);
     layout->addRow("sequence_index:", sequenceIndexValueLabel);
@@ -3326,10 +3399,8 @@ void MainWindow::createTelemetryPanel()
                    supervisorSmartPlanExecutionEnabledValueLabel);
     layout->addRow("supervisor_smart_action_in_progress:",
                    supervisorSmartActionInProgressValueLabel);
-    layout->addRow("supervisor_smart_compare_reason:",
-                   supervisorSmartCompareReasonValueLabel);
-    layout->addRow("supervisor_smart_shadow_matches_mainwindow:",
-                   supervisorSmartShadowMatchesMainWindowValueLabel);
+    layout->addRow("supervisor_smart_active_as_source:",
+                   supervisorSmartActiveAsSourceValueLabel);
     layout->addRow("supervisor_smart_local_control_enabled:",
                    supervisorSmartLocalControlEnabledValueLabel);
     layout->addRow("supervisor_smart_local_control_applied:",
@@ -3453,6 +3524,13 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("special_cells_found_count:", mapSpecialCellsFoundCountValueLabel);
     layout->addRow("last_special_cell:", mapLastSpecialCellValueLabel);
     layout->addRow("map_overlay_enabled:", mapOverlayEnabledValueLabel);
+    layout->addRow("overlay_items_created_last_update:",
+                   overlayItemsCreatedLastUpdateValueLabel);
+    layout->addRow("overlay_items_deleted_last_update:",
+                   overlayItemsDeletedLastUpdateValueLabel);
+    layout->addRow("overlay_items_current:", overlayItemsCurrentValueLabel);
+    layout->addRow("overlay_rebuild_count:", overlayRebuildCountValueLabel);
+    layout->addRow("overlay_dirty:", overlayDirtyValueLabel);
 
     layout->addRow(motorTestTitle);
     layout->addRow("test_left_pwm:", motorTestLeftValueLabel);
@@ -3534,17 +3612,21 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("advance_front_diag_error_mm", turnDebugAdvanceFrontDiagErrorValueLabel);
     addPinnedRow("advance_yaw_hold_deg", turnDebugAdvanceYawHoldValueLabel);
     addPinnedRow("advance_yaw_hold_error_deg", turnDebugAdvanceYawHoldErrorValueLabel);
+    addPinnedRow("perf_fps_estimate", perfFpsEstimateValueLabel);
+    addPinnedRow("perf_sim_step_avg_ms", perfSimulationStepAvgMsValueLabel);
+    addPinnedRow("perf_sim_step_max_ms", perfSimulationStepMaxMsValueLabel);
+    addPinnedRow("perf_scene_item_count", perfSceneItemCountValueLabel);
+    addPinnedRow("overlay_items_current", overlayItemsCurrentValueLabel);
+    addPinnedRow("overlay_rebuild_count", overlayRebuildCountValueLabel);
     addPinnedRow("plan_current_action", planCurrentActionValueLabel);
     addPinnedRow("plan_next_action", planNextActionValueLabel);
     addPinnedRow("smart_recognition_state", smartRecognitionStateValueLabel);
     addPinnedRow("supervisor_smart_state", supervisorSmartStateValueLabel);
-    addPinnedRow("supervisor_smart_shadow_matches_mainwindow",
-                 supervisorSmartShadowMatchesMainWindowValueLabel);
+    addPinnedRow("supervisor_smart_active_as_source",
+                 supervisorSmartActiveAsSourceValueLabel);
     addPinnedRow("supervisor_requested_action", supervisorRequestedActionValueLabel);
     addPinnedRow("supervisor_smart_decision_reason",
                  supervisorSmartDecisionReasonValueLabel);
-    addPinnedRow("supervisor_smart_compare_reason",
-                 supervisorSmartCompareReasonValueLabel);
     addPinnedRow("supervisor_request_plan_to_frontier",
                  supervisorRequestPlanToFrontierValueLabel);
     addPinnedRow("supervisor_request_execute_plan",
@@ -3609,6 +3691,11 @@ void MainWindow::createTelemetryPanel()
 
 void MainWindow::updateTelemetryPanel()
 {
+    QElapsedTimer telemetryTimer;
+    if (performanceDebugEnabled) {
+        telemetryTimer.start();
+    }
+
     if (xValueLabel) {
         xValueLabel->setText(QString("%1 mm").arg(robot.xMm(), 0, 'f', 1));
     }
@@ -4851,13 +4938,9 @@ void MainWindow::updateTelemetryPanel()
         supervisorSmartActionInProgressValueLabel->setText(
             supervisorSmartActionInProgress ? "true" : "false");
     }
-    if (supervisorSmartCompareReasonValueLabel) {
-        supervisorSmartCompareReasonValueLabel->setText(
-            smartShadowCompareReasonText(supervisorSmartCompareReason));
-    }
-    if (supervisorSmartShadowMatchesMainWindowValueLabel) {
-        supervisorSmartShadowMatchesMainWindowValueLabel->setText(
-            supervisorSmartShadowMatchesMainWindow ? "true" : "false");
+    if (supervisorSmartActiveAsSourceValueLabel) {
+        supervisorSmartActiveAsSourceValueLabel->setText(
+            supervisorSmartActiveAsSource ? "true" : "false");
     }
     if (supervisorSmartLocalControlEnabledValueLabel) {
         supervisorSmartLocalControlEnabledValueLabel->setText(
@@ -5247,6 +5330,23 @@ void MainWindow::updateTelemetryPanel()
     if (mapOverlayEnabledValueLabel) {
         mapOverlayEnabledValueLabel->setText(shadowMapOverlayEnabled ? "true" : "false");
     }
+    if (overlayItemsCreatedLastUpdateValueLabel) {
+        overlayItemsCreatedLastUpdateValueLabel->setText(
+            QString::number(overlayItemsCreatedLastUpdate));
+    }
+    if (overlayItemsDeletedLastUpdateValueLabel) {
+        overlayItemsDeletedLastUpdateValueLabel->setText(
+            QString::number(overlayItemsDeletedLastUpdate));
+    }
+    if (overlayItemsCurrentValueLabel) {
+        overlayItemsCurrentValueLabel->setText(QString::number(overlayItemsCurrent));
+    }
+    if (overlayRebuildCountValueLabel) {
+        overlayRebuildCountValueLabel->setText(QString::number(overlayRebuildCount));
+    }
+    if (overlayDirtyValueLabel) {
+        overlayDirtyValueLabel->setText(shadowMapOverlayDirty ? "true" : "false");
+    }
     if (simLeftMotorGainValueLabel) {
         simLeftMotorGainValueLabel->setText(QString("%1").arg(robot.leftMotorGain(), 0, 'f', 3));
     }
@@ -5287,6 +5387,60 @@ void MainWindow::updateTelemetryPanel()
     if (simFloorRearGlobalYValueLabel) {
         simFloorRearGlobalYValueLabel->setText(QString("%1 mm").arg(floorRearGlobalY, 0, 'f', 1));
     }
+    if (performanceDebugEnabledValueLabel) {
+        performanceDebugEnabledValueLabel->setText(
+            performanceDebugEnabled ? "true" : "false");
+    }
+    if (perfSceneItemCountValueLabel) {
+        perfSceneItemCountValueLabel->setText(QString::number(perfSceneItemCount));
+    }
+    if (perfSceneOverlayItemCountValueLabel) {
+        perfSceneOverlayItemCountValueLabel->setText(
+            QString::number(perfSceneOverlayItemCount));
+    }
+    if (perfSceneTextItemCountValueLabel) {
+        perfSceneTextItemCountValueLabel->setText(QString::number(perfSceneTextItemCount));
+    }
+    if (perfSceneStaticOtherItemCountValueLabel) {
+        perfSceneStaticOtherItemCountValueLabel->setText(
+            QString::number(perfSceneStaticOtherItemCount));
+    }
+    if (perfSimulationStepMsValueLabel) {
+        perfSimulationStepMsValueLabel->setText(
+            QString("%1 ms").arg(perfSimulationStepMs, 0, 'f', 3));
+    }
+    if (perfSimulationStepAvgMsValueLabel) {
+        perfSimulationStepAvgMsValueLabel->setText(
+            QString("%1 ms").arg(perfSimulationStepAvgMs, 0, 'f', 3));
+    }
+    if (perfSimulationStepMaxMsValueLabel) {
+        perfSimulationStepMaxMsValueLabel->setText(
+            QString("%1 ms").arg(perfSimulationStepMaxMs, 0, 'f', 3));
+    }
+    if (perfNavUpdateMsValueLabel) {
+        perfNavUpdateMsValueLabel->setText(
+            QString("%1 ms").arg(perfNavUpdateMs, 0, 'f', 3));
+    }
+    if (perfSensorUpdateMsValueLabel) {
+        perfSensorUpdateMsValueLabel->setText(
+            QString("%1 ms").arg(perfSensorUpdateMs, 0, 'f', 3));
+    }
+    if (perfVisualUpdateMsValueLabel) {
+        perfVisualUpdateMsValueLabel->setText(
+            QString("%1 ms").arg(perfVisualUpdateMs, 0, 'f', 3));
+    }
+    if (perfOverlayUpdateMsValueLabel) {
+        perfOverlayUpdateMsValueLabel->setText(
+            QString("%1 ms").arg(perfOverlayUpdateMs, 0, 'f', 3));
+    }
+    if (perfTelemetryUpdateMsValueLabel) {
+        perfTelemetryUpdateMsValueLabel->setText(
+            QString("%1 ms").arg(perfTelemetryUpdateMs, 0, 'f', 3));
+    }
+    if (perfFpsEstimateValueLabel) {
+        perfFpsEstimateValueLabel->setText(
+            QString("%1 Hz").arg(perfFpsEstimate, 0, 'f', 1));
+    }
     if (motorTestLeftValueLabel) {
         motorTestLeftValueLabel->setText(QString::number(motorTestCommand.left_motor_pwm));
     }
@@ -5294,6 +5448,10 @@ void MainWindow::updateTelemetryPanel()
         motorTestRightValueLabel->setText(QString::number(motorTestCommand.right_motor_pwm));
     }
     syncPinnedTelemetryRows();
+
+    if (performanceDebugEnabled) {
+        perfTelemetryUpdateMs = telemetryTimer.nsecsElapsed() / 1000000.0;
+    }
 }
 
 void MainWindow::syncPinnedTelemetryRows()
@@ -5753,7 +5911,7 @@ bool MainWindow::advanceMode1MissionIfNeeded()
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_CANCELLED;
 }
 
-void MainWindow::updateSmartRecognitionShadow(NavRecommendedAction recommendedAction,
+void MainWindow::updateSmartRecognitionSupervisor(NavRecommendedAction recommendedAction,
                                               bool navReady,
                                               bool missionBlocked,
                                               NavRouteStatus frontierStatus,
@@ -5790,129 +5948,15 @@ void MainWindow::updateSmartRecognitionShadow(NavRecommendedAction recommendedAc
     input.frontier_route_status = frontierStatus;
     input.frontier_plan_loaded = frontierPlanLoaded;
 
-    nav_supervisor_update_smart_shadow(&input, &supervisorSmartLastOutput);
+    nav_supervisor_update_smart(&input, &supervisorSmartLastOutput);
     supervisorSmartLastNavReady = navReady;
     supervisorSmartLastPlanExecutionEnabled = planExecutionEnabled;
     supervisorSmartActionInProgress =
         !navReady
         && (nav_core_action() != NAV_ACTION_NONE
             || !(nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE));
-    supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
-}
-
-bool MainWindow::smartShadowMatchesMainWindow()
-{
-    if (supervisorSmartLastOutput.smart_state
-        == NAV_SUPERVISOR_SMART_STATE_BLOCKED_BY_MISSION) {
-        supervisorSmartCompareReason = supervisorSmartLastOutput.block_new_actions
-            ? SmartShadowCompareReason::MatchBlockedByMission
-            : SmartShadowCompareReason::MismatchState;
-        return supervisorSmartLastOutput.block_new_actions;
-    }
-
-    if (!basicNavAutonomyEnabled || nav_core_get_policy() != NAV_POLICY_SMART_RECOGNITION) {
-        const bool matches =
-            supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_IDLE;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-
-    if (!supervisorSmartLastNavReady
-        && supervisorSmartLastOutput.smart_state
-            == NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY
-        && supervisorSmartLastOutput.decision_reason
-            == NAV_SUPERVISOR_SMART_DECISION_REASON_NAV_NOT_READY) {
-        supervisorSmartCompareReason = SmartShadowCompareReason::MatchWaitNavReady;
-        return true;
-    }
-
-    if (supervisorSmartLastPlanExecutionEnabled
-        || smartRecognitionState == SmartRecognitionState::ExecutingFrontierRoute) {
-        const bool matches = supervisorSmartLastOutput.smart_state
-            == NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchPlanExecution
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-
-    switch (smartRecognitionState) {
-    case SmartRecognitionState::Idle:
-    {
-        const bool matches =
-            supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_IDLE
-            || supervisorSmartLastOutput.smart_state
-                == NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY
-            || (supervisorSmartLastOutput.request_start_action
-                && supervisorSmartLastOutput.requested_action
-                    == supervisorRequestedActionFromRecommended(smartLocalAction));
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-    case SmartRecognitionState::LocalUnvisited:
-    {
-        const bool matches = supervisorSmartLastOutput.request_start_action
-            && supervisorSmartLastOutput.requested_action
-                == supervisorRequestedActionFromRecommended(smartLocalAction);
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchAction;
-        return matches;
-    }
-    case SmartRecognitionState::PlanToFrontier:
-    {
-        const bool matches = supervisorSmartLastOutput.request_plan_to_frontier
-            || supervisorSmartLastOutput.smart_state
-                == NAV_SUPERVISOR_SMART_STATE_PLAN_TO_FRONTIER;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchPlanRequest;
-        return matches;
-    }
-    case SmartRecognitionState::ExecutingFrontierRoute:
-    {
-        const bool matches = supervisorSmartLastOutput.smart_state
-            == NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchPlanExecution
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-    case SmartRecognitionState::FrontierAlreadyHere:
-    {
-        const bool matches = supervisorSmartLastOutput.smart_state
-            == NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-    case SmartRecognitionState::NoFrontier:
-    {
-        const bool matches = supervisorSmartLastOutput.smart_state
-            == NAV_SUPERVISOR_SMART_STATE_NO_FRONTIER;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-    case SmartRecognitionState::Error:
-    {
-        const bool matches =
-            supervisorSmartLastOutput.smart_state == NAV_SUPERVISOR_SMART_STATE_ERROR;
-        supervisorSmartCompareReason = matches
-            ? SmartShadowCompareReason::MatchDecisionPoint
-            : SmartShadowCompareReason::MismatchState;
-        return matches;
-    }
-    }
-
-    supervisorSmartCompareReason = SmartShadowCompareReason::MismatchState;
-    return false;
+    supervisorSmartActiveAsSource =
+        basicNavAutonomyEnabled && nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION;
 }
 
 void MainWindow::cancelPlanCompositeAction()
@@ -6247,6 +6291,7 @@ void MainWindow::setBasicNavAutonomyEnabled(bool enabled)
         basicNavDecisionWallLeft = false;
         basicNavDecisionWallRight = false;
         basicNavDecisionPointValid = false;
+        supervisorSmartActiveAsSource = false;
         cancelDeadEndRecovery();
     }
 }
@@ -6333,7 +6378,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     }
 
     if (advanceMode1MissionIfNeeded()) {
-        updateSmartRecognitionShadow(NAV_RECOMMENDED_NONE,
+        updateSmartRecognitionSupervisor(NAV_RECOMMENDED_NONE,
                                      false,
                                      supervisorLastOutput.block_smart_actions,
                                      NAV_ROUTE_STATUS_IDLE,
@@ -6343,7 +6388,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
 
     if (nav_core_get_policy() == NAV_POLICY_SMART_RECOGNITION && planExecutionEnabled) {
         smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
-        updateSmartRecognitionShadow(NAV_RECOMMENDED_NONE,
+        updateSmartRecognitionSupervisor(NAV_RECOMMENDED_NONE,
                                      false,
                                      false,
                                      smartLastFrontierStatus,
@@ -6355,7 +6400,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         (nav_core_action() == NAV_ACTION_NONE)
         && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
     if (!navReady) {
-        updateSmartRecognitionShadow(NAV_RECOMMENDED_NONE,
+        updateSmartRecognitionSupervisor(NAV_RECOMMENDED_NONE,
                                      false,
                                      false,
                                      NAV_ROUTE_STATUS_IDLE,
@@ -6374,7 +6419,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
     basicNavDecisionPointValid = sensors.floor_rear_black && rearLineTrusted;
     basicNavRecommendedAction = nav_core_recommend_basic_action(&sensors);
     smartLocalAction = basicNavRecommendedAction;
-    updateSmartRecognitionShadow(basicNavRecommendedAction,
+    updateSmartRecognitionSupervisor(basicNavRecommendedAction,
                                  true,
                                  false,
                                  NAV_ROUTE_STATUS_IDLE,
@@ -6405,21 +6450,26 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
                     ? SmartRecognitionState::LocalUnvisited
                     : SmartRecognitionState::Idle;
                 supervisorSmartLocalControlApplied = true;
-                supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
                 startBasicNavRecommendedAction(supervisorAction, sensors);
                 return;
             }
             supervisorSmartLocalControlFallbackLegacy = true;
         }
 
-        if (!basicNavDecisionPointValid
-            || candidateDebug.used_unvisited_preference
-            || basicNavRecommendedAction == NAV_RECOMMENDED_ACQUIRE_REAR_LINE
-            || basicNavRecommendedAction == NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED) {
+        const bool legacyLocalFallbackAllowed =
+            !supervisorSmartLocalControlEnabled || supervisorSmartLocalControlFallbackLegacy;
+        // Fallback de adaptador: no decide SMART salvo si se deshabilita el control
+        // del supervisor o si una accion pedida no pudo mapearse.
+        if (legacyLocalFallbackAllowed
+            && (!basicNavDecisionPointValid
+                || candidateDebug.used_unvisited_preference
+                || basicNavRecommendedAction == NAV_RECOMMENDED_ACQUIRE_REAR_LINE
+                || basicNavRecommendedAction
+                    == NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED)) {
             smartRecognitionState = candidateDebug.used_unvisited_preference
                 ? SmartRecognitionState::LocalUnvisited
                 : SmartRecognitionState::Idle;
-            updateSmartRecognitionShadow(basicNavRecommendedAction,
+            updateSmartRecognitionSupervisor(basicNavRecommendedAction,
                                          true,
                                          false,
                                          NAV_ROUTE_STATUS_IDLE,
@@ -6438,7 +6488,7 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
             const bool frontierPlanLoaded =
                 frontierStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
             nav_supervisor_notify_frontier_route_status(frontierStatus, frontierPlanLoaded);
-            updateSmartRecognitionShadow(basicNavRecommendedAction,
+            updateSmartRecognitionSupervisor(basicNavRecommendedAction,
                                          true,
                                          false,
                                          NAV_ROUTE_STATUS_IDLE,
@@ -6448,7 +6498,6 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         if (supervisorSmartLastOutput.request_execute_frontier_plan) {
             ++smartFrontierRoutesExecutedCount;
             smartRecognitionState = SmartRecognitionState::ExecutingFrontierRoute;
-            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             planExecutionEnabled = true;
             routeExecuteStatus = RouteExecuteStatus::Running;
             advancePlanExecutionIfNeeded();
@@ -6458,7 +6507,6 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
         if (supervisorSmartLastOutput.smart_state
             == NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE) {
             smartRecognitionState = SmartRecognitionState::FrontierAlreadyHere;
-            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             return;
         }
 
@@ -6475,7 +6523,6 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
                 setBasicNavAutonomyEnabled(false);
             }
             smartRecognitionState = SmartRecognitionState::NoFrontier;
-            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             return;
         }
 
@@ -6485,15 +6532,13 @@ void MainWindow::advanceBasicNavAutonomyIfNeeded()
                 setBasicNavAutonomyEnabled(false);
                 smartRecognitionState = SmartRecognitionState::Error;
             }
-            supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
             return;
         }
 
-        supervisorSmartShadowMatchesMainWindow = smartShadowMatchesMainWindow();
         return;
     }
 
-    updateSmartRecognitionShadow(basicNavRecommendedAction,
+    updateSmartRecognitionSupervisor(basicNavRecommendedAction,
                                  true,
                                  false,
                                  NAV_ROUTE_STATUS_IDLE,
@@ -6599,6 +6644,7 @@ void MainWindow::initializeNavMapFromWorldStart()
                                       mode1StartCellY,
                                       static_cast<int8_t>(mode1StartDir));
     }
+    markShadowMapOverlayDirty();
     updateShadowMapOverlay();
 }
 
@@ -6689,11 +6735,17 @@ void MainWindow::runFloodFillToMode1Start()
 
     if (!mode1StartCellValid) {
         nav_core_flood_fill_to_cell(-1, -1);
+        ++floodOverlayRevision;
+        markShadowMapOverlayDirty();
+        updateShadowMapOverlay();
         updateTelemetryPanel();
         return;
     }
 
     nav_core_flood_fill_to_cell(mode1StartCellX, mode1StartCellY);
+    ++floodOverlayRevision;
+    markShadowMapOverlayDirty();
+    updateShadowMapOverlay();
     updateTelemetryPanel();
 }
 
@@ -6728,6 +6780,8 @@ void MainWindow::clearFloodFrontierEvaluation()
     floodFrontierEntryPreferredArrivalDir = NAV_DIR_NORTH;
     floodFrontierEntryPreferredAction = FloodFrontierEntryAction::None;
     floodFrontierEntryPreferredSupported = false;
+    ++frontierOverlayRevision;
+    markShadowMapOverlayDirty();
 }
 
 void MainWindow::evaluateFloodFrontierCandidates()
@@ -6737,6 +6791,7 @@ void MainWindow::evaluateFloodFrontierCandidates()
     if (!nav_core_flood_is_valid() || !mode1StartCellValid) {
         floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
         floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFlood;
+        updateShadowMapOverlay();
         return;
     }
 
@@ -6745,6 +6800,7 @@ void MainWindow::evaluateFloodFrontierCandidates()
     if (!mapDebug.enabled) {
         floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
         floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFlood;
+        updateShadowMapOverlay();
         return;
     }
 
@@ -6839,12 +6895,14 @@ void MainWindow::evaluateFloodFrontierCandidates()
     if (floodFrontierSafeReturnCost == NAV_FLOOD_COST_INF) {
         floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
         floodFrontierDecisionReason = FloodFrontierDecisionReason::CurrentCellUnreachable;
+        updateShadowMapOverlay();
         return;
     }
 
     if (!floodFrontierBestFound) {
         floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
         floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFrontier;
+        updateShadowMapOverlay();
         return;
     }
 
@@ -6899,6 +6957,7 @@ void MainWindow::evaluateFloodFrontierCandidates()
         floodFrontierDecisionReason =
             FloodFrontierDecisionReason::FrontierNotBetterThanSafeReturn;
     }
+    updateShadowMapOverlay();
 }
 
 void MainWindow::showControlTuningDialog()
@@ -7252,6 +7311,7 @@ void MainWindow::showControlsHelp()
         "- L: Test CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE -> PIVOT_180 sequence\n"
         "- B: Toggle basic autonomous navigation; dead-ends use approach-front then PIVOT_180\n"
         "- P: Toggle nav policy RIGHT_HAND_RULE / MAP_PREFER_UNVISITED / SMART_RECOGNITION\n"
+        "- Shift+P: Toggle performance debug telemetry\n"
         "- C: Toggle ADVANCE guidance WALL_ASSIST / YAW_ONLY\n"
         "- Y: Toggle shadow logical map overlay\n"
         "\n"
@@ -7336,12 +7396,19 @@ void MainWindow::createFloorSensorItems()
 
 void MainWindow::updateRobotVisualOnly()
 {
+    QElapsedTimer timer;
+    if (performanceDebugEnabled) {
+        timer.start();
+    }
     if (!robotItem) {
         return;
     }
 
     robotItem->setPos(robot.xMm(), robot.yMm());
     robotItem->setRotation(robot.yawDeg());
+    if (performanceDebugEnabled) {
+        perfVisualUpdateMs += timer.nsecsElapsed() / 1000000.0;
+    }
 }
 
 void MainWindow::updateRobotGraphics()
@@ -7355,6 +7422,10 @@ void MainWindow::updateRobotGraphics()
 
 void MainWindow::updateIrSensors()
 {
+    QElapsedTimer timer;
+    if (performanceDebugEnabled) {
+        timer.start();
+    }
     for (IrSensor &sensor : irSensors) {
         if (!sensor.ray_item || !sensor.hit_item) {
             continue;
@@ -7374,10 +7445,17 @@ void MainWindow::updateIrSensors()
         sensor.hit_item->setPos(hit.hit_x_mm, hit.hit_y_mm);
         sensor.hit_item->setVisible(hit.hit);
     }
+    if (performanceDebugEnabled) {
+        perfSensorUpdateMs += timer.nsecsElapsed() / 1000000.0;
+    }
 }
 
 void MainWindow::updateFloorSensors()
 {
+    QElapsedTimer timer;
+    if (performanceDebugEnabled) {
+        timer.start();
+    }
     for (FloorSensor &sensor : floorSensors) {
         if (!sensor.marker_item) {
             continue;
@@ -7392,17 +7470,36 @@ void MainWindow::updateFloorSensors()
         sensor.marker_item->setPos(sensorX, sensorY);
         sensor.marker_item->setBrush(sensor.is_black ? QBrush(Qt::black) : QBrush(Qt::white));
     }
+    if (performanceDebugEnabled) {
+        perfSensorUpdateMs += timer.nsecsElapsed() / 1000000.0;
+    }
 }
 
 void MainWindow::updateNavCorePipeline()
 {
     RobotSensors sensors = buildRobotSensorsSnapshot();
+    QElapsedTimer timer;
+    if (performanceDebugEnabled) {
+        timer.start();
+    }
     lastNavCommand = nav_core_update(&sensors);
+    if (performanceDebugEnabled) {
+        perfNavUpdateMs += timer.nsecsElapsed() / 1000000.0;
+    }
     updateShadowMapOverlay();
 }
 
 void MainWindow::simulationStep()
 {
+    QElapsedTimer stepTimer;
+    if (performanceDebugEnabled) {
+        stepTimer.start();
+        perfNavUpdateMs = 0.0;
+        perfSensorUpdateMs = 0.0;
+        perfVisualUpdateMs = 0.0;
+        perfOverlayUpdateMs = 0.0;
+    }
+
     ++simulationStepCount;
     simulationTimeS += kSimulationDtS;
 
@@ -7428,6 +7525,90 @@ void MainWindow::simulationStep()
     }
 
     updateTelemetryPanel();
+
+    if (performanceDebugEnabled) {
+        recordPerformanceStep(stepTimer.nsecsElapsed() / 1000000.0);
+    }
+}
+
+void MainWindow::togglePerformanceDebug()
+{
+    performanceDebugEnabled = !performanceDebugEnabled;
+    resetPerformanceStats();
+    if (performanceDebugEnabled) {
+        updatePerformanceSceneItemCounts();
+    }
+    updateTelemetryPanel();
+}
+
+void MainWindow::resetPerformanceStats()
+{
+    perfSceneItemCount = 0;
+    perfSceneOverlayItemCount = 0;
+    perfSceneTextItemCount = 0;
+    perfSceneStaticOtherItemCount = 0;
+    perfSimulationStepMs = 0.0;
+    perfSimulationStepAvgMs = 0.0;
+    perfSimulationStepMaxMs = 0.0;
+    perfNavUpdateMs = 0.0;
+    perfSensorUpdateMs = 0.0;
+    perfVisualUpdateMs = 0.0;
+    perfOverlayUpdateMs = 0.0;
+    perfTelemetryUpdateMs = 0.0;
+    perfFpsEstimate = 0.0;
+    perfWindowStepAccumMs = 0.0;
+    perfWindowStepMaxMs = 0.0;
+    perfWindowStepCount = 0;
+    perfWindowStartElapsedMs = perfElapsedTimer.isValid() ? perfElapsedTimer.elapsed() : 0;
+}
+
+void MainWindow::updatePerformanceSceneItemCounts()
+{
+    if (!scene) {
+        perfSceneItemCount = 0;
+        perfSceneOverlayItemCount = 0;
+        perfSceneTextItemCount = 0;
+        perfSceneStaticOtherItemCount = 0;
+        return;
+    }
+
+    const QList<QGraphicsItem *> sceneItems = scene->items();
+    int textItemCount = 0;
+    for (QGraphicsItem *item : sceneItems) {
+        if (dynamic_cast<QGraphicsTextItem *>(item) != nullptr) {
+            ++textItemCount;
+        }
+    }
+
+    perfSceneItemCount = sceneItems.size();
+    perfSceneOverlayItemCount = static_cast<int>(shadowMapOverlayItems.size());
+    perfSceneTextItemCount = textItemCount;
+    perfSceneStaticOtherItemCount =
+        std::max(0, perfSceneItemCount - perfSceneOverlayItemCount);
+}
+
+void MainWindow::recordPerformanceStep(double stepMs)
+{
+    perfSimulationStepMs = stepMs;
+    ++perfWindowStepCount;
+    perfWindowStepAccumMs += stepMs;
+    perfWindowStepMaxMs = std::max(perfWindowStepMaxMs, stepMs);
+
+    const qint64 nowMs = perfElapsedTimer.elapsed();
+    if (perfWindowStartElapsedMs == 0) {
+        perfWindowStartElapsedMs = nowMs;
+    }
+    const qint64 elapsedMs = nowMs - perfWindowStartElapsedMs;
+    if (elapsedMs >= 1000 && perfWindowStepCount > 0) {
+        perfSimulationStepAvgMs = perfWindowStepAccumMs / perfWindowStepCount;
+        perfSimulationStepMaxMs = perfWindowStepMaxMs;
+        perfFpsEstimate = (perfWindowStepCount * 1000.0) / elapsedMs;
+        updatePerformanceSceneItemCounts();
+        perfWindowStepAccumMs = 0.0;
+        perfWindowStepMaxMs = 0.0;
+        perfWindowStepCount = 0;
+        perfWindowStartElapsedMs = nowMs;
+    }
 }
 
 void MainWindow::setSimulationRunning(bool running)

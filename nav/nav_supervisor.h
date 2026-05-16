@@ -191,8 +191,8 @@ void nav_supervisor_cancel(void);
 void nav_supervisor_set_start_cell(int8_t x, int8_t y, int8_t dir);
 void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput *output);
 void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_loaded);
-void nav_supervisor_update_smart_shadow(const NavSupervisorSmartInput *input,
-                                        NavSupervisorSmartOutput *output);
+void nav_supervisor_update_smart(const NavSupervisorSmartInput *input,
+                                 NavSupervisorSmartOutput *output);
 void nav_supervisor_notify_frontier_route_status(NavRouteStatus status, bool plan_loaded);
 
 #ifdef __cplusplus
