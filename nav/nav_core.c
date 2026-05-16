@@ -133,6 +133,7 @@ static uint8_t plan_head = 0;
 static uint8_t plan_count = 0;
 static bool plan_overflow = false;
 static NavRouteDebugSnapshot route_debug = {0};
+static NavRouteEvalDebugSnapshot route_eval_debug = {0};
 enum {
     NAV_ROUTE_MAX_STATES = NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT * 4
 };
@@ -1299,6 +1300,18 @@ void nav_core_route_clear_debug(void)
     route_debug.frontier_neighbor_cell_y = -1;
 }
 
+static void nav_core_route_eval_clear_debug(void)
+{
+    route_eval_debug = (NavRouteEvalDebugSnapshot){0};
+    route_eval_debug.status = NAV_ROUTE_STATUS_IDLE;
+    route_eval_debug.target_cell_x = -1;
+    route_eval_debug.target_cell_y = -1;
+    route_eval_debug.target_dir_mask = 0u;
+    route_eval_debug.found_target_dir = -1;
+    route_eval_debug.first_action = NAV_PLAN_ACTION_NONE;
+    route_eval_debug.last_action = NAV_PLAN_ACTION_NONE;
+}
+
 void nav_core_get_route_debug(NavRouteDebugSnapshot *snapshot)
 {
     if (snapshot == 0) {
@@ -1306,6 +1319,15 @@ void nav_core_get_route_debug(NavRouteDebugSnapshot *snapshot)
     }
 
     *snapshot = route_debug;
+}
+
+void nav_core_route_eval_get_debug(NavRouteEvalDebugSnapshot *snapshot)
+{
+    if (snapshot == 0) {
+        return;
+    }
+
+    *snapshot = route_eval_debug;
 }
 
 static uint16_t route_state_index(int8_t cell_x,
@@ -1539,94 +1561,181 @@ static void route_workspace_reset(void)
     }
 }
 
-static NavRouteStatus route_load_plan_from_found_state(int16_t found_index,
-                                                       uint16_t start_index,
-                                                       const int16_t *parent,
-                                                       const NavPlanAction *parent_action)
+static NavRouteStatus route_collect_plan_from_found_state(int16_t found_index,
+                                                          uint16_t start_index,
+                                                          const int16_t *parent,
+                                                          const NavPlanAction *parent_action,
+                                                          bool load_queue,
+                                                          uint16_t *route_length_out,
+                                                          NavPlanAction *first_action_out,
+                                                          NavPlanAction *last_action_out)
 {
     uint8_t route_length = 0;
     int16_t cursor = found_index;
     while (cursor >= 0 && cursor != (int16_t)start_index) {
         if (route_length >= NAV_PLAN_MAX_ACTIONS) {
-            route_debug.status = NAV_ROUTE_STATUS_ROUTE_TOO_LONG;
-            route_debug.route_length = route_length;
-            return route_debug.status;
+            if (route_length_out != 0) {
+                *route_length_out = route_length;
+            }
+            return NAV_ROUTE_STATUS_ROUTE_TOO_LONG;
         }
 
         route_workspace.reverse_actions[route_length++] = parent_action[cursor];
         cursor = parent[cursor];
     }
 
-    for (uint8_t i = 0; i < route_length; ++i) {
-        const NavPlanAction action = route_workspace.reverse_actions[route_length - 1u - i];
-        if (!nav_core_plan_push(action)) {
-            route_debug.status = NAV_ROUTE_STATUS_QUEUE_OVERFLOW;
-            route_debug.route_length = i;
-            return route_debug.status;
+    if (load_queue) {
+        for (uint8_t i = 0; i < route_length; ++i) {
+            const NavPlanAction action = route_workspace.reverse_actions[route_length - 1u - i];
+            if (!nav_core_plan_push(action)) {
+                if (route_length_out != 0) {
+                    *route_length_out = i;
+                }
+                return NAV_ROUTE_STATUS_QUEUE_OVERFLOW;
+            }
         }
     }
 
-    route_debug.route_length = route_length;
-    route_debug.loaded_into_plan_queue = route_length > 0;
-    route_debug.first_action = route_length > 0
-        ? route_workspace.reverse_actions[route_length - 1u]
-        : NAV_PLAN_ACTION_NONE;
-    route_debug.last_action = route_length > 0
-        ? route_workspace.reverse_actions[0]
-        : NAV_PLAN_ACTION_NONE;
+    if (route_length_out != 0) {
+        *route_length_out = route_length;
+    }
+    if (first_action_out != 0) {
+        *first_action_out = route_length > 0
+            ? route_workspace.reverse_actions[route_length - 1u]
+            : NAV_PLAN_ACTION_NONE;
+    }
+    if (last_action_out != 0) {
+        *last_action_out = route_length > 0
+            ? route_workspace.reverse_actions[0]
+            : NAV_PLAN_ACTION_NONE;
+    }
     return NAV_ROUTE_STATUS_FOUND;
 }
 
-NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target_cell_y)
+static NavRouteStatus route_load_plan_from_found_state(int16_t found_index,
+                                                       uint16_t start_index,
+                                                       const int16_t *parent,
+                                                       const NavPlanAction *parent_action)
 {
-    nav_core_route_clear_debug();
-    nav_core_plan_clear();
+    uint16_t route_length = 0;
+    NavPlanAction first_action = NAV_PLAN_ACTION_NONE;
+    NavPlanAction last_action = NAV_PLAN_ACTION_NONE;
+    const NavRouteStatus status =
+        route_collect_plan_from_found_state(found_index,
+                                            start_index,
+                                            parent,
+                                            parent_action,
+                                            true,
+                                            &route_length,
+                                            &first_action,
+                                            &last_action);
+    route_debug.status = status;
+    route_debug.route_length = (uint8_t)route_length;
+    route_debug.loaded_into_plan_queue =
+        status == NAV_ROUTE_STATUS_FOUND && route_length > 0u;
+    route_debug.first_action = first_action;
+    route_debug.last_action = last_action;
+    return status;
+}
 
+static bool route_target_dir_mask_is_valid(uint8_t target_dir_mask)
+{
+    return target_dir_mask != 0u && (target_dir_mask & 0xF0u) == 0u;
+}
+
+static NavRouteStatus route_search_to_cell_with_dir_mask(int8_t target_cell_x,
+                                                         int8_t target_cell_y,
+                                                         uint8_t target_dir_mask,
+                                                         bool load_queue,
+                                                         bool update_eval_debug,
+                                                         int16_t *found_index_out,
+                                                         uint16_t *start_index_out,
+                                                         NavMapDirection *found_dir_out)
+{
     NavMapDebugSnapshot map_debug = {0};
     nav_map_get_debug_snapshot(&map_debug);
-    route_debug.target_cell_x = (int8_t)target_cell_x;
-    route_debug.target_cell_y = (int8_t)target_cell_y;
-    route_debug.start_cell_x = map_debug.cell_x;
-    route_debug.start_cell_y = map_debug.cell_y;
-    route_debug.start_dir = map_debug.dir;
+    if (update_eval_debug) {
+        nav_core_route_eval_clear_debug();
+        route_eval_debug.target_cell_x = target_cell_x;
+        route_eval_debug.target_cell_y = target_cell_y;
+        route_eval_debug.target_dir_mask = target_dir_mask;
+    } else {
+        nav_core_route_clear_debug();
+        route_debug.target_cell_x = target_cell_x;
+        route_debug.target_cell_y = target_cell_y;
+        route_debug.start_cell_x = map_debug.cell_x;
+        route_debug.start_cell_y = map_debug.cell_y;
+        route_debug.start_dir = map_debug.dir;
+    }
 
     if (!map_debug.enabled
         || target_cell_x < 0
         || target_cell_y < 0
         || target_cell_x >= map_debug.width
         || target_cell_y >= map_debug.height) {
-        route_debug.status = NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
-        return route_debug.status;
+        if (update_eval_debug) {
+            route_eval_debug.status = NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
+        } else {
+            route_debug.status = NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
+        }
+        return NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
+    }
+
+    if (!route_target_dir_mask_is_valid(target_dir_mask)) {
+        if (update_eval_debug) {
+            route_eval_debug.status = NAV_ROUTE_STATUS_INVALID_TARGET_DIR_MASK;
+        } else {
+            route_debug.status = NAV_ROUTE_STATUS_INVALID_TARGET_DIR_MASK;
+        }
+        return NAV_ROUTE_STATUS_INVALID_TARGET_DIR_MASK;
     }
 
     NavMapCell target_cell = {0};
-    if (!nav_map_get_cell((int8_t)target_cell_x, (int8_t)target_cell_y, &target_cell)
+    if (!nav_map_get_cell(target_cell_x, target_cell_y, &target_cell)
         || !target_cell.visited) {
-        route_debug.status = NAV_ROUTE_STATUS_TARGET_NOT_VISITED;
-        return route_debug.status;
+        if (update_eval_debug) {
+            route_eval_debug.status = NAV_ROUTE_STATUS_TARGET_NOT_VISITED;
+        } else {
+            route_debug.status = NAV_ROUTE_STATUS_TARGET_NOT_VISITED;
+        }
+        return NAV_ROUTE_STATUS_TARGET_NOT_VISITED;
     }
 
     route_workspace_reset();
 
     const uint16_t start_index =
         route_state_index(map_debug.cell_x, map_debug.cell_y, map_debug.dir, map_debug.width);
+    if (start_index_out != 0) {
+        *start_index_out = start_index;
+    }
     route_workspace.visited[start_index] = 1u;
     route_workspace.queue[0] = start_index;
     uint16_t queue_head = 0;
     uint16_t queue_tail = 1;
+    if (update_eval_debug) {
+        route_eval_debug.reached_count = 1u;
+    }
     int16_t found_index = -1;
+    NavMapDirection found_dir = NAV_DIR_NORTH;
 
     while (queue_head < queue_tail) {
         const uint16_t current_index = route_workspace.queue[queue_head++];
-        ++route_debug.expanded_states;
+        if (update_eval_debug) {
+            ++route_eval_debug.expanded_count;
+        } else {
+            ++route_debug.expanded_states;
+        }
 
         int8_t cell_x = 0;
         int8_t cell_y = 0;
         NavMapDirection dir = NAV_DIR_NORTH;
         route_decode_state(current_index, map_debug.width, &cell_x, &cell_y, &dir);
 
-        if (cell_x == (int8_t)target_cell_x && cell_y == (int8_t)target_cell_y) {
+        if (cell_x == target_cell_x
+            && cell_y == target_cell_y
+            && ((uint8_t)(1u << (uint8_t)dir) & target_dir_mask) != 0u) {
             found_index = (int16_t)current_index;
+            found_dir = dir;
             break;
         }
 
@@ -1667,24 +1776,117 @@ NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target
             route_workspace.parent[next_index] = (int16_t)current_index;
             route_workspace.parent_action[next_index] = actions[i];
             route_workspace.queue[queue_tail++] = next_index;
+            if (update_eval_debug) {
+                route_eval_debug.reached_count = queue_tail;
+            }
         }
     }
 
     if (found_index < 0) {
-        route_debug.status = NAV_ROUTE_STATUS_NO_PATH;
+        if (update_eval_debug) {
+            route_eval_debug.status = NAV_ROUTE_STATUS_NO_PATH;
+            route_eval_debug.reached_count = queue_tail;
+        } else {
+            route_debug.status = NAV_ROUTE_STATUS_NO_PATH;
+        }
+        return NAV_ROUTE_STATUS_NO_PATH;
+    }
+
+    if (found_index_out != 0) {
+        *found_index_out = found_index;
+    }
+    if (found_dir_out != 0) {
+        *found_dir_out = found_dir;
+    }
+
+    uint16_t route_length = 0;
+    NavPlanAction first_action = NAV_PLAN_ACTION_NONE;
+    NavPlanAction last_action = NAV_PLAN_ACTION_NONE;
+    const NavRouteStatus status =
+        route_collect_plan_from_found_state(found_index,
+                                            start_index,
+                                            route_workspace.parent,
+                                            route_workspace.parent_action,
+                                            load_queue,
+                                            &route_length,
+                                            &first_action,
+                                            &last_action);
+    if (update_eval_debug) {
+        route_eval_debug.status = status;
+        route_eval_debug.found_target_dir =
+            status == NAV_ROUTE_STATUS_FOUND ? (int8_t)found_dir : -1;
+        route_eval_debug.route_length = route_length;
+        route_eval_debug.first_action = first_action;
+        route_eval_debug.last_action = last_action;
+        route_eval_debug.loaded_into_plan_queue = false;
+        route_eval_debug.reached_count = queue_tail;
+    } else {
+        route_debug.status = status;
+        route_debug.route_length = (uint8_t)route_length;
+        route_debug.first_action = first_action;
+        route_debug.last_action = last_action;
+        route_debug.loaded_into_plan_queue =
+            status == NAV_ROUTE_STATUS_FOUND && route_length > 0u && load_queue;
+    }
+    return status;
+}
+
+NavRouteStatus nav_core_route_eval_to_cell_with_dir_mask(int8_t target_x,
+                                                         int8_t target_y,
+                                                         uint8_t target_dir_mask)
+{
+    return route_search_to_cell_with_dir_mask(target_x,
+                                              target_y,
+                                              target_dir_mask,
+                                              false,
+                                              true,
+                                              0,
+                                              0,
+                                              0);
+}
+
+NavRouteStatus nav_core_route_plan_to_cell_with_dir_mask(int8_t target_x,
+                                                         int8_t target_y,
+                                                         uint8_t target_dir_mask)
+{
+    nav_core_plan_clear();
+    return route_search_to_cell_with_dir_mask(target_x,
+                                              target_y,
+                                              target_dir_mask,
+                                              true,
+                                              false,
+                                              0,
+                                              0,
+                                              0);
+}
+
+NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target_cell_y)
+{
+    if (target_cell_x < INT8_MIN
+        || target_cell_x > INT8_MAX
+        || target_cell_y < INT8_MIN
+        || target_cell_y > INT8_MAX) {
+        nav_core_route_clear_debug();
+        nav_core_plan_clear();
+        NavMapDebugSnapshot map_debug = {0};
+        nav_map_get_debug_snapshot(&map_debug);
+        route_debug.target_cell_x = -1;
+        route_debug.target_cell_y = -1;
+        route_debug.start_cell_x = map_debug.cell_x;
+        route_debug.start_cell_y = map_debug.cell_y;
+        route_debug.start_dir = map_debug.dir;
+        route_debug.status = NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS;
         return route_debug.status;
     }
 
-    route_debug.status =
-        route_load_plan_from_found_state(found_index,
-                                         start_index,
-                                         route_workspace.parent,
-                                         route_workspace.parent_action);
-    if (route_debug.status != NAV_ROUTE_STATUS_FOUND) {
-        return route_debug.status;
+    const NavRouteStatus status =
+        nav_core_route_plan_to_cell_with_dir_mask((int8_t)target_cell_x,
+                                                  (int8_t)target_cell_y,
+                                                  0x0Fu);
+    if (status == NAV_ROUTE_STATUS_FOUND) {
+        route_debug.loaded_into_plan_queue = true;
     }
-    route_debug.loaded_into_plan_queue = true;
-    return route_debug.status;
+    return status;
 }
 
 NavRouteStatus nav_core_route_plan_to_nearest_frontier(void)
@@ -3098,6 +3300,7 @@ void nav_core_init(void)
     clear_special_mark_debug();
     nav_core_plan_clear();
     nav_core_route_clear_debug();
+    nav_core_route_eval_clear_debug();
     clear_wall_perception();
     reset_advance_wall_pd();
     reset_wall_caution_state(NAV_WALL_CAUTION_LOSS_ACTION_END);

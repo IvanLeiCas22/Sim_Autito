@@ -848,6 +848,8 @@ QString routeStatusText(NavRouteStatus status)
         return "ROUTE_TOO_LONG";
     case NAV_ROUTE_STATUS_QUEUE_OVERFLOW:
         return "QUEUE_OVERFLOW";
+    case NAV_ROUTE_STATUS_INVALID_TARGET_DIR_MASK:
+        return "INVALID_TARGET_DIR_MASK";
     }
 
     return "UNKNOWN";

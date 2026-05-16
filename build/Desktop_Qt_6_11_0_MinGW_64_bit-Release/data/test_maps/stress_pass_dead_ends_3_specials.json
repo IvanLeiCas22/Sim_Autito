@@ -1,0 +1,29 @@
+{
+  "name": "stress_pass_dead_ends_3_specials",
+  "cells": {
+    "width": 8,
+    "height": 8,
+    "cell_size_mm": 200
+  },
+  "start": {
+    "x_mm": 100,
+    "y_mm": 100,
+    "yaw_deg": 0
+  },
+  "special_cells": [
+    { "cell_x": 0, "cell_y": 7, "size_mm": 120 },
+    { "cell_x": 7, "cell_y": 0, "size_mm": 120 },
+    { "cell_x": 7, "cell_y": 7, "size_mm": 120 }
+  ],
+  "walls": [
+    { "cell_x": 3, "cell_y": 3, "dir": "N" },
+    { "cell_x": 3, "cell_y": 3, "dir": "S" },
+    { "cell_x": 3, "cell_y": 3, "dir": "E" },
+    { "cell_x": 5, "cell_y": 2, "dir": "N" },
+    { "cell_x": 5, "cell_y": 2, "dir": "E" },
+    { "cell_x": 5, "cell_y": 2, "dir": "W" },
+    { "cell_x": 2, "cell_y": 6, "dir": "E" },
+    { "cell_x": 2, "cell_y": 6, "dir": "W" },
+    { "cell_x": 2, "cell_y": 6, "dir": "S" }
+  ]
+}

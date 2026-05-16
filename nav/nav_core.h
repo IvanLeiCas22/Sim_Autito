@@ -224,7 +224,8 @@ typedef enum NavRouteStatus {
     NAV_ROUTE_STATUS_TARGET_OUT_OF_BOUNDS,
     NAV_ROUTE_STATUS_TARGET_NOT_VISITED,
     NAV_ROUTE_STATUS_ROUTE_TOO_LONG,
-    NAV_ROUTE_STATUS_QUEUE_OVERFLOW
+    NAV_ROUTE_STATUS_QUEUE_OVERFLOW,
+    NAV_ROUTE_STATUS_INVALID_TARGET_DIR_MASK
 } NavRouteStatus;
 
 typedef enum NavFrontierExitRelative {
@@ -256,6 +257,20 @@ typedef struct NavRouteDebugSnapshot {
     int8_t frontier_neighbor_cell_y;
     uint16_t frontier_count_found;
 } NavRouteDebugSnapshot;
+
+typedef struct NavRouteEvalDebugSnapshot {
+    NavRouteStatus status;
+    int8_t target_cell_x;
+    int8_t target_cell_y;
+    uint8_t target_dir_mask;
+    int8_t found_target_dir;
+    uint16_t route_length;
+    NavPlanAction first_action;
+    NavPlanAction last_action;
+    bool loaded_into_plan_queue;
+    uint16_t expanded_count;
+    uint16_t reached_count;
+} NavRouteEvalDebugSnapshot;
 
 typedef struct NavMapCandidateDebug {
     int8_t right_cell_x;
@@ -620,8 +635,15 @@ NavPlanAction nav_core_plan_peek_next(void);
 NavPlanAction nav_core_plan_pop_next(void);
 void nav_core_plan_debug_snapshot(NavPlanDebugSnapshot *snapshot);
 NavRouteStatus nav_core_route_plan_to_cell(int16_t target_cell_x, int16_t target_cell_y);
+NavRouteStatus nav_core_route_eval_to_cell_with_dir_mask(int8_t target_x,
+                                                         int8_t target_y,
+                                                         uint8_t target_dir_mask);
+NavRouteStatus nav_core_route_plan_to_cell_with_dir_mask(int8_t target_x,
+                                                         int8_t target_y,
+                                                         uint8_t target_dir_mask);
 NavRouteStatus nav_core_route_plan_to_nearest_frontier(void);
 void nav_core_get_route_debug(NavRouteDebugSnapshot *snapshot);
+void nav_core_route_eval_get_debug(NavRouteEvalDebugSnapshot *snapshot);
 void nav_core_route_clear_debug(void);
 NavState nav_core_state(void);
 NavAction nav_core_action(void);
