@@ -54,8 +54,20 @@ typedef enum NavSupervisorReturnStrategy {
 typedef enum NavSupervisorGoalDirectedExecutionMode {
     NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_DISABLED = 0,
     NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_SHADOW,
-    NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED
+    NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_PLAN_CONNECTED
 } NavSupervisorGoalDirectedExecutionMode;
+
+typedef enum NavSupervisorGoalDirectedFallbackReason {
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_NONE = 0,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_SHADOW_FALLBACK,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ROUTE_NOT_FOUND,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_PLAN_NOT_LOADED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_CELL_MISMATCH,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_CANCELLED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_UNKNOWN_ERROR
+} NavSupervisorGoalDirectedFallbackReason;
 
 typedef enum NavSupervisorGoalDirectedDecision {
     NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_NONE = 0,
@@ -186,6 +198,19 @@ typedef struct NavSupervisorDebugSnapshot {
     bool goal_directed_shadow_enabled;
     NavSupervisorGoalDirectedExecutionMode goal_directed_execution_mode;
     bool goal_directed_execution_connected;
+    bool goal_directed_entry_connected;
+    uint8_t goal_directed_attempt_count;
+    uint8_t goal_directed_max_attempts;
+    int8_t goal_directed_exec_frontier_cell_x;
+    int8_t goal_directed_exec_frontier_cell_y;
+    int8_t goal_directed_exec_frontier_neighbor_x;
+    int8_t goal_directed_exec_frontier_neighbor_y;
+    uint8_t goal_directed_exec_target_dir_mask;
+    NavRouteStatus goal_directed_exec_plan_status;
+    bool goal_directed_exec_plan_loaded;
+    uint16_t goal_directed_exec_route_length;
+    int8_t goal_directed_exec_found_arrival_dir;
+    NavSupervisorGoalDirectedFallbackReason goal_directed_exec_fallback_reason;
     bool goal_directed_shadow_evaluated;
     bool goal_directed_shadow_valid;
     NavSupervisorGoalDirectedDecision goal_directed_shadow_decision;
@@ -244,6 +269,11 @@ typedef struct NavSupervisorOutput {
     bool request_clear_exploration_plan;
     bool request_plan_return_to_start;
     bool request_execute_return_plan;
+    bool request_goal_plan_to_frontier;
+    int8_t goal_plan_target_x;
+    int8_t goal_plan_target_y;
+    uint8_t goal_plan_target_dir_mask;
+    bool request_goal_execute_frontier_plan;
     bool request_stop_autonomy;
     bool request_stop_motors;
 } NavSupervisorOutput;
@@ -292,6 +322,10 @@ void nav_supervisor_cancel(void);
 void nav_supervisor_set_start_cell(int8_t x, int8_t y, int8_t dir);
 void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput *output);
 void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_loaded);
+void nav_supervisor_notify_goal_frontier_route_status(NavRouteStatus status,
+                                                      bool plan_loaded,
+                                                      uint16_t route_length,
+                                                      int8_t found_arrival_dir);
 void nav_supervisor_update_smart(const NavSupervisorSmartInput *input,
                                  NavSupervisorSmartOutput *output);
 void nav_supervisor_notify_frontier_route_status(NavRouteStatus status, bool plan_loaded);

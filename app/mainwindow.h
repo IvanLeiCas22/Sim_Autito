@@ -792,6 +792,17 @@ private:
     QLabel *goalDirectedShadowEnabledValueLabel = nullptr;
     QLabel *goalDirectedExecutionModeValueLabel = nullptr;
     QLabel *goalDirectedExecutionConnectedValueLabel = nullptr;
+    QLabel *goalDirectedEntryConnectedValueLabel = nullptr;
+    QLabel *goalDirectedExecAttemptCountValueLabel = nullptr;
+    QLabel *goalDirectedExecMaxAttemptsValueLabel = nullptr;
+    QLabel *goalDirectedExecFrontierCellValueLabel = nullptr;
+    QLabel *goalDirectedExecFrontierNeighborValueLabel = nullptr;
+    QLabel *goalDirectedExecTargetDirMaskValueLabel = nullptr;
+    QLabel *goalDirectedExecPlanStatusValueLabel = nullptr;
+    QLabel *goalDirectedExecPlanLoadedValueLabel = nullptr;
+    QLabel *goalDirectedExecRouteLengthValueLabel = nullptr;
+    QLabel *goalDirectedExecFoundArrivalDirValueLabel = nullptr;
+    QLabel *goalDirectedExecFallbackReasonValueLabel = nullptr;
     QLabel *goalDirectedShadowEvaluatedValueLabel = nullptr;
     QLabel *goalDirectedShadowDecisionValueLabel = nullptr;
     QLabel *goalDirectedShadowReasonValueLabel = nullptr;

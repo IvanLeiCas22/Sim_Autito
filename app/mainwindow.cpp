@@ -1386,6 +1386,32 @@ QString goalDirectedExecutionModeText(NavSupervisorGoalDirectedExecutionMode mod
         return "SHADOW";
     case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED:
         return "LIMITED_EXECUTION_SELECTED_NOT_CONNECTED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_PLAN_CONNECTED:
+        return "LIMITED_EXECUTION_PLAN_CONNECTED_ENTRY_DISABLED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalDirectedFallbackReasonText(NavSupervisorGoalDirectedFallbackReason reason)
+{
+    switch (reason) {
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_SHADOW_FALLBACK:
+        return "SHADOW_FALLBACK";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ROUTE_NOT_FOUND:
+        return "GOAL_ROUTE_NOT_FOUND";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_PLAN_NOT_LOADED:
+        return "GOAL_PLAN_NOT_LOADED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED:
+        return "GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_CELL_MISMATCH:
+        return "GOAL_FRONTIER_CELL_MISMATCH";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_CANCELLED:
+        return "GOAL_CANCELLED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_UNKNOWN_ERROR:
+        return "GOAL_UNKNOWN_ERROR";
     }
 
     return "UNKNOWN";
@@ -2918,6 +2944,17 @@ void MainWindow::createTelemetryPanel()
     goalDirectedShadowEnabledValueLabel = new QLabel(panel);
     goalDirectedExecutionModeValueLabel = new QLabel(panel);
     goalDirectedExecutionConnectedValueLabel = new QLabel(panel);
+    goalDirectedEntryConnectedValueLabel = new QLabel(panel);
+    goalDirectedExecAttemptCountValueLabel = new QLabel(panel);
+    goalDirectedExecMaxAttemptsValueLabel = new QLabel(panel);
+    goalDirectedExecFrontierCellValueLabel = new QLabel(panel);
+    goalDirectedExecFrontierNeighborValueLabel = new QLabel(panel);
+    goalDirectedExecTargetDirMaskValueLabel = new QLabel(panel);
+    goalDirectedExecPlanStatusValueLabel = new QLabel(panel);
+    goalDirectedExecPlanLoadedValueLabel = new QLabel(panel);
+    goalDirectedExecRouteLengthValueLabel = new QLabel(panel);
+    goalDirectedExecFoundArrivalDirValueLabel = new QLabel(panel);
+    goalDirectedExecFallbackReasonValueLabel = new QLabel(panel);
     goalDirectedShadowEvaluatedValueLabel = new QLabel(panel);
     goalDirectedShadowDecisionValueLabel = new QLabel(panel);
     goalDirectedShadowReasonValueLabel = new QLabel(panel);
@@ -3417,6 +3454,17 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(goalDirectedShadowEnabledValueLabel);
     configureTelemetryValueLabel(goalDirectedExecutionModeValueLabel);
     configureTelemetryValueLabel(goalDirectedExecutionConnectedValueLabel);
+    configureTelemetryValueLabel(goalDirectedEntryConnectedValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecAttemptCountValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecMaxAttemptsValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecFrontierCellValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecFrontierNeighborValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecTargetDirMaskValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecPlanStatusValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecPlanLoadedValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecRouteLengthValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecFoundArrivalDirValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecFallbackReasonValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowEvaluatedValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowDecisionValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowReasonValueLabel);
@@ -4051,6 +4099,20 @@ void MainWindow::createTelemetryPanel()
                    goalDirectedExecutionModeValueLabel);
     layout->addRow("goal_directed_execution_connected:",
                    goalDirectedExecutionConnectedValueLabel);
+    layout->addRow("goal_directed_entry_connected:", goalDirectedEntryConnectedValueLabel);
+    layout->addRow("goal_exec_attempt_count:", goalDirectedExecAttemptCountValueLabel);
+    layout->addRow("goal_exec_max_attempts:", goalDirectedExecMaxAttemptsValueLabel);
+    layout->addRow("goal_exec_frontier_cell:", goalDirectedExecFrontierCellValueLabel);
+    layout->addRow("goal_exec_frontier_neighbor:",
+                   goalDirectedExecFrontierNeighborValueLabel);
+    layout->addRow("goal_exec_target_dir_mask:", goalDirectedExecTargetDirMaskValueLabel);
+    layout->addRow("goal_exec_plan_status:", goalDirectedExecPlanStatusValueLabel);
+    layout->addRow("goal_exec_plan_loaded:", goalDirectedExecPlanLoadedValueLabel);
+    layout->addRow("goal_exec_route_length:", goalDirectedExecRouteLengthValueLabel);
+    layout->addRow("goal_exec_found_arrival_dir:",
+                   goalDirectedExecFoundArrivalDirValueLabel);
+    layout->addRow("goal_exec_fallback_reason:",
+                   goalDirectedExecFallbackReasonValueLabel);
     layout->addRow("goal_directed_shadow_evaluated:", goalDirectedShadowEvaluatedValueLabel);
     layout->addRow("goal_directed_shadow_decision:", goalDirectedShadowDecisionValueLabel);
     layout->addRow("goal_directed_shadow_reason:", goalDirectedShadowReasonValueLabel);
@@ -4329,6 +4391,9 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("goal_directed_shadow_decision", goalDirectedShadowDecisionValueLabel);
     addPinnedRow("goal_directed_shadow_reason", goalDirectedShadowReasonValueLabel);
     addPinnedRow("goal_directed_score_improvement", goalDirectedScoreImprovementValueLabel);
+    addPinnedRow("goal_exec_state", supervisorStateValueLabel);
+    addPinnedRow("goal_exec_plan_status", goalDirectedExecPlanStatusValueLabel);
+    addPinnedRow("goal_exec_fallback_reason", goalDirectedExecFallbackReasonValueLabel);
     addPinnedRow("flood_status", floodStatusValueLabel);
     addPinnedRow("flood_current_cell_cost", floodCurrentCellCostValueLabel);
     addPinnedRow("flood_fr_candidate_edge_count", floodFrontierCandidateEdgeCountValueLabel);
@@ -6053,6 +6118,67 @@ void MainWindow::updateTelemetryPanel()
         goalDirectedExecutionConnectedValueLabel->setText(
             supervisorDebug.goal_directed_execution_connected ? "true" : "false");
     }
+    if (goalDirectedEntryConnectedValueLabel) {
+        goalDirectedEntryConnectedValueLabel->setText(
+            supervisorDebug.goal_directed_entry_connected ? "true" : "false");
+    }
+    if (goalDirectedExecAttemptCountValueLabel) {
+        goalDirectedExecAttemptCountValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_attempt_count));
+    }
+    if (goalDirectedExecMaxAttemptsValueLabel) {
+        goalDirectedExecMaxAttemptsValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_max_attempts));
+    }
+    if (goalDirectedExecFrontierCellValueLabel) {
+        goalDirectedExecFrontierCellValueLabel->setText(
+            supervisorDebug.goal_directed_exec_frontier_cell_x >= 0
+                    && supervisorDebug.goal_directed_exec_frontier_cell_y >= 0
+                ? QString("(%1,%2)")
+                      .arg(supervisorDebug.goal_directed_exec_frontier_cell_x)
+                      .arg(supervisorDebug.goal_directed_exec_frontier_cell_y)
+                : "none");
+    }
+    if (goalDirectedExecFrontierNeighborValueLabel) {
+        goalDirectedExecFrontierNeighborValueLabel->setText(
+            supervisorDebug.goal_directed_exec_frontier_neighbor_x >= 0
+                    && supervisorDebug.goal_directed_exec_frontier_neighbor_y >= 0
+                ? QString("(%1,%2)")
+                      .arg(supervisorDebug.goal_directed_exec_frontier_neighbor_x)
+                      .arg(supervisorDebug.goal_directed_exec_frontier_neighbor_y)
+                : "none");
+    }
+    if (goalDirectedExecTargetDirMaskValueLabel) {
+        goalDirectedExecTargetDirMaskValueLabel->setText(
+            QString("0x%1").arg(supervisorDebug.goal_directed_exec_target_dir_mask,
+                                2,
+                                16,
+                                QChar('0')));
+    }
+    if (goalDirectedExecPlanStatusValueLabel) {
+        goalDirectedExecPlanStatusValueLabel->setText(
+            routeStatusText(supervisorDebug.goal_directed_exec_plan_status));
+    }
+    if (goalDirectedExecPlanLoadedValueLabel) {
+        goalDirectedExecPlanLoadedValueLabel->setText(
+            supervisorDebug.goal_directed_exec_plan_loaded ? "true" : "false");
+    }
+    if (goalDirectedExecRouteLengthValueLabel) {
+        goalDirectedExecRouteLengthValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_exec_route_length));
+    }
+    if (goalDirectedExecFoundArrivalDirValueLabel) {
+        goalDirectedExecFoundArrivalDirValueLabel->setText(
+            supervisorDebug.goal_directed_exec_found_arrival_dir >= 0
+                ? mapDirectionText(static_cast<NavMapDirection>(
+                      supervisorDebug.goal_directed_exec_found_arrival_dir))
+                : "none");
+    }
+    if (goalDirectedExecFallbackReasonValueLabel) {
+        goalDirectedExecFallbackReasonValueLabel->setText(
+            goalDirectedFallbackReasonText(
+                supervisorDebug.goal_directed_exec_fallback_reason));
+    }
     if (goalDirectedShadowEvaluatedValueLabel) {
         goalDirectedShadowEvaluatedValueLabel->setText(
             supervisorDebug.goal_directed_shadow_evaluated ? "true" : "false");
@@ -6848,6 +6974,46 @@ void MainWindow::applyNavSupervisorOutput(const NavSupervisorOutput &output)
                                                   mode1ReturnPlanLoaded);
     }
 
+    if (output.request_goal_plan_to_frontier) {
+        planExecutionEnabled = false;
+        planCurrentAction = NAV_PLAN_ACTION_NONE;
+        planNextAdvanceFromCenteredPose = false;
+        cancelPlanCompositeAction();
+        nav_core_plan_clear();
+
+        (void)nav_core_route_eval_to_cell_with_dir_mask(output.goal_plan_target_x,
+                                                        output.goal_plan_target_y,
+                                                        output.goal_plan_target_dir_mask);
+        NavRouteEvalDebugSnapshot evalDebug = {};
+        nav_core_route_eval_get_debug(&evalDebug);
+        const NavRouteStatus goalRouteStatus =
+            nav_core_route_plan_to_cell_with_dir_mask(output.goal_plan_target_x,
+                                                      output.goal_plan_target_y,
+                                                      output.goal_plan_target_dir_mask);
+        NavPlanDebugSnapshot planDebug = {};
+        nav_core_plan_debug_snapshot(&planDebug);
+        NavRouteDebugSnapshot routeDebug = {};
+        nav_core_get_route_debug(&routeDebug);
+        const bool goalPlanLoaded =
+            goalRouteStatus == NAV_ROUTE_STATUS_FOUND && planDebug.count > 0;
+        nav_supervisor_notify_goal_frontier_route_status(goalRouteStatus,
+                                                         goalPlanLoaded,
+                                                         routeDebug.route_length,
+                                                         evalDebug.found_target_dir);
+        routeExecuteStatus = RouteExecuteStatus::Idle;
+    }
+
+    if (output.request_goal_execute_frontier_plan) {
+        NavPlanDebugSnapshot planDebug = {};
+        nav_core_plan_debug_snapshot(&planDebug);
+        if (planDebug.count > 0) {
+            planExecutionEnabled = true;
+            planCurrentAction = NAV_PLAN_ACTION_NONE;
+            routeExecuteStatus = RouteExecuteStatus::Running;
+            advancePlanExecutionIfNeeded();
+        }
+    }
+
     if (output.request_execute_return_plan) {
         NavPlanDebugSnapshot planDebug = {};
         nav_core_plan_debug_snapshot(&planDebug);
@@ -6953,6 +7119,10 @@ bool MainWindow::advanceMode1MissionIfNeeded()
             == NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_EXECUTE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SMART_DECIDE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_FRONTIER_PLAN
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_FRONTIER_EXECUTE
+        || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_FRONTIER_ENTER
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE
         || supervisorDebug.state == NAV_SUPERVISOR_STATE_DONE
@@ -8058,7 +8228,7 @@ void MainWindow::showControlTuningDialog()
                                       static_cast<int>(
                                           NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW));
     mode1ReturnStrategyCombo->addItem(
-        "GOAL_DIRECTED_RETURN_LIMITED_EXECUTION (not connected)",
+        "GOAL_DIRECTED_RETURN_LIMITED_EXECUTION (plan only)",
         static_cast<int>(
             NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION));
     goalDirectedRequiredImprovementSpin->setRange(0, 20);

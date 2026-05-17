@@ -73,6 +73,14 @@ typedef struct NavSupervisorStateData {
     uint16_t goal_directed_estimated_after_entry_to_start;
     uint16_t goal_directed_attempt_total_score;
     int32_t goal_directed_score_improvement;
+    bool goal_exec_plan_requested;
+    bool goal_exec_execute_requested;
+    bool goal_exec_plan_loaded;
+    NavRouteStatus goal_exec_plan_status;
+    uint16_t goal_exec_route_length;
+    int8_t goal_exec_found_arrival_dir;
+    uint8_t goal_exec_attempt_count;
+    NavSupervisorGoalDirectedFallbackReason goal_exec_fallback_reason;
 } NavSupervisorStateData;
 
 static NavSupervisorStateData supervisor_state;
@@ -112,6 +120,14 @@ static void clear_goal_directed_shadow_debug(void)
     supervisor_state.goal_directed_estimated_after_entry_to_start = 0u;
     supervisor_state.goal_directed_attempt_total_score = NAV_SUPERVISOR_COST_INF;
     supervisor_state.goal_directed_score_improvement = 0;
+    supervisor_state.goal_exec_plan_requested = false;
+    supervisor_state.goal_exec_execute_requested = false;
+    supervisor_state.goal_exec_plan_loaded = false;
+    supervisor_state.goal_exec_plan_status = NAV_ROUTE_STATUS_IDLE;
+    supervisor_state.goal_exec_route_length = 0u;
+    supervisor_state.goal_exec_found_arrival_dir = -1;
+    supervisor_state.goal_exec_fallback_reason =
+        NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_NONE;
 }
 
 static NavSupervisorConfig nav_supervisor_default_config(void)
@@ -157,11 +173,17 @@ static NavSupervisorGoalDirectedExecutionMode goal_directed_execution_mode(void)
     case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW:
         return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_SHADOW;
     case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION:
-        return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED;
+        return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_PLAN_CONNECTED;
     case NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN:
     default:
         return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_DISABLED;
     }
+}
+
+static bool goal_directed_limited_execution_selected(void)
+{
+    return supervisor_state.config.return_strategy
+        == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION;
 }
 
 static NavSupervisorConfig sanitize_config(const NavSupervisorConfig *config)
@@ -288,7 +310,30 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
         supervisor_state.final_safe_scan_return_wait_reason;
     snapshot->goal_directed_shadow_enabled = goal_directed_shadow_should_evaluate();
     snapshot->goal_directed_execution_mode = goal_directed_execution_mode();
-    snapshot->goal_directed_execution_connected = false;
+    snapshot->goal_directed_execution_connected =
+        supervisor_state.config.return_strategy
+        == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION;
+    snapshot->goal_directed_entry_connected = false;
+    snapshot->goal_directed_attempt_count = supervisor_state.goal_exec_attempt_count;
+    snapshot->goal_directed_max_attempts =
+        supervisor_state.config.goal_directed_max_frontier_attempts;
+    snapshot->goal_directed_exec_frontier_cell_x =
+        supervisor_state.goal_directed_best_cell_x;
+    snapshot->goal_directed_exec_frontier_cell_y =
+        supervisor_state.goal_directed_best_cell_y;
+    snapshot->goal_directed_exec_frontier_neighbor_x =
+        supervisor_state.goal_directed_best_neighbor_x;
+    snapshot->goal_directed_exec_frontier_neighbor_y =
+        supervisor_state.goal_directed_best_neighbor_y;
+    snapshot->goal_directed_exec_target_dir_mask =
+        supervisor_state.goal_directed_supported_arrival_dir_mask;
+    snapshot->goal_directed_exec_plan_status = supervisor_state.goal_exec_plan_status;
+    snapshot->goal_directed_exec_plan_loaded = supervisor_state.goal_exec_plan_loaded;
+    snapshot->goal_directed_exec_route_length = supervisor_state.goal_exec_route_length;
+    snapshot->goal_directed_exec_found_arrival_dir =
+        supervisor_state.goal_exec_found_arrival_dir;
+    snapshot->goal_directed_exec_fallback_reason =
+        supervisor_state.goal_exec_fallback_reason;
     snapshot->goal_directed_shadow_evaluated =
         supervisor_state.goal_directed_shadow_evaluated;
     snapshot->goal_directed_shadow_valid = supervisor_state.goal_directed_shadow_valid;
@@ -351,6 +396,8 @@ void nav_supervisor_cancel(void)
     supervisor_state.waiting_action_done = false;
     supervisor_state.return_to_start_active = false;
     supervisor_state.final_safe_scan_return_active = false;
+    supervisor_state.goal_exec_fallback_reason =
+        NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_CANCELLED;
 }
 
 void nav_supervisor_set_start_cell(int8_t x, int8_t y, int8_t dir)
@@ -668,6 +715,31 @@ static void start_required_specials_return_wait(const NavSupervisorInput *input,
     }
 }
 
+static void begin_return_safe_plan(NavSupervisorOutput *output)
+{
+    supervisor_state.state = NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN;
+    supervisor_state.return_to_start_active = true;
+    supervisor_state.return_plan_requested = true;
+    supervisor_state.execute_return_requested = false;
+    supervisor_state.return_plan_loaded = false;
+    supervisor_state.return_route_status = NAV_ROUTE_STATUS_IDLE;
+    if (output != 0) {
+        output->block_smart_actions = true;
+        output->request_plan_return_to_start = true;
+    }
+}
+
+static void goal_directed_fallback_to_safe(
+    NavSupervisorGoalDirectedFallbackReason reason,
+    NavSupervisorOutput *output)
+{
+    supervisor_state.goal_exec_fallback_reason = reason;
+    supervisor_state.goal_exec_plan_requested = false;
+    supervisor_state.goal_exec_execute_requested = false;
+    supervisor_state.goal_exec_plan_loaded = false;
+    begin_return_safe_plan(output);
+}
+
 static void enter_no_frontier_before_required_error(NavSupervisorOutput *output)
 {
     supervisor_state.state = NAV_SUPERVISOR_STATE_ERROR;
@@ -888,13 +960,98 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
             && goal_directed_shadow_should_evaluate()) {
             evaluate_goal_directed_return_shadow(input);
         }
-        supervisor_state.state = NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN;
-        supervisor_state.return_to_start_active = true;
-        if (!supervisor_state.return_plan_requested) {
-            supervisor_state.return_plan_requested = true;
-            if (output != 0) {
-                output->request_plan_return_to_start = true;
+
+        if (goal_directed_limited_execution_selected()) {
+            if (supervisor_state.goal_directed_shadow_decision
+                == NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_TRY_FRONTIER) {
+                supervisor_state.state = NAV_SUPERVISOR_STATE_RETURN_FRONTIER_PLAN;
+                supervisor_state.return_to_start_active = true;
+                supervisor_state.goal_exec_plan_requested = false;
+                supervisor_state.goal_exec_execute_requested = false;
+                supervisor_state.goal_exec_plan_loaded = false;
+                supervisor_state.goal_exec_plan_status = NAV_ROUTE_STATUS_IDLE;
+                supervisor_state.goal_exec_route_length = 0u;
+                supervisor_state.goal_exec_found_arrival_dir = -1;
+                supervisor_state.goal_exec_fallback_reason =
+                    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_NONE;
+                return;
             }
+            goal_directed_fallback_to_safe(
+                NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_SHADOW_FALLBACK,
+                output);
+            return;
+        }
+
+        begin_return_safe_plan(output);
+        return;
+    }
+
+    if (supervisor_state.state == NAV_SUPERVISOR_STATE_RETURN_FRONTIER_PLAN) {
+        supervisor_state.return_to_start_active = true;
+        if (output != 0) {
+            output->block_smart_actions = true;
+        }
+
+        if (!supervisor_state.goal_exec_plan_requested) {
+            supervisor_state.goal_exec_plan_requested = true;
+            if (output != 0) {
+                output->request_goal_plan_to_frontier = true;
+                output->goal_plan_target_x = supervisor_state.goal_directed_best_cell_x;
+                output->goal_plan_target_y = supervisor_state.goal_directed_best_cell_y;
+                output->goal_plan_target_dir_mask =
+                    supervisor_state.goal_directed_supported_arrival_dir_mask;
+            }
+            return;
+        }
+
+        if (supervisor_state.goal_exec_plan_status == NAV_ROUTE_STATUS_FOUND) {
+            if (supervisor_state.goal_exec_route_length == 0u
+                || !supervisor_state.goal_exec_plan_loaded) {
+                goal_directed_fallback_to_safe(
+                    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED,
+                    output);
+                return;
+            }
+            supervisor_state.state = NAV_SUPERVISOR_STATE_RETURN_FRONTIER_EXECUTE;
+            supervisor_state.goal_exec_execute_requested = false;
+            return;
+        }
+
+        if (supervisor_state.goal_exec_plan_status != NAV_ROUTE_STATUS_IDLE) {
+            goal_directed_fallback_to_safe(
+                NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ROUTE_NOT_FOUND,
+                output);
+            return;
+        }
+        return;
+    }
+
+    if (supervisor_state.state == NAV_SUPERVISOR_STATE_RETURN_FRONTIER_EXECUTE) {
+        supervisor_state.return_to_start_active = true;
+        if (output != 0) {
+            output->block_smart_actions = true;
+        }
+
+        if (!supervisor_state.goal_exec_execute_requested) {
+            supervisor_state.goal_exec_execute_requested = true;
+            if (output != 0) {
+                output->request_goal_execute_frontier_plan = true;
+            }
+            return;
+        }
+
+        if (!input->plan_execution_enabled) {
+            if (input->current_cell_x == supervisor_state.goal_directed_best_cell_x
+                && input->current_cell_y == supervisor_state.goal_directed_best_cell_y) {
+                goal_directed_fallback_to_safe(
+                    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED,
+                    output);
+            } else {
+                goal_directed_fallback_to_safe(
+                    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_CELL_MISMATCH,
+                    output);
+            }
+            return;
         }
         return;
     }
@@ -975,6 +1132,17 @@ void nav_supervisor_notify_return_route_status(int16_t route_status, bool plan_l
 {
     supervisor_state.return_route_status = route_status;
     supervisor_state.return_plan_loaded = plan_loaded;
+}
+
+void nav_supervisor_notify_goal_frontier_route_status(NavRouteStatus status,
+                                                      bool plan_loaded,
+                                                      uint16_t route_length,
+                                                      int8_t found_arrival_dir)
+{
+    supervisor_state.goal_exec_plan_status = status;
+    supervisor_state.goal_exec_plan_loaded = plan_loaded;
+    supervisor_state.goal_exec_route_length = route_length;
+    supervisor_state.goal_exec_found_arrival_dir = found_arrival_dir;
 }
 
 void nav_supervisor_notify_frontier_route_status(NavRouteStatus status, bool plan_loaded)
