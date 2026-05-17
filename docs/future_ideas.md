@@ -95,6 +95,22 @@ Estado:
 
 - no implementado como primitiva dedicada.
 
+## Colision fisica de pivots y starts conflictivos
+
+Estado actual:
+
+- El simulador no modela colision del cuerpo contra paredes durante pivots.
+- El robot no tiene sensores traseros, asi que no puede inferir con seguridad una pared
+  inmediatamente detras al iniciar.
+- Los mapas expected `PASS` deben evitar starts fisicamente conflictivos; esto se
+  documenta como regla de generacion de mapas, no como autocheck o logica especial.
+
+Ideas futuras:
+
+- modelar envolvente fisica del robot durante pivots;
+- agregar validacion offline de pose inicial para mapas;
+- crear mapas de stress/dev para starts conflictivos fuera de `data/test_maps`.
+
 ## Confianza de paredes mas avanzada
 
 Actual:

@@ -96,11 +96,31 @@ Para que un mapa entre en `data/test_maps`:
 - debe haber al menos `required_special_count` especiales alcanzables;
 - debe existir camino fisico desde start hacia esas especiales;
 - debe existir alguna forma valida de volver al inicio;
+- debe iniciar al robot en una pose fisicamente valida;
 - no debe depender de comportamiento indefinido;
 - debe terminar `PASS` en `Shift+R` y `Shift+B`.
 
 El retorno inteligente puede explorar atajos desconocidos, pero el mapa no debe exigir
 atravesar paredes conocidas presentes ni inconsistencias geometricas.
+
+### Validez fisica del start
+
+Los mapas esperados a `PASS` no deben iniciar el robot en una pose fisicamente
+conflictiva. El robot no tiene sensores traseros, y el simulador no modela colision
+del cuerpo contra paredes durante un pivot; por eso un start mal condicionado puede
+generar un escape irreal del laberinto sin que sea un fallo de navegacion.
+
+Evitar en `data/test_maps`:
+
+- pared inmediatamente detras del robot si puede necesitar pivot inicial;
+- start encajonado entre pared frontal y pared trasera;
+- starts donde un pivot inicial pueda barrer fisicamente contra una pared no observable
+  por sensores;
+- starts sin una direccion segura para adquirir linea y comenzar la navegacion.
+
+Preferir start con frente libre o con espacio suficiente alrededor para maniobrar sin
+colision fisica. Si se quiere probar un caso de start conflictivo, ubicarlo en
+`data/dev_maps` o `data/stress_maps`, no en `data/test_maps`.
 
 ## Celdas especiales
 
@@ -119,6 +139,8 @@ Casos ambiguos son validos como stress si estan documentados.
 - `start.x_mm` y `start.y_mm` deben caer dentro del mapa.
 - `yaw_deg` recomendado: `0`, `90`, `180` o `270`.
 - Start no debe quedar encerrado.
+- Start no debe tener pared inmediatamente detras si puede requerir pivot inicial.
+- Start debe permitir adquirir linea y maniobrar sin colision fisica esperada.
 - Start sobre especial debe tratarse como stress, salvo que el caso ya este validado.
 
 ## Clasificacion sugerida
@@ -135,6 +157,7 @@ Solo `normal_pass` y `stress_pass` deberian entrar en `data/test_maps`.
 - Elegir `width`, `height` y `cell_size_mm`.
 - Definir start dentro del mapa.
 - Usar yaw cardinal.
+- Verificar que el start no sea fisicamente conflictivo para un pivot inicial.
 - Generar paredes interiores validas.
 - No declarar paredes exteriores.
 - Colocar al menos 3 especiales alcanzables.

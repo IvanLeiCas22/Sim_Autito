@@ -1,5 +1,5 @@
 {
-  "name": "goal_shortcut_blocked_03",
+  "name": "goal_shortcut_clear_01",
   "cells": {
     "width": 8,
     "height": 8,
@@ -8,7 +8,7 @@
   "start": {
     "x_mm": 100,
     "y_mm": 100,
-    "yaw_deg": 0
+    "yaw_deg": 90
   },
   "special_cells": [
     { "cell_x": 0, "cell_y": 7, "size_mm": 120 },
@@ -31,12 +31,6 @@
     { "cell_x": 6, "cell_y": 2, "dir": "E" },
     { "cell_x": 6, "cell_y": 3, "dir": "E" },
     { "cell_x": 6, "cell_y": 4, "dir": "E" },
-    { "cell_x": 6, "cell_y": 5, "dir": "E" },
-    { "cell_x": 3, "cell_y": 0, "dir": "E" },
-    { "cell_x": 3, "cell_y": 1, "dir": "E" },
-    { "cell_x": 3, "cell_y": 2, "dir": "E" },
-    { "cell_x": 3, "cell_y": 3, "dir": "E" },
-    { "cell_x": 3, "cell_y": 4, "dir": "E" },
-    { "cell_x": 3, "cell_y": 5, "dir": "E" }
+    { "cell_x": 6, "cell_y": 5, "dir": "E" }
   ]
 }

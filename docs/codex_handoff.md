@@ -101,6 +101,12 @@ Despues de cambios de navegacion:
 
 Para un mapa puntual, usar `Shift+R`.
 
+Regla de mapas expected `PASS`: el start debe ser fisicamente valido. No usar
+`data/test_maps` para mapas donde el robot arranca con pared inmediatamente detras,
+encajonado frente/detras, o en una pose donde un pivot inicial pueda colisionar con una
+pared no observable por sensores traseros. Esos casos pertenecen a `data/dev_maps` o
+`data/stress_maps`; no se tratan como fallo de navegacion ni autocheck por ahora.
+
 ## Portabilidad
 
 `nav/` esta pensado para STM32:

@@ -45,6 +45,13 @@ que el robot planifique muchas celdas desconocidas de una vez.
 Los mapas en `data/test_maps` deben ser esperados a `PASS`. Mapas `expected_fail`,
 experimentales o de desarrollo deben vivir en otra carpeta o estar documentados aparte.
 
+Ademas, `data/test_maps` debe evitar starts fisicamente conflictivos. En particular,
+no usar mapas donde el robot comience con pared inmediatamente detras, encajonado entre
+pared frontal y trasera, o en una pose donde un pivot inicial pueda barrer contra una
+pared no observable por sensores traseros. El simulador no modela colision del cuerpo
+durante pivots, por lo que ese caso se considera condicion invalida del mapa expected
+`PASS`, no fallo de navegacion.
+
 ## Fast Test Mode
 
 Activo por defecto para `Shift+R` y `Shift+B`.
@@ -213,6 +220,7 @@ Campos:
 Considerar falla si:
 
 - atraviesa una pared fisica;
+- el mapa expected `PASS` inicia con pose fisicamente conflictiva para pivot inicial;
 - celda/orientacion logica no coincide con overlay;
 - se marca una especial falsa;
 - no detecta especiales alcanzables;
