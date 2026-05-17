@@ -6,6 +6,7 @@
 
 #include "nav_core.h"
 #include "nav_frontier_eval.h"
+#include "nav_goal_return_eval.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,7 +66,11 @@ typedef enum NavSupervisorGoalDirectedReason {
     NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_ROUTE_NOT_FOUND,
     NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_NOT_BETTER_THAN_SAFE_RETURN,
     NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_BETTER_THAN_SAFE_RETURN,
-    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_SHORTCUT_FRONTIER,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_UNKNOWN_BUDGET_EXCEEDED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_NOT_BETTER_THAN_SAFE_RETURN,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_BETTER_THAN_SAFE_RETURN
 } NavSupervisorGoalDirectedReason;
 
 typedef enum NavSupervisorFinalSafeScanReturnWaitReason {
@@ -124,6 +129,10 @@ typedef struct NavSupervisorConfig {
     uint16_t goal_directed_min_safe_return_cost_to_try;
     uint8_t goal_directed_max_frontier_attempts;
     bool goal_directed_allow_back_entry;
+    uint16_t goal_directed_unknown_wall_penalty;
+    uint16_t goal_directed_unknown_cell_penalty;
+    uint8_t goal_directed_max_unknown_cells;
+    uint8_t goal_directed_max_unknown_edges;
 } NavSupervisorConfig;
 
 typedef struct NavSupervisorDebugSnapshot {
@@ -172,6 +181,10 @@ typedef struct NavSupervisorDebugSnapshot {
     NavSupervisorGoalDirectedReason goal_directed_shadow_reason;
     NavRouteStatus goal_directed_safe_return_status;
     uint16_t goal_directed_safe_return_cost;
+    NavGoalReturnEvalStatus goal_directed_optimistic_eval_status;
+    uint16_t goal_directed_optimistic_return_cost;
+    uint8_t goal_directed_unknown_cells_on_path;
+    uint8_t goal_directed_unknown_edges_on_path;
     NavFrontierEvalStatus goal_directed_frontier_eval_status;
     bool goal_directed_best_found;
     int8_t goal_directed_best_cell_x;

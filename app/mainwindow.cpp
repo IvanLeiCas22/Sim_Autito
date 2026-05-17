@@ -1416,6 +1416,34 @@ QString goalDirectedReasonText(NavSupervisorGoalDirectedReason reason)
         return "FRONTIER_BETTER_THAN_SAFE_RETURN";
     case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED:
         return "ATTEMPT_BUDGET_EXHAUSTED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_SHORTCUT_FRONTIER:
+        return "NO_SHORTCUT_FRONTIER";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_UNKNOWN_BUDGET_EXCEEDED:
+        return "UNKNOWN_BUDGET_EXCEEDED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_NOT_BETTER_THAN_SAFE_RETURN:
+        return "OPTIMISTIC_NOT_BETTER_THAN_SAFE_RETURN";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_BETTER_THAN_SAFE_RETURN:
+        return "OPTIMISTIC_BETTER_THAN_SAFE_RETURN";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalReturnEvalStatusText(NavGoalReturnEvalStatus status)
+{
+    switch (status) {
+    case NAV_GOAL_RETURN_EVAL_STATUS_IDLE:
+        return "IDLE";
+    case NAV_GOAL_RETURN_EVAL_STATUS_OK:
+        return "OK";
+    case NAV_GOAL_RETURN_EVAL_STATUS_INVALID_INPUT:
+        return "INVALID_INPUT";
+    case NAV_GOAL_RETURN_EVAL_STATUS_NO_PATH:
+        return "NO_PATH";
+    case NAV_GOAL_RETURN_EVAL_STATUS_NO_SHORTCUT_FRONTIER:
+        return "NO_SHORTCUT_FRONTIER";
+    case NAV_GOAL_RETURN_EVAL_STATUS_BUDGET_EXCEEDED:
+        return "BUDGET_EXCEEDED";
     }
 
     return "UNKNOWN";
@@ -2876,6 +2904,10 @@ void MainWindow::createTelemetryPanel()
     goalDirectedShadowDecisionValueLabel = new QLabel(panel);
     goalDirectedShadowReasonValueLabel = new QLabel(panel);
     goalDirectedSafeReturnCostValueLabel = new QLabel(panel);
+    goalDirectedOptimisticEvalStatusValueLabel = new QLabel(panel);
+    goalDirectedOptimisticReturnCostValueLabel = new QLabel(panel);
+    goalDirectedUnknownCellsValueLabel = new QLabel(panel);
+    goalDirectedUnknownEdgesValueLabel = new QLabel(panel);
     goalDirectedFrontierRouteStatusValueLabel = new QLabel(panel);
     goalDirectedFrontierRouteCostValueLabel = new QLabel(panel);
     goalDirectedAttemptTotalScoreValueLabel = new QLabel(panel);
@@ -3358,6 +3390,10 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(goalDirectedShadowDecisionValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowReasonValueLabel);
     configureTelemetryValueLabel(goalDirectedSafeReturnCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedOptimisticEvalStatusValueLabel);
+    configureTelemetryValueLabel(goalDirectedOptimisticReturnCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedUnknownCellsValueLabel);
+    configureTelemetryValueLabel(goalDirectedUnknownEdgesValueLabel);
     configureTelemetryValueLabel(goalDirectedFrontierRouteStatusValueLabel);
     configureTelemetryValueLabel(goalDirectedFrontierRouteCostValueLabel);
     configureTelemetryValueLabel(goalDirectedAttemptTotalScoreValueLabel);
@@ -3973,6 +4009,14 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("goal_directed_shadow_decision:", goalDirectedShadowDecisionValueLabel);
     layout->addRow("goal_directed_shadow_reason:", goalDirectedShadowReasonValueLabel);
     layout->addRow("goal_directed_safe_return_cost:", goalDirectedSafeReturnCostValueLabel);
+    layout->addRow("goal_directed_optimistic_eval_status:",
+                   goalDirectedOptimisticEvalStatusValueLabel);
+    layout->addRow("goal_directed_optimistic_return_cost:",
+                   goalDirectedOptimisticReturnCostValueLabel);
+    layout->addRow("goal_directed_unknown_cells:",
+                   goalDirectedUnknownCellsValueLabel);
+    layout->addRow("goal_directed_unknown_edges:",
+                   goalDirectedUnknownEdgesValueLabel);
     layout->addRow("goal_directed_frontier_route_status:",
                    goalDirectedFrontierRouteStatusValueLabel);
     layout->addRow("goal_directed_frontier_route_cost:",
@@ -5951,6 +5995,24 @@ void MainWindow::updateTelemetryPanel()
                 ? "INF"
                 : QString::number(supervisorDebug.goal_directed_safe_return_cost));
     }
+    if (goalDirectedOptimisticEvalStatusValueLabel) {
+        goalDirectedOptimisticEvalStatusValueLabel->setText(
+            goalReturnEvalStatusText(supervisorDebug.goal_directed_optimistic_eval_status));
+    }
+    if (goalDirectedOptimisticReturnCostValueLabel) {
+        goalDirectedOptimisticReturnCostValueLabel->setText(
+            supervisorDebug.goal_directed_optimistic_return_cost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(supervisorDebug.goal_directed_optimistic_return_cost));
+    }
+    if (goalDirectedUnknownCellsValueLabel) {
+        goalDirectedUnknownCellsValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_unknown_cells_on_path));
+    }
+    if (goalDirectedUnknownEdgesValueLabel) {
+        goalDirectedUnknownEdgesValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_unknown_edges_on_path));
+    }
     if (goalDirectedFrontierRouteStatusValueLabel) {
         goalDirectedFrontierRouteStatusValueLabel->setText(
             routeStatusText(supervisorDebug.goal_directed_frontier_route_status));
@@ -6544,6 +6606,10 @@ void MainWindow::syncNavSupervisorConfig()
         goalDirectedMinSafeReturnCostToTry;
     config.goal_directed_max_frontier_attempts = goalDirectedMaxFrontierAttempts;
     config.goal_directed_allow_back_entry = goalDirectedAllowBackEntry;
+    config.goal_directed_unknown_wall_penalty = goalDirectedUnknownWallPenalty;
+    config.goal_directed_unknown_cell_penalty = goalDirectedUnknownCellPenalty;
+    config.goal_directed_max_unknown_cells = goalDirectedMaxUnknownCells;
+    config.goal_directed_max_unknown_edges = goalDirectedMaxUnknownEdges;
     nav_supervisor_set_config(&config);
 }
 

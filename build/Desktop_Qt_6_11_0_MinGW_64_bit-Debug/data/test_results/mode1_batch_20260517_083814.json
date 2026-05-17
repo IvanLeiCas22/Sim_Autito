@@ -1,0 +1,54 @@
+{
+    "batch_fast_mode_enabled": true,
+    "batch_fast_ticks_per_ui_update": 10,
+    "batch_reason": "MANUAL_CANCELLED",
+    "batch_sim_time_s": 55.199999999997665,
+    "batch_speedup": 6.6402020931069,
+    "batch_state": "BATCH_CANCELLED",
+    "batch_wall_time_s": 8.313,
+    "cancelled_count": 1,
+    "fail_count": 0,
+    "pass_count": 1,
+    "results": [
+        {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
+            "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
+            "final_mission_state": "DONE",
+            "found_specials": 3,
+            "index": 1,
+            "map_name": "normal_pass_open_3_specials.json",
+            "map_path": "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/data/test_maps/normal_pass_open_3_specials.json",
+            "reason": "PASS_FOUND_REQUIRED_SPECIALS_AND_RETURNED",
+            "required_specials": 3,
+            "result": "PASS",
+            "returned_to_start": true,
+            "sim_time_s": 54.79999999999767,
+            "ticks": 5480
+        },
+        {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
+            "final_done_reason": "NONE",
+            "final_mission_state": "SEARCH_SPECIALS",
+            "found_specials": 0,
+            "index": 2,
+            "map_name": "stress_center_pivot_cases_v2.json",
+            "map_path": "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/data/test_maps/stress_center_pivot_cases_v2.json",
+            "reason": "MANUAL_CANCELLED",
+            "required_specials": 3,
+            "result": "CANCELLED",
+            "returned_to_start": true,
+            "sim_time_s": 0.4000000000000002,
+            "ticks": 40
+        }
+    ],
+    "runner": "mode1_batch",
+    "timeout_count": 0,
+    "timestamp": "2026-05-17T08:38:14",
+    "total_maps": 8
+}

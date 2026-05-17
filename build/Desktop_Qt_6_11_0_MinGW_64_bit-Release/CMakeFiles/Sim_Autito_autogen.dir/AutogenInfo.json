@@ -405,6 +405,12 @@
 			null
 		],
 		[
+			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_goal_return_eval.h",
+			"MU",
+			"7UZHUCU65W/moc_nav_goal_return_eval.cpp",
+			null
+		],
+		[
 			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h",
 			"MU",
 			"7UZHUCU65W/moc_nav_map.cpp",
@@ -538,6 +544,11 @@
 		],
 		[
 			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_frontier_eval.c",
+			"MU",
+			null
+		],
+		[
+			"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_goal_return_eval.c",
 			"MU",
 			null
 		],

@@ -16,6 +16,8 @@ Sim_Autito_autogen/timestamp: \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_flood.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_frontier_eval.c \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_frontier_eval.h \
+	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_goal_return_eval.c \
+	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_goal_return_eval.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.c \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_map.h \
 	C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_supervisor.c \

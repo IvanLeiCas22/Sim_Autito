@@ -3,9 +3,9 @@
     "batch_fast_ticks_per_ui_update": 10,
     "batch_reason": "BATCH_COMPLETED",
     "batch_sim_time_s": 412.83999999999827,
-    "batch_speedup": 9.993706124425037,
+    "batch_speedup": 9.978247208391702,
     "batch_state": "BATCH_DONE",
-    "batch_wall_time_s": 41.31,
+    "batch_wall_time_s": 41.374,
     "cancelled_count": 0,
     "fail_count": 0,
     "pass_count": 8,
@@ -157,6 +157,6 @@
     ],
     "runner": "mode1_batch",
     "timeout_count": 0,
-    "timestamp": "2026-05-16T21:05:57",
+    "timestamp": "2026-05-17T08:26:36",
     "total_maps": 8
 }

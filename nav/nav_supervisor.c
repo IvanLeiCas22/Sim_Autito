@@ -50,6 +50,10 @@ typedef struct NavSupervisorStateData {
     NavSupervisorGoalDirectedReason goal_directed_shadow_reason;
     NavRouteStatus goal_directed_safe_return_status;
     uint16_t goal_directed_safe_return_cost;
+    NavGoalReturnEvalStatus goal_directed_optimistic_eval_status;
+    uint16_t goal_directed_optimistic_return_cost;
+    uint8_t goal_directed_unknown_cells_on_path;
+    uint8_t goal_directed_unknown_edges_on_path;
     NavFrontierEvalStatus goal_directed_frontier_eval_status;
     bool goal_directed_best_found;
     int8_t goal_directed_best_cell_x;
@@ -80,6 +84,11 @@ static void clear_goal_directed_shadow_debug(void)
         NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NONE;
     supervisor_state.goal_directed_safe_return_status = NAV_ROUTE_STATUS_IDLE;
     supervisor_state.goal_directed_safe_return_cost = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_optimistic_eval_status =
+        NAV_GOAL_RETURN_EVAL_STATUS_IDLE;
+    supervisor_state.goal_directed_optimistic_return_cost = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_unknown_cells_on_path = 0u;
+    supervisor_state.goal_directed_unknown_edges_on_path = 0u;
     supervisor_state.goal_directed_frontier_eval_status =
         NAV_FRONTIER_EVAL_STATUS_IDLE;
     supervisor_state.goal_directed_best_found = false;
@@ -109,6 +118,10 @@ static NavSupervisorConfig nav_supervisor_default_config(void)
     config.goal_directed_min_safe_return_cost_to_try = 4u;
     config.goal_directed_max_frontier_attempts = 1u;
     config.goal_directed_allow_back_entry = false;
+    config.goal_directed_unknown_wall_penalty = 1u;
+    config.goal_directed_unknown_cell_penalty = 1u;
+    config.goal_directed_max_unknown_cells = 4u;
+    config.goal_directed_max_unknown_edges = 4u;
     return config;
 }
 
@@ -144,6 +157,14 @@ static NavSupervisorConfig sanitize_config(const NavSupervisorConfig *config)
     sanitized.goal_directed_max_frontier_attempts =
         config->goal_directed_max_frontier_attempts;
     sanitized.goal_directed_allow_back_entry = config->goal_directed_allow_back_entry;
+    sanitized.goal_directed_unknown_wall_penalty =
+        config->goal_directed_unknown_wall_penalty;
+    sanitized.goal_directed_unknown_cell_penalty =
+        config->goal_directed_unknown_cell_penalty;
+    sanitized.goal_directed_max_unknown_cells =
+        config->goal_directed_max_unknown_cells;
+    sanitized.goal_directed_max_unknown_edges =
+        config->goal_directed_max_unknown_edges;
     return sanitized;
 }
 
@@ -250,6 +271,14 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
         supervisor_state.goal_directed_safe_return_status;
     snapshot->goal_directed_safe_return_cost =
         supervisor_state.goal_directed_safe_return_cost;
+    snapshot->goal_directed_optimistic_eval_status =
+        supervisor_state.goal_directed_optimistic_eval_status;
+    snapshot->goal_directed_optimistic_return_cost =
+        supervisor_state.goal_directed_optimistic_return_cost;
+    snapshot->goal_directed_unknown_cells_on_path =
+        supervisor_state.goal_directed_unknown_cells_on_path;
+    snapshot->goal_directed_unknown_edges_on_path =
+        supervisor_state.goal_directed_unknown_edges_on_path;
     snapshot->goal_directed_frontier_eval_status =
         supervisor_state.goal_directed_frontier_eval_status;
     snapshot->goal_directed_best_found = supervisor_state.goal_directed_best_found;
@@ -345,15 +374,6 @@ static void sync_input_snapshot(const NavSupervisorInput *input)
         input->final_safe_scan_return_wait_reason;
 }
 
-static uint16_t supervisor_manhattan(int8_t ax, int8_t ay, int8_t bx, int8_t by)
-{
-    const int dx = (int)ax - (int)bx;
-    const int dy = (int)ay - (int)by;
-    const int abs_dx = dx < 0 ? -dx : dx;
-    const int abs_dy = dy < 0 ? -dy : dy;
-    return (uint16_t)(abs_dx + abs_dy);
-}
-
 static NavFrontierEntryAction goal_directed_entry_action_for_dirs(
     NavMapDirection arrival_dir,
     NavMapDirection exit_dir)
@@ -406,6 +426,31 @@ static void goal_directed_set_fallback(NavSupervisorGoalDirectedReason reason)
     supervisor_state.goal_directed_shadow_reason = reason;
 }
 
+static NavSupervisorGoalDirectedReason goal_directed_reason_from_eval(
+    NavGoalReturnReason reason)
+{
+    switch (reason) {
+    case NAV_GOAL_RETURN_REASON_NO_PATH:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_FRONTIER;
+    case NAV_GOAL_RETURN_REASON_NO_SHORTCUT_FRONTIER:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_SHORTCUT_FRONTIER;
+    case NAV_GOAL_RETURN_REASON_UNKNOWN_BUDGET_EXCEEDED:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_UNKNOWN_BUDGET_EXCEEDED;
+    case NAV_GOAL_RETURN_REASON_OPTIMISTIC_NOT_BETTER_THAN_SAFE:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_NOT_BETTER_THAN_SAFE_RETURN;
+    case NAV_GOAL_RETURN_REASON_OPTIMISTIC_BETTER_THAN_SAFE:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_BETTER_THAN_SAFE_RETURN;
+    case NAV_GOAL_RETURN_REASON_SAFE_RETURN_TOO_SHORT:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_TOO_SHORT;
+    case NAV_GOAL_RETURN_REASON_ATTEMPT_BUDGET_EXHAUSTED:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED;
+    case NAV_GOAL_RETURN_REASON_NONE:
+        break;
+    }
+
+    return NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NONE;
+}
+
 static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input)
 {
     clear_goal_directed_shadow_debug();
@@ -445,48 +490,60 @@ static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input
         return;
     }
 
-    if (safe_debug.route_length
-        < supervisor_state.config.goal_directed_min_safe_return_cost_to_try) {
-        goal_directed_set_fallback(
-            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_TOO_SHORT);
-        return;
-    }
+    NavGoalReturnEvalConfig eval_config = {0};
+    eval_config.start_cell_x = input->start_cell_x;
+    eval_config.start_cell_y = input->start_cell_y;
+    eval_config.current_cell_x = input->current_cell_x;
+    eval_config.current_cell_y = input->current_cell_y;
+    eval_config.current_dir = (NavMapDirection)input->current_dir;
+    eval_config.safe_return_cost = safe_debug.route_length;
+    eval_config.score_margin = supervisor_state.config.goal_directed_score_margin;
+    eval_config.min_safe_return_cost_to_try =
+        supervisor_state.config.goal_directed_min_safe_return_cost_to_try;
+    eval_config.unknown_wall_penalty =
+        supervisor_state.config.goal_directed_unknown_wall_penalty;
+    eval_config.unknown_cell_penalty =
+        supervisor_state.config.goal_directed_unknown_cell_penalty;
+    eval_config.max_unknown_cells =
+        supervisor_state.config.goal_directed_max_unknown_cells;
+    eval_config.max_unknown_edges =
+        supervisor_state.config.goal_directed_max_unknown_edges;
+    eval_config.max_shortcut_attempts =
+        supervisor_state.config.goal_directed_max_frontier_attempts;
+    eval_config.allow_back_entry = supervisor_state.config.goal_directed_allow_back_entry;
 
-    const NavFloodStatus flood_status =
-        nav_flood_fill_to_cell(input->start_cell_x, input->start_cell_y);
-    if (flood_status != NAV_FLOOD_STATUS_OK) {
-        goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FLOOD_FAILED);
-        return;
-    }
+    NavGoalReturnEvalResult eval_result = {0};
+    const NavGoalReturnEvalStatus eval_status =
+        nav_goal_return_eval_evaluate(&eval_config, &eval_result);
+    supervisor_state.goal_directed_optimistic_eval_status = eval_status;
+    supervisor_state.goal_directed_optimistic_return_cost =
+        eval_result.optimistic_return_cost;
+    supervisor_state.goal_directed_unknown_cells_on_path =
+        eval_result.unknown_cells_on_path;
+    supervisor_state.goal_directed_unknown_edges_on_path =
+        eval_result.unknown_edges_on_path;
+    supervisor_state.goal_directed_best_found = eval_result.first_frontier_found;
+    supervisor_state.goal_directed_best_cell_x = eval_result.frontier_cell_x;
+    supervisor_state.goal_directed_best_cell_y = eval_result.frontier_cell_y;
+    supervisor_state.goal_directed_best_neighbor_x = eval_result.frontier_neighbor_x;
+    supervisor_state.goal_directed_best_neighbor_y = eval_result.frontier_neighbor_y;
+    supervisor_state.goal_directed_best_exit_dir = eval_result.exit_dir;
+    supervisor_state.goal_directed_estimated_after_entry_to_start =
+        eval_result.optimistic_return_cost;
+    supervisor_state.goal_directed_attempt_total_score =
+        eval_result.optimistic_return_cost;
+    supervisor_state.goal_directed_score_improvement = eval_result.score_improvement;
+    supervisor_state.goal_directed_shadow_valid = eval_result.valid;
 
-    NavFrontierEvalConfig frontier_config = {0};
-    frontier_config.start_cell_x = input->start_cell_x;
-    frontier_config.start_cell_y = input->start_cell_y;
-    frontier_config.score_margin = supervisor_state.config.goal_directed_score_margin;
-    frontier_config.allow_back_entry =
-        supervisor_state.config.goal_directed_allow_back_entry;
-    const NavFrontierEvalStatus frontier_status =
-        nav_frontier_eval_evaluate(&frontier_config);
-    NavFrontierEvalDebugSnapshot frontier_debug = {0};
-    nav_frontier_eval_get_debug(&frontier_debug);
-    supervisor_state.goal_directed_frontier_eval_status = frontier_status;
-    supervisor_state.goal_directed_best_found = frontier_debug.best_found;
-    supervisor_state.goal_directed_best_cell_x = frontier_debug.best_cell_x;
-    supervisor_state.goal_directed_best_cell_y = frontier_debug.best_cell_y;
-    supervisor_state.goal_directed_best_neighbor_x =
-        frontier_debug.best_neighbor_cell_x;
-    supervisor_state.goal_directed_best_neighbor_y =
-        frontier_debug.best_neighbor_cell_y;
-    supervisor_state.goal_directed_best_exit_dir = frontier_debug.best_exit_dir;
-
-    if (!frontier_debug.best_found) {
-        goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_FRONTIER);
+    if (eval_result.decision != NAV_GOAL_RETURN_DECISION_TRY_SHORTCUT
+        || !eval_result.first_frontier_found) {
+        goal_directed_set_fallback(goal_directed_reason_from_eval(eval_result.reason));
         return;
     }
 
     const uint8_t arrival_mask =
         goal_directed_supported_arrival_dir_mask(
-            frontier_debug.best_exit_dir,
+            eval_result.exit_dir,
             supervisor_state.config.goal_directed_allow_back_entry);
     supervisor_state.goal_directed_supported_arrival_dir_mask = arrival_mask;
     if (arrival_mask == 0u) {
@@ -496,8 +553,8 @@ static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input
     }
 
     const NavRouteStatus frontier_route_status =
-        nav_core_route_eval_to_cell_with_dir_mask(frontier_debug.best_cell_x,
-                                                  frontier_debug.best_cell_y,
+        nav_core_route_eval_to_cell_with_dir_mask(eval_result.frontier_cell_x,
+                                                  eval_result.frontier_cell_y,
                                                   arrival_mask);
     NavRouteEvalDebugSnapshot frontier_route_debug = {0};
     nav_core_route_eval_get_debug(&frontier_route_debug);
@@ -521,7 +578,7 @@ static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input
         (NavMapDirection)frontier_route_debug.found_target_dir;
     const NavFrontierEntryAction entry_action =
         goal_directed_entry_action_for_dirs(found_arrival_dir,
-                                            frontier_debug.best_exit_dir);
+                                            eval_result.exit_dir);
     supervisor_state.goal_directed_entry_action = entry_action;
     supervisor_state.goal_directed_entry_supported =
         goal_directed_entry_action_is_supported(
@@ -533,35 +590,11 @@ static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input
         return;
     }
 
-    const uint16_t estimated_after_entry =
-        supervisor_manhattan(frontier_debug.best_neighbor_cell_x,
-                             frontier_debug.best_neighbor_cell_y,
-                             input->start_cell_x,
-                             input->start_cell_y);
-    supervisor_state.goal_directed_estimated_after_entry_to_start =
-        estimated_after_entry;
-
-    const uint32_t attempt_score =
-        (uint32_t)frontier_route_debug.route_length + 1u + (uint32_t)estimated_after_entry;
-    supervisor_state.goal_directed_attempt_total_score =
-        attempt_score > NAV_SUPERVISOR_COST_INF
-            ? NAV_SUPERVISOR_COST_INF
-            : (uint16_t)attempt_score;
-    supervisor_state.goal_directed_score_improvement =
-        (int32_t)safe_debug.route_length
-        - (int32_t)supervisor_state.goal_directed_attempt_total_score;
     supervisor_state.goal_directed_shadow_valid = true;
-
-    if (attempt_score + (uint32_t)supervisor_state.config.goal_directed_score_margin
-        < (uint32_t)safe_debug.route_length) {
-        supervisor_state.goal_directed_shadow_decision =
-            NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_TRY_FRONTIER;
-        supervisor_state.goal_directed_shadow_reason =
-            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_BETTER_THAN_SAFE_RETURN;
-    } else {
-        goal_directed_set_fallback(
-            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_NOT_BETTER_THAN_SAFE_RETURN);
-    }
+    supervisor_state.goal_directed_shadow_decision =
+        NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_TRY_FRONTIER;
+    supervisor_state.goal_directed_shadow_reason =
+        NAV_SUPERVISOR_GOAL_DIRECTED_REASON_OPTIMISTIC_BETTER_THAN_SAFE_RETURN;
 }
 
 static NavSupervisorDoneReason done_reason_from_return_route_status(int16_t route_status)

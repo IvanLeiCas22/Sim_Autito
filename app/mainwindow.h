@@ -794,6 +794,10 @@ private:
     QLabel *goalDirectedShadowDecisionValueLabel = nullptr;
     QLabel *goalDirectedShadowReasonValueLabel = nullptr;
     QLabel *goalDirectedSafeReturnCostValueLabel = nullptr;
+    QLabel *goalDirectedOptimisticEvalStatusValueLabel = nullptr;
+    QLabel *goalDirectedOptimisticReturnCostValueLabel = nullptr;
+    QLabel *goalDirectedUnknownCellsValueLabel = nullptr;
+    QLabel *goalDirectedUnknownEdgesValueLabel = nullptr;
     QLabel *goalDirectedFrontierRouteStatusValueLabel = nullptr;
     QLabel *goalDirectedFrontierRouteCostValueLabel = nullptr;
     QLabel *goalDirectedAttemptTotalScoreValueLabel = nullptr;
@@ -950,6 +954,10 @@ private:
     uint16_t goalDirectedMinSafeReturnCostToTry = 4;
     uint8_t goalDirectedMaxFrontierAttempts = 1;
     bool goalDirectedAllowBackEntry = false;
+    uint16_t goalDirectedUnknownWallPenalty = 1;
+    uint16_t goalDirectedUnknownCellPenalty = 1;
+    uint8_t goalDirectedMaxUnknownCells = 4;
+    uint8_t goalDirectedMaxUnknownEdges = 4;
     bool mode1PlanCancelledAfterRequiredFound = false;
     bool mode1PlanWasActiveWhenRequiredFound = false;
     uint16_t mode1SearchCompleteLatchedAtCount = 0;

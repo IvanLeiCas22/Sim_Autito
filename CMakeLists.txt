@@ -22,6 +22,8 @@ qt_add_executable(Sim_Autito
     nav/nav_flood.h
     nav/nav_frontier_eval.c
     nav/nav_frontier_eval.h
+    nav/nav_goal_return_eval.c
+    nav/nav_goal_return_eval.h
     nav/nav_supervisor.c
     nav/nav_supervisor.h
     nav/pid_controller.c
