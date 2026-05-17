@@ -1,6 +1,6 @@
 # Smart recognition stress test plan
 
-Checkpoint actual para validar manualmente el modo 1 inteligente del simulador.
+Checkpoint actual para validar manualmente SMART y el modo 1 inteligente del simulador.
 
 ## Configuracion comun
 
@@ -9,14 +9,22 @@ Para cada mapa:
 1. Cargar el JSON desde `File -> Load Maze...` o tecla `O`.
 2. Activar overlay con `Y`.
 3. Seleccionar `SMART_RECOGNITION` con `P`.
-4. Activar `auto_mode` con `M`.
-5. Presionar `Space` para correr simulacion.
-6. Activar autonomia con `B`.
-7. Dejar correr hasta finalizar o hasta observar un fallo claro.
+4. Para probar SMART puro hasta `NO_FRONTIER`, desactivar `mode1_mission_enabled` en
+   `F3`.
+5. Para probar modo 1 completo, dejar los defaults actuales:
+   `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`, `goal_max_shortcut_attempts = 32` y
+   Fast Batch Mode activo.
+6. Activar `auto_mode` con `M`.
+7. Presionar `Space` para correr simulacion.
+8. Activar autonomia con `B`.
+9. Dejar correr hasta finalizar o hasta observar un fallo claro.
 
 Checklist general:
 
-- `smart_recognition_state` debe terminar en `NO_FRONTIER` cuando no queden fronteras alcanzables.
+- Con mision desactivada, `smart_recognition_state` debe terminar en `NO_FRONTIER`
+  cuando no queden fronteras alcanzables.
+- Con mision activada, al encontrar las especiales requeridas debe bloquear SMART y
+  volver al inicio; por defecto puede usar `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`.
 - El overlay debe mantener pose logica coherente con el robot.
 - El robot no debe atravesar paredes.
 - Las celdas especiales alcanzables deben marcarse con el indicador visual del overlay.

@@ -1,323 +1,209 @@
 # Diseno de la capa portable `nav_supervisor`
 
-Este documento describe el estado actual y el diseno previsto de la capa portable de
-supervision de navegacion. Distingue entre comportamiento implementado, herramientas de
-debug y trabajo futuro.
+Este documento describe el estado actual de la supervision de navegacion. La regla
+principal sigue siendo separar decisiones portables de la UI/simulacion Qt.
 
-## 1. Motivacion
+## Arquitectura por capas
 
-El modo 1 combina primitivas de movimiento, mapa logico, planner orientado, cola FIFO,
-flood fill, deteccion de celdas especiales y mision de retorno al inicio. La primera
-version concentraba demasiada orquestacion en `MainWindow`.
+### Qt / simulacion
 
-`nav_supervisor` existe para:
+`MainWindow` es adaptador, no fuente principal de decision de navegacion. Sus
+responsabilidades actuales son:
 
-- evitar que `MainWindow` siga creciendo con logica de mision y politica;
-- separar UI/simulacion de decisiones de navegacion;
-- permitir portar la misma orquestacion a STM32;
-- mantener comportamiento reproducible entre Qt y firmware;
-- conservar `nav_core`, `nav_map`, `nav_flood` y el planner ya validados.
+- leer sensores simulados desde `SimWorld` y `SimRobot`;
+- construir `RobotSensors`;
+- llamar `nav_core_update(...)`;
+- arrancar primitivas `nav_core_start_*`;
+- ejecutar la cola de planes;
+- resetear/aplicar referencia de yaw del simulador;
+- cargar JSON;
+- mantener UI, telemetria, overlay, test runner y batch runner.
 
-## 2. Arquitectura por capas
+### Modulos portables en `nav/`
 
-### Nivel 0 - HAL / simulacion
+- `nav_core`: primitivas fisicas, avance, smooth turns, pivots, cola de planes,
+  planner BFS orientado, `route_eval_to_cell_with_dir_mask`.
+- `nav_map`: mapa logico, celda/orientacion actual, visitadas, paredes
+  conocidas/presentes y especiales.
+- `nav_flood`: flood fill portable para costos/debug.
+- `nav_frontier_eval`: evaluacion clasica de fronteras flood usada por `Shift+F`.
+- `nav_goal_return_eval`: evaluador optimista de retorno hacia inicio. Usa
+  weighted/optimistic flood fill por celdas, permite desconocido con presupuesto y
+  devuelve la primera frontera util.
+- `nav_supervisor`: mision modo 1, SMART_RECOGNITION, retorno seguro y
+  `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`.
+- `pid_controller`: PID/fixed-point portable.
 
-Actual en Qt:
+## Responsabilidades de `nav_supervisor`
 
-- `SimWorld`: paredes, cintas, marcas especiales y geometria del mundo.
-- `SimRobot`: cinematica, motores simulados y sensores simulados.
-- `MainWindow`: loop Qt, teclado, UI, overlay, telemetria y adaptacion hacia `nav_core`.
-
-Futuro en STM32:
-
-- sensores IR;
-- sensores de piso;
-- gyro/yaw;
-- timers;
-- PWM de motores;
-- botones o comandos externos.
-
-### Nivel 1 - Percepcion
-
-Convierte lecturas crudas en datos de navegacion:
-
-- `RobotSensors`;
-- paredes frontal/lateral/diagonal;
-- piso delantero/trasero negro o blanco;
-- yaw relativo.
-
-En Qt, esta adaptacion sigue viviendo en `MainWindow`.
-
-### Nivel 2 - Primitivas
-
-Viven en `nav_core`:
-
-- `ADVANCE_LINE` / `ADVANCE_UNTIL_REAR_BLACK`;
-- `SMOOTH_LEFT` / `SMOOTH_RIGHT`;
-- `PIVOT_LEFT`, `PIVOT_RIGHT`, `PIVOT_180`;
-- `CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE`;
-- `APPROACH_FRONT_WALL_FOR_PIVOT`.
-
-Estas primitivas son portables y no dependen de Qt.
-
-### Nivel 3 - Mapa
-
-`nav_map` mantiene:
-
-- celda logica actual;
-- orientacion discreta;
-- celdas visitadas;
-- paredes conocidas/presentes;
-- celdas especiales detectadas.
-
-### Nivel 4 - Planificacion
-
-Componentes actuales:
-
-- planner BFS orientado sobre `(cell_x, cell_y, dir)`;
-- cola FIFO portable de `NavPlanAction`;
-- `nav_flood` como capa portable de costos por celda;
-- evaluacion debug de fronteras con flood en `MainWindow`.
-
-El BFS orientado sigue siendo el que genera acciones fisicas ejecutables. `nav_flood`
-calcula costos y por ahora no cambia el comportamiento de navegacion.
-
-### Nivel 5 - Supervisor / mision
-
-Actual:
-
-- `nav/nav_supervisor.h`;
-- `nav/nav_supervisor.c`.
-
-`nav_supervisor` ya controla:
+`nav_supervisor` coordina decisiones de alto nivel:
 
 - mision modo 1 segura;
-- latch de busqueda completa al encontrar N celdas especiales;
-- bloqueo de SMART durante retorno;
-- planificacion de retorno seguro al inicio mediante request hacia `MainWindow`;
-- acciones locales de `SMART_RECOGNITION`;
-- planificacion a frontera de `SMART_RECOGNITION`;
-- estados principales de SMART y telemetria portable.
+- latch al encontrar `required_special_count`;
+- bloqueo de SMART cuando la mision toma control;
+- retorno seguro conocido;
+- acciones locales SMART;
+- planificacion/ejecucion a frontera SMART;
+- `FINAL_SAFE_SCAN_RETURN`;
+- `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`;
+- estados, reasons, pulsos de request y debug snapshots.
 
-`MainWindow` aplica los requests del supervisor y sigue ejecutando las primitivas reales.
+No debe depender de Qt, `SimWorld`, `SimRobot`, JSON, dibujo, teclado, PWM real,
+`malloc/free`, `float/double` ni buffers grandes en stack.
 
-## 3. Estado actual real
+## Entradas y salidas
 
-### Implementado y validado
+Entradas principales:
 
-- `nav_supervisor` fue creado como modulo portable.
-- C1: shadow/debug de mision modo 1 validado.
-- C2: mision modo 1 segura migrada al supervisor.
-- C3: `MainWindow` limpiado como adaptador de mision.
-- C4B: shadow/debug de SMART agregado.
-- C4C: acciones locales SMART migradas al supervisor.
-- C4D: planificacion a frontera SMART migrada al supervisor.
-- C4E: limpieza de integracion SMART; se elimino comparacion shadow como fuente activa.
+- `NavSupervisorInput`;
+- `NavSupervisorSmartInput`;
+- `NavSupervisorConfig`;
+- `nav_supervisor_set_start_cell(...)`;
+- `nav_supervisor_notify_return_route_status(...)`;
+- `nav_supervisor_notify_frontier_route_status(...)`;
+- `nav_supervisor_notify_goal_frontier_route_status(...)`;
+- `nav_supervisor_notify_goal_entry_started(...)`.
 
-### MainWindow hoy
-
-`MainWindow` ya no es la fuente principal de decision para mision modo 1 segura ni para
-SMART. Sigue siendo adaptador Qt/fisico:
-
-- lee sensores simulados y arma snapshots;
-- llama `nav_core_update(...)`;
-- arranca primitivas `nav_core_start_*`;
-- llama al planner real cuando `nav_supervisor` lo pide;
-- activa y consume la cola con `advancePlanExecutionIfNeeded()`;
-- maneja secuencias compuestas como `CENTER_AND_PIVOT_180`;
-- resetea/aplica referencia de yaw del simulador;
-- dibuja UI, overlay y telemetria;
-- mantiene herramientas debug `K/J`, `T/J`, `I`, `Shift+F`.
-
-### Debug experimental
-
-La evaluacion de fronteras con flood (`Shift+F`) todavia vive en `MainWindow`. Es una
-herramienta de debug: calcula mejor frontera, score, decision tentativa y accion de
-entrada, pero no ejecuta acciones ni modifica la mision.
-
-## 4. Responsabilidades actuales de `nav_supervisor`
-
-`nav_supervisor` debe:
-
-- mantener estado de mision;
-- aplicar config de mision;
-- detectar que se alcanzo `required_special_count`;
-- pedir limpiar exploracion pendiente;
-- esperar que termine la accion fisica actual;
-- pedir plan seguro al inicio;
-- pedir ejecucion de cola de retorno;
-- producir `DONE`, `ERROR` o `CANCELLED`;
-- decidir acciones locales SMART;
-- pedir planificacion a frontera SMART;
-- pedir ejecucion de plan de frontera;
-- emitir estados, razones y flags de debug.
-
-El supervisor coordina modulos existentes. No duplica primitivas ni planner.
-
-## 5. Que no debe hacer `nav_supervisor`
-
-`nav_supervisor` no debe:
-
-- dibujar overlay;
-- leer teclado;
-- depender de Qt;
-- acceder a `SimWorld` o `SimRobot`;
-- parsear JSON;
-- manejar PWM directamente;
-- resetear yaw del simulador;
-- ejecutar cinematicas;
-- usar `malloc/free`;
-- usar `float/double`;
-- usar buffers grandes en stack.
-
-## 6. Entradas y salidas
-
-### Entradas actuales
-
-El supervisor recibe snapshots portables como:
-
-- `NavSupervisorInput` para mision;
-- `NavSupervisorSmartInput` para SMART;
-- config `NavSupervisorConfig`;
-- celda inicial mediante `nav_supervisor_set_start_cell(...)`;
-- notificaciones de rutas:
-  - `nav_supervisor_notify_return_route_status(...)`;
-  - `nav_supervisor_notify_frontier_route_status(...)`.
-
-### Salidas actuales
-
-Produce:
+Salidas principales:
 
 - `NavSupervisorOutput`;
 - `NavSupervisorSmartOutput`;
 - `NavSupervisorDebugSnapshot`.
 
-`MainWindow` traduce esas salidas a:
+`MainWindow` aplica esos outputs como adaptador: planifica con `nav_core`, activa la
+cola, arranca primitivas o detiene autonomia/motores.
 
-- `nav_core_plan_clear()`;
-- `nav_core_route_plan_to_cell(...)`;
-- `nav_core_route_plan_to_nearest_frontier()`;
-- `planExecutionEnabled = true`;
-- `startBasicNavRecommendedAction(...)`;
-- detener autonomia cuando corresponde.
+## Estados de mision
 
-## 7. Estados del supervisor
+Estados activos principales:
 
-Estados de mision implementados:
-
-- `NAV_SUPERVISOR_STATE_IDLE`;
-- `NAV_SUPERVISOR_STATE_SEARCH_SPECIALS`;
-- `NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE`;
-- `NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN`;
-- `NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE`;
-- `NAV_SUPERVISOR_STATE_DONE`;
-- `NAV_SUPERVISOR_STATE_ERROR`;
-- `NAV_SUPERVISOR_STATE_CANCELLED`.
-
-Estados reservados/futuros:
-
-- `NAV_SUPERVISOR_STATE_RETURN_SMART_DECIDE`;
-- `NAV_SUPERVISOR_STATE_RETURN_FRONTIER_PLAN`;
-- `NAV_SUPERVISOR_STATE_RETURN_FRONTIER_EXECUTE`;
-- `NAV_SUPERVISOR_STATE_RETURN_FRONTIER_ENTER`.
+- `IDLE`;
+- `SEARCH_SPECIALS`;
+- `FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE`;
+- `FINAL_SAFE_SCAN_RETURN_PLAN`;
+- `FINAL_SAFE_SCAN_RETURN_EXECUTE`;
+- `RETURN_SMART_DECIDE`;
+- `RETURN_FRONTIER_PLAN`;
+- `RETURN_FRONTIER_EXECUTE`;
+- `RETURN_FRONTIER_ENTER`;
+- `RETURN_SAFE_PLAN`;
+- `RETURN_SAFE_EXECUTE`;
+- `DONE`;
+- `ERROR`;
+- `CANCELLED`.
 
 Estados SMART implementados:
 
-- `NAV_SUPERVISOR_SMART_STATE_IDLE`;
-- `NAV_SUPERVISOR_SMART_STATE_LOCAL_UNVISITED`;
-- `NAV_SUPERVISOR_SMART_STATE_PLAN_TO_FRONTIER`;
-- `NAV_SUPERVISOR_SMART_STATE_EXECUTING_FRONTIER_ROUTE`;
-- `NAV_SUPERVISOR_SMART_STATE_FRONTIER_ALREADY_HERE`;
-- `NAV_SUPERVISOR_SMART_STATE_NO_FRONTIER`;
-- `NAV_SUPERVISOR_SMART_STATE_ERROR`;
-- `NAV_SUPERVISOR_SMART_STATE_BLOCKED_BY_MISSION`;
-- `NAV_SUPERVISOR_SMART_STATE_WAIT_NAV_READY`.
+- `IDLE`;
+- `LOCAL_UNVISITED`;
+- `PLAN_TO_FRONTIER`;
+- `EXECUTING_FRONTIER_ROUTE`;
+- `FRONTIER_ALREADY_HERE`;
+- `NO_FRONTIER`;
+- `ERROR`;
+- `BLOCKED_BY_MISSION`;
+- `WAIT_NAV_READY`.
 
-## 8. Estrategias de retorno
+## Estrategias de retorno
 
 ### `SAFE_KNOWN_RETURN`
 
-Actual e implementada:
+Retorno conservador:
 
-- al encontrar N especiales, deja terminar la accion fisica actual;
-- limpia exploracion pendiente;
-- planifica a la celda inicial con `nav_core_route_plan_to_cell(...)`;
-- ejecuta la cola;
-- termina al llegar a la celda inicial.
+1. deja terminar la accion fisica actual;
+2. limpia exploracion pendiente;
+3. planifica a la celda inicial por mapa conocido;
+4. ejecuta la cola;
+5. termina en `DONE` al llegar al inicio.
 
-### `GOAL_DIRECTED_RETURN`
+### `GOAL_DIRECTED_RETURN_SHADOW`
 
-Futuro:
+Evalua que haria el retorno inteligente, pero no cambia el comportamiento real. Sirve
+para comparar decision, frontera, costos y reasons.
 
-- intentaria descubrir atajos hacia el inicio;
-- usaria flood fill para evaluar fronteras;
-- deberia mantener fallback seguro;
-- necesita presupuesto, limite de intentos y blacklist de fronteras;
-- no esta conectado al control real.
+### `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`
 
-## 9. Uso de flood fill
+Es el default actual.
 
-Actual:
+Objetivo: volver al inicio explorando de forma dirigida si puede descubrir un atajo,
+sin planificar todo un camino desconocido de una vez.
 
-- `nav_flood` calcula costos por celda hacia un objetivo;
-- la tecla `I` calcula flood hacia la celda inicial;
-- el overlay muestra costos;
-- `Shift+F` evalua fronteras candidatas como debug.
+Flujo:
 
-Rol correcto:
+1. calcula retorno seguro conocido;
+2. calcula ruta optimista hacia inicio permitiendo desconocido con presupuesto;
+3. elige la primera frontera util del camino optimista;
+4. planifica por mapa conocido hasta `frontier_cell` con mascara de orientaciones;
+5. ejecuta esa cola;
+6. revalida la frontera;
+7. entra una sola celda desconocida (`frontier_neighbor`) con:
+   - `ADVANCE_LINE`;
+   - `SMOOTH_LEFT`;
+   - `SMOOTH_RIGHT`;
+8. no usa `BACK` por defecto;
+9. deja que `nav_core` actualice mapa/celda/orientacion normalmente;
+10. recalcula desde la nueva situacion;
+11. si ya no conviene o se agotan intentos, cae a retorno seguro.
 
-- flood fill sirve para costos globales y scoring;
-- no reemplaza al planner orientado;
-- no arranca primitivas;
-- no cambia la mision actual.
+El supervisor hace fallback seguro ante ruta no encontrada, orientacion no soportada,
+pared compartida conocida presente, vecino invalido/visitado, nav ocupado, fallo de
+arranque de primitiva, mismatch de celda o cancelacion.
 
-Integracion futura:
+## Defaults actuales de F3
 
-1. `nav_flood` calcula costo hacia inicio.
-2. El supervisor evalua si conviene probar una frontera.
-3. El BFS orientado genera la cola hacia esa frontera.
-4. El supervisor decide entrar o hacer fallback seguro.
+- `return_strategy = GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`.
+- `goal_required_improvement = 0`.
+- `goal_unknown_cell_penalty = 0`.
+- `goal_unknown_edge_penalty = 0`.
+- `goal_max_unknown_cells = 32`.
+- `goal_max_unknown_edges = 32`.
+- `goal_min_safe_return_cost_to_try = 4`.
+- `goal_max_shortcut_attempts = 32`.
+- `goal_allow_back_entry = false`.
+- `batch_fast_mode_enabled = true`.
+- `batch_fast_ticks_per_ui_update = 10`.
 
-## 10. Relacion con STM32
+Notas:
 
-`nav_supervisor` esta disenado como portable:
+- `goal_max_unknown_cells/edges` limitan cuanto desconocido puede considerar el
+  evaluador optimista.
+- `goal_max_shortcut_attempts` limita entradas reales a celdas desconocidas durante
+  el retorno. No significa planificar muchas celdas a ciegas.
+- penalty `0` significa que desconocido cuesta lo mismo que un paso normal.
+- pared conocida presente bloquea; pared conocida ausente es paso normal; pared
+  desconocida es transitable optimista configurable.
+
+## Relacion con STM32
+
+`nav_supervisor` esta disenado como C portable:
 
 - sin Qt;
 - sin `malloc/free`;
 - sin `float/double`;
-- sin dependencia de `SimWorld`/`SimRobot`;
-- con inputs/outputs explicitos.
+- con arrays/workspaces fijos;
+- con requests explicitos hacia una futura HAL/adaptador.
 
-Antes de firmware real falta:
+Pendiente para firmware real:
 
-- definir HAL para sensores, yaw, tiempo y motores;
-- decidir que telemetria queda en firmware;
-- medir SRAM y tiempo de loop;
-- validar sensores reales con ruido.
+- HAL de sensores, yaw, tiempo y motores;
+- telemetria serial liviana;
+- medicion de SRAM/CPU;
+- tuning con sensores reales.
 
-## 11. Plan de migracion actualizado
+## Riesgos actuales
 
-- Etapa A - documentar diseno: completada.
-- Etapa B - crear `nav_supervisor.h/c`: completada.
-- Etapa C - migrar mision modo 1 segura: completada.
-- Etapa D - migrar SMART/orquestacion local y planificacion a frontera: completada para SMART actual.
-- Etapa E - integrar retorno inteligente con flood: pendiente.
-- Etapa F - preparar HAL STM32: pendiente.
+- `MainWindow` todavia ejecuta cola, secuencias compuestas y yaw del simulador.
+- `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION` puede gastar mas pasos que retorno seguro
+  en mapas donde el atajo optimista no se materializa.
+- No hay blacklist temporal de fronteras fallidas todavia.
+- No hay soporte `BACK` para entrada a frontera.
+- Planner y route eval usan workspace estatico no reentrante.
 
-## 12. Riesgos actuales
+## Recomendacion
 
-- `MainWindow` aun ejecuta cola, secuencias compuestas y yaw del simulador.
-- `GOAL_DIRECTED_RETURN` podria gastar mas tiempo que el retorno seguro si se implementa sin presupuesto.
-- Flood frontier debug puede parecer decision real, pero todavia no ejecuta nada.
-- Portar a STM32 requiere HAL y tuning real de sensores.
-- La cola y planner siguen usando workspace estatico no reentrante, aceptable para el flujo actual.
+Mantener la direccion actual:
 
-## 13. Recomendacion
-
-No volver a agregar logica de mision o SMART en `MainWindow`. La direccion actual es:
-
-- mantener `MainWindow` como adaptador Qt;
-- conservar primitivas y planner actuales;
-- usar `nav_flood` como capa de costos;
-- mover la evaluacion de fronteras y retorno inteligente a `nav_supervisor` cuando se active;
-- preparar luego una HAL limpia para STM32.
+- decisiones en `nav/`;
+- `MainWindow` como adaptador Qt/UI/simulacion;
+- fallback seguro siempre disponible;
+- batch + autocheck como validacion obligatoria despues de cambios.

@@ -1,25 +1,22 @@
 # Reglas para generar mapas JSON
 
-## Objetivo
+Reglas para crear mapas compatibles con el simulador Qt/C++ de micromouse/autito.
 
-Este documento define reglas para crear mapas JSON compatibles con el simulador Qt/C++ de micromouse/autito. Está pensado especialmente para que una IA pueda generar mapas nuevos sin romper el formato actual.
+## Carpetas
 
-Separación recomendada:
+- `data/test_maps/`: mapas esperados a `PASS` con `Shift+B`.
+- `data/stress_maps/` o `data/dev_maps/`: sugeridas para mapas extremos,
+  experimentales o `expected_fail`.
+- Mapas sueltos en `data/`: pruebas manuales o compatibilidad.
 
-- Mapas de test automático: deben ser estables y pasar el Mode 1 Test Runner.
-- Mapas stress: pueden incluir casos extremos, ambiguos o difíciles.
-- Mapas experimentales/debug: sirven para probar una función puntual y no necesariamente deben pasar.
+`data/test_maps` debe contener solo mapas que el batch debe pasar. Si un mapa esta
+disenado para fallar, usar otra carpeta o documentarlo explicitamente.
 
-## Carpetas recomendadas
+## Formato JSON
 
-- `data/test_maps/`: mapas que deben pasar el batch runner de modo 1. Resultado esperado: `PASS`.
-- `data/stress_maps/` o `data/dev_maps/`: sugeridas para mapas extremos o experimentales. No tienen obligación de pasar.
+Parser real: `SimWorld::loadFromJsonFile(...)`.
 
-Los mapas sueltos en `data/` pueden seguir usándose para pruebas manuales o compatibilidad.
-
-## Formato JSON actual
-
-El parser real está en `SimWorld::loadFromJsonFile(...)`. El formato usado actualmente es:
+Formato recomendado:
 
 ```json
 {
@@ -43,150 +40,118 @@ El parser real está en `SimWorld::loadFromJsonFile(...)`. El formato usado actu
 }
 ```
 
-Campos actuales:
+Campos:
 
-- `name`: opcional; si falta, se usa un nombre por defecto.
-- `cells.width`: cantidad de columnas.
-- `cells.height`: cantidad de filas.
-- `cells.cell_size_mm`: tamaño de celda en milímetros.
-- `start.x_mm`: posición inicial X física en milímetros.
-- `start.y_mm`: posición inicial Y física en milímetros.
-- `start.yaw_deg`: yaw inicial en grados.
-- `walls`: lista de paredes internas o explícitas.
-- `special_cells`: lista de celdas especiales.
+- `name`: opcional.
+- `cells.width`, `cells.height`, `cells.cell_size_mm`.
+- `start.x_mm`, `start.y_mm`, `start.yaw_deg`.
+- `walls`.
+- `special_cells`.
 
-Compatibilidad aceptada por el parser:
+Alias aceptados por compatibilidad:
 
-- También existen alias raíz `cols`, `rows` y `cell_size_mm`.
-- En `walls` y `special_cells`, también se aceptan `col`/`row` como alias de `cell_x`/`cell_y`.
-- Para mapas nuevos, preferir siempre `cells.width`, `cells.height`, `cells.cell_size_mm`, `cell_x` y `cell_y`.
+- raiz `cols`, `rows`, `cell_size_mm`;
+- `col`/`row` como alias de `cell_x`/`cell_y`.
 
-Campos futuros deben marcarse como opcionales/futuros y no deben ser necesarios para cargar el mapa.
+Para mapas nuevos, preferir siempre el formato recomendado.
 
-## Sistema de coordenadas
+## Coordenadas
 
-- `cell_x` es la columna.
-- `cell_y` es la fila.
-- El origen lógico es la esquina superior izquierda del mapa: `(0, 0)`.
-- `x` crece hacia el Este.
-- `y` crece hacia el Sur.
-- La celda `(cell_x, cell_y)` ocupa:
-  - `x_mm = cell_x * cell_size_mm ... (cell_x + 1) * cell_size_mm`
-  - `y_mm = cell_y * cell_size_mm ... (cell_y + 1) * cell_size_mm`
+- `cell_x`: columna.
+- `cell_y`: fila.
+- origen logico: esquina superior izquierda `(0, 0)`.
+- X crece hacia Este.
+- Y crece hacia Sur.
+- `cell_size_mm` recomendado: `200`.
 
-Direcciones válidas para paredes:
+Direcciones validas:
 
-- `N` o `NORTH`
-- `E` o `EAST`
-- `S` o `SOUTH`
-- `W` o `WEST`
+- `N` / `NORTH`;
+- `E` / `EAST`;
+- `S` / `SOUTH`;
+- `W` / `WEST`.
 
-Para mapas nuevos, preferir las formas cortas `N`, `E`, `S`, `W`.
+Preferir `N`, `E`, `S`, `W`.
 
-## Reglas geométricas obligatorias
+## Paredes
 
-- `width` y `height` deben ser positivos.
-- `cell_size_mm` debe ser positivo.
-- Todas las celdas referenciadas por paredes o especiales deben estar dentro del mapa.
-- Las paredes deben pertenecer a una celda válida y a una dirección válida.
-- No agregar paredes fuera de límites.
-- Evitar duplicados conflictivos. Si se declara una pared compartida, no hace falta declarar también la opuesta en la celda vecina.
-- `SimWorld::setWall(...)` propaga la pared a la celda vecina cuando corresponde.
-- `SimWorld::addBoundaryWalls()` genera el borde exterior automáticamente. No es necesario declarar el perímetro exterior en JSON.
+- Todas las paredes deben referenciar celdas dentro del mapa.
+- No declarar paredes fuera de limites.
+- Evitar duplicados conflictivos.
+- Si se declara una pared compartida, no hace falta declarar la opuesta.
+- `SimWorld::setWall(...)` propaga la pared al vecino cuando corresponde.
+- `SimWorld::addBoundaryWalls()` genera el perimetro exterior automaticamente.
 
-## Reglas de conectividad para `data/test_maps/`
+## Reglas para `data/test_maps`
 
-Para mapas de test automático:
+Con defaults actuales:
 
-- Debe existir un camino desde `start` hasta todas las celdas especiales requeridas.
-- Debe existir camino de regreso al inicio.
-- El mapa debe tener al menos `required_special_count` celdas especiales.
-- El default actual recomendado es al menos 3 especiales.
-- Evitar regiones inalcanzables salvo que no afecten el `PASS` esperado.
-- Si el objetivo del mapa es probar regiones inalcanzables, ubicarlo como stress/dev o documentarlo como `expected_fail`, no como test normal.
+- `return_strategy = GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`;
+- `goal_max_shortcut_attempts = 32`;
+- `batch_fast_mode_enabled = true`;
+- `required_special_count` recomendado: `3`.
 
-## Reglas para celdas especiales
+Para que un mapa entre en `data/test_maps`:
 
-- Cada celda especial debe estar dentro del mapa.
-- No debe superponerse con una pared de forma que impida físicamente detectarla.
-- El tamaño usado en mapas actuales suele ser `size_mm: 120`.
-- Si falta `size_mm`, el simulador usa su tamaño especial por defecto.
-- Para mapas `normal_pass`, evitar casos ambiguos:
-  - especial muy pegado al inicio;
-  - especiales contiguas;
+- debe haber al menos `required_special_count` especiales alcanzables;
+- debe existir camino fisico desde start hacia esas especiales;
+- debe existir alguna forma valida de volver al inicio;
+- no debe depender de comportamiento indefinido;
+- debe terminar `PASS` en `Shift+R` y `Shift+B`.
+
+El retorno inteligente puede explorar atajos desconocidos, pero el mapa no debe exigir
+atravesar paredes conocidas presentes ni inconsistencias geometricas.
+
+## Celdas especiales
+
+- Cada especial debe estar dentro del mapa.
+- `size_mm` usado normalmente: `120`.
+- Si falta `size_mm`, el simulador usa su default.
+- Para mapas `normal_pass`, evitar ambiguedades innecesarias:
   - start sobre especial;
-  - marcas especiales en trayectorias físicamente raras.
-- Esos casos son válidos para mapas stress si se documenta la intención.
+  - especiales contiguas si no se busca probar ese caso;
+  - especiales pegadas a paredes que impidan pisarlas.
 
-## Reglas de start
+Casos ambiguos son validos como stress si estan documentados.
+
+## Start
 
 - `start.x_mm` y `start.y_mm` deben caer dentro del mapa.
-- La orientación inicial debe ser una orientación cardinal compatible con la navegación esperada. Recomendado: `0`, `90`, `180` o `270`.
-- En mapas `normal_pass`, el start no debe quedar encerrado por paredes.
-- Start sobre especial debe tratarse como caso stress, no como mapa normal de batch.
+- `yaw_deg` recomendado: `0`, `90`, `180` o `270`.
+- Start no debe quedar encerrado.
+- Start sobre especial debe tratarse como stress, salvo que el caso ya este validado.
 
-## Clasificación sugerida de mapas
+## Clasificacion sugerida
 
-- `normal_pass`: debería pasar siempre.
-- `stress_pass`: desafiante, pero debería pasar.
-- `expected_fail`: diseñado para fallar por falta de especiales, regiones inaccesibles u otra condición esperada.
-- `debug`: prueba una función específica.
+- `normal_pass`: debe pasar siempre.
+- `stress_pass`: dificil, pero debe pasar.
+- `expected_fail`: disenado para fallar por una razon esperada.
+- `debug`: prueba una funcion puntual.
 
-Solo `normal_pass` y `stress_pass` deberían entrar en `data/test_maps/` si el batch espera `PASS`.
+Solo `normal_pass` y `stress_pass` deberian entrar en `data/test_maps`.
 
-## Checklist para IA generadora
+## Checklist para generar un mapa
 
-Antes de entregar un mapa:
+- Elegir `width`, `height` y `cell_size_mm`.
+- Definir start dentro del mapa.
+- Usar yaw cardinal.
+- Generar paredes interiores validas.
+- No declarar paredes exteriores.
+- Colocar al menos 3 especiales alcanzables.
+- Garantizar regreso al inicio.
+- Usar JSON puro, sin comentarios.
+- Usar nombre descriptivo.
+- Guardar en `data/test_maps` solo si se espera `PASS`.
 
-- Elegir `width` y `height`.
-- Elegir `cell_size_mm`, normalmente `200`.
-- Definir `start` dentro del mapa.
-- Usar orientación inicial cardinal.
-- Generar paredes interiores válidas.
-- No declarar paredes fuera de límites.
-- Recordar que el borde exterior se genera automáticamente.
-- Garantizar conectividad desde start hacia las especiales.
-- Colocar al menos 3 especiales alcanzables para el modo 1 default.
-- Usar `size_mm: 120` salvo que se quiera probar otra cosa.
-- Mantener JSON puro, sin comentarios.
-- Usar nombres descriptivos.
-- Guardar en `data/test_maps/` solo si se espera `PASS`.
+## Validacion
 
-## Plantilla de prompt para generar mapas
-
-```text
-Generá un mapa JSON para el simulador de micromouse usando el formato existente del proyecto.
-
-Requisitos:
-- JSON puro, sin comentarios.
-- No inventes campos nuevos.
-- Usá:
-  - name
-  - cells.width
-  - cells.height
-  - cells.cell_size_mm
-  - start.x_mm
-  - start.y_mm
-  - start.yaw_deg
-  - walls con cell_x, cell_y, dir
-  - special_cells con cell_x, cell_y, size_mm
-- Usá cell_size_mm = 200.
-- Asegurá al menos 3 special_cells alcanzables desde start.
-- Asegurá que existe camino de regreso al inicio.
-- No declares paredes exteriores; el simulador las genera.
-- Las direcciones de pared deben ser N, E, S o W.
-- Todas las celdas referenciadas deben estar dentro del mapa.
-
-Objetivo del mapa:
-[describir si es normal_pass, stress_pass, expected_fail o debug]
-```
-
-## Checklist de validación manual
-
-1. Cargar el mapa desde la UI.
-2. Activar overlay lógico si ayuda (`Y`).
-3. Ejecutar `Shift+R` para correr el Mode 1 Test Runner en el mapa actual.
-4. Si pasa, puede entrar a `data/test_maps/`.
-5. Ejecutar `Shift+B` cuando haya varios mapas.
-6. Revisar `batch_runner_state`, `pass_count`, `fail_count`, `timeout_count` y `cancelled_count`.
-7. Si falla, moverlo a stress/dev o corregir conectividad/especiales.
+1. Cargar el mapa.
+2. Activar overlay con `Y` si ayuda.
+3. Ejecutar `Shift+R`.
+4. Si pasa, ejecutar `Shift+B`.
+5. Revisar:
+   - `batch_runner_state = BATCH_DONE`;
+   - `batch_runner_fail_count = 0`;
+   - `batch_runner_timeout_count = 0`;
+   - `autocheck_failure_count = 0`.
+6. Revisar CSV/JSON exportado en `data/test_results`.

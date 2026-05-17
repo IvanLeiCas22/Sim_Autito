@@ -1,719 +1,288 @@
 # Estado actual del modo 1 de navegacion
 
-Este documento describe el estado real inspeccionado del modo 1. Separa lo que esta implementado de ideas futuras y usa los nombres actuales de archivos, enums, structs, funciones y telemetria cuando son relevantes.
+Este documento resume el estado real del modo 1 despues de integrar
+`GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`.
 
 ## Objetivo del modo 1
 
-El modo 1 busca reconocer el laberinto de forma incremental:
+El modo 1:
 
-- navegar con percepcion actual de paredes;
-- mantener un mapa logico sombra en `nav_map`;
-- detectar celdas especiales por sensores de piso;
-- explorar celdas no visitadas;
-- volver automaticamente a una frontera de exploracion cuando queda rodeado de celdas ya visitadas;
-- terminar cuando no quedan fronteras alcanzables (`NO_FRONTIER`) si la mision esta
-  desactivada;
-- si la mision modo 1 esta activada, buscar N celdas especiales y volver a la celda
-  inicial por retorno seguro conocido.
+- explora incrementalmente el laberinto;
+- mantiene mapa logico en `nav_map`;
+- detecta celdas especiales con sensores de piso;
+- usa `SMART_RECOGNITION` para explorar celdas no visitadas y volver a fronteras;
+- cuando encuentra las especiales requeridas, vuelve al inicio;
+- usa retorno inteligente limitado por defecto, con fallback seguro.
 
-El mapa logico se usa para decisiones de exploracion y planificacion. `nav_flood`
-existe como capa portable de costos/debug, pero todavia no controla el retorno
-inteligente ni reemplaza al planner BFS orientado.
+## Arquitectura actual
 
-## Arquitectura general
+### `MainWindow`
 
-### Simulador Qt y MainWindow
+`MainWindow` no decide la mision. Actua como adaptador Qt/UI/simulacion:
 
-Archivos principales:
+- lee `SimWorld` y `SimRobot`;
+- calcula sensores simulados;
+- construye `RobotSensors`;
+- llama `nav_core_update(...)`;
+- arranca primitivas;
+- ejecuta la cola de planes;
+- resetea yaw del simulador antes de acciones;
+- carga JSON;
+- dibuja overlay/telemetria;
+- corre `Shift+R`, `Shift+B`, Fast Batch Mode y Autocheck.
 
-- `app/mainwindow.h`
-- `app/mainwindow.cpp`
+### `nav_core`
 
-`MainWindow` no es portable. Actualmente funciona como adaptador Qt/fisico:
+Contiene:
 
-- ciclo de simulacion;
-- lectura de `SimRobot` y `SimWorld`;
-- construccion de `RobotSensors`;
-- llamadas a `nav_core_update`;
-- arranque de primitivas con `nav_core_start_*`;
-- aplicacion de requests de `nav_supervisor`;
-- llamadas reales al planner cuando el supervisor las pide;
-- reseteo de referencia de yaw del simulador;
-- ejecucion de planes;
-- secuencias compuestas;
-- overlay del mapa;
-- telemetria;
-- ventana `Control Tuning`.
+- `ADVANCE_LINE`;
+- `SMOOTH_LEFT/RIGHT`;
+- pivots;
+- `CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE`;
+- `APPROACH_FRONT_WALL_FOR_PIVOT`;
+- deteccion de especiales;
+- cola FIFO de `NavPlanAction`;
+- planner BFS orientado;
+- `nav_core_route_eval_to_cell_with_dir_mask(...)`;
+- `nav_core_route_plan_to_cell_with_dir_mask(...)`.
 
-`MainWindow` ya no es la fuente principal de decision para la mision modo 1 segura ni
-para `SMART_RECOGNITION`.
+### `nav_map`
 
-### nav_supervisor portable
-
-Archivos:
-
-- `nav/nav_supervisor.h`
-- `nav/nav_supervisor.c`
-
-`nav_supervisor` controla actualmente:
-
-- mision modo 1 segura;
-- latch al encontrar el numero requerido de celdas especiales;
-- bloqueo de SMART durante retorno;
-- planificacion segura al inicio mediante requests a `MainWindow`;
-- acciones locales de `SMART_RECOGNITION`;
-- planificacion a frontera de `SMART_RECOGNITION`;
-- estados SMART principales y debug portable.
-
-`MainWindow` traduce las salidas del supervisor a llamadas reales de `nav_core` y
-ejecucion fisica de la cola.
-
-### nav_core portable
-
-Archivos:
-
-- `nav/nav_core.h`
-- `nav/nav_core.c`
-- `nav/nav_types.h`
-
-`nav_core` contiene:
-
-- maquina de estado de acciones;
-- control de movimiento portable;
-- percepcion de paredes;
-- politicas de recomendacion;
-- cola FIFO de acciones planificadas;
-- planner BFS a celda;
-- planner BFS a frontera;
-- deteccion de celdas especiales;
-- debug snapshots y telemetria portable.
-
-No depende de Qt, no usa `malloc/free` y no usa `float/double` en `nav/*`.
-
-### nav_map portable
-
-Archivos:
-
-- `nav/nav_map.h`
-- `nav/nav_map.c`
-
-`nav_map` mantiene:
+Mantiene:
 
 - celda logica actual;
-- orientacion discreta `NavMapDirection`;
-- celdas visitadas;
-- paredes conocidas;
-- paredes presentes;
-- celdas especiales detectadas;
-- contadores de pose y paredes;
-- debug snapshot del mapa.
+- orientacion discreta;
+- visitadas;
+- paredes conocidas/presentes;
+- celdas especiales.
 
-### pid_controller portable
+### `nav_flood`
 
-Archivos:
+Calcula costos por celda hacia un objetivo. Se usa para debug y como base de
+evaluaciones portables.
 
-- `nav/pid_controller.h`
-- `nav/pid_controller.c`
+### `nav_frontier_eval`
 
-Usa fixed-point Q16.16 (`q16_16_t`) y operaciones con `int64_t` para multiplicacion/division intermedia.
-
-### nav_flood portable
-
-Archivos:
-
-- `nav/nav_flood.h`
-- `nav/nav_flood.c`
-
-`nav_flood` calcula costos por celda hacia un objetivo unico. Respeta:
-
-- celdas visitadas;
-- paredes conocidas;
-- paredes presentes;
-- limites del mapa.
-
-La tecla `I` calcula flood hacia la celda inicial. El overlay muestra costos cuando
-hay flood valido. `Shift+F` evalua fronteras candidatas como debug, sin ejecutar
+Evalua fronteras clasicas con flood. `Shift+F` lo usa para debug/overlay. No ejecuta
 acciones.
 
-### SimWorld y SimRobot
+### `nav_goal_return_eval`
 
-Archivos:
+Evalua retorno optimista hacia el inicio:
 
-- `sim/sim_world.h`
-- `sim/sim_world.cpp`
-- `sim/sim_robot.h`
-- `sim/sim_robot.cpp`
+- C puro portable;
+- arrays fijos;
+- weighted/optimistic flood fill por celdas;
+- permite paredes/celdas desconocidas con presupuesto;
+- respeta paredes conocidas presentes;
+- encuentra la primera frontera util del camino optimista.
 
-Son simulacion no portable:
+### `nav_supervisor`
 
-- geometria del mundo;
-- paredes y cintas;
-- marcas especiales desde JSON;
-- robot cinematico;
-- sensores simulados;
-- `double` para UI/simulacion.
+Controla:
 
-## Flujo general de navegacion automatica
+- mision modo 1;
+- SMART_RECOGNITION;
+- retorno seguro;
+- `FINAL_SAFE_SCAN_RETURN`;
+- `GOAL_DIRECTED_RETURN_SHADOW`;
+- `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`.
 
-1. `MainWindow` lee el mundo y el robot simulado.
-2. Construye `RobotSensors`.
-3. Llama a `nav_core_update(...)`.
-4. Si una accion termina, `nav_core` aplica la politica de actualizacion de mapa.
-5. `MainWindow` construye inputs para `nav_supervisor`.
-6. `nav_supervisor` decide mision/SMART y emite requests.
-7. `MainWindow` aplica esos requests como adaptador: arranca primitivas, planifica,
-   ejecuta cola o detiene autonomia.
-8. Antes de arrancar una primitiva, `MainWindow` ajusta la referencia de yaw del simulador.
-9. `X` cancela autonomia, plan, secuencias compuestas, supervisor y accion actual.
+## Flujo de navegacion
 
-Atajos importantes:
+1. `MainWindow` actualiza sensores y `nav_core`.
+2. `nav_core` actualiza accion, mapa, paredes y especiales.
+3. `MainWindow` arma inputs para `nav_supervisor`.
+4. `nav_supervisor` decide mision/SMART/retorno.
+5. `MainWindow` aplica requests como adaptador.
+6. `SimRobot` avanza con el mismo `dt` logico.
 
-- `B`: autonomia.
-- `P`: cambia politica.
-- `Y`: overlay del mapa sombra.
-- `K`: plan dry-run a celda.
-- `T`: plan dry-run a frontera.
-- `J`: ejecutar ruta cargada, con validaciones fisicas.
-- `U`: ruta de prueba.
-- `F3`: `Control Tuning`.
+## SMART_RECOGNITION
 
-## Politicas disponibles
-
-Enum real: `NavPolicy`.
-
-| Politica | Estado actual |
-| --- | --- |
-| `NAV_POLICY_RIGHT_HAND_RULE` | Implementada. Regla mano derecha con percepcion actual. |
-| `NAV_POLICY_MAP_PREFER_UNVISITED` | Implementada. Prefiere vecinas libres no visitadas en orden derecha, frente, izquierda. Si no encuentra, cae a mano derecha. |
-| `NAV_POLICY_SMART_RECOGNITION` | Implementada con decision en `nav_supervisor`. Usa accion local hacia no visitada; si no hay, pide plan a frontera y ejecucion de cola. |
-
-### RIGHT_HAND_RULE
-
-Si `floor_rear_black == false`:
-
-- sin pared frontal: `NAV_RECOMMENDED_ACQUIRE_REAR_LINE`;
-- con pared frontal: `NAV_RECOMMENDED_RECOVERY_PIVOT_180_FRONT_BLOCKED`.
-
-Si `floor_rear_black == true`:
-
-- derecha libre: `NAV_RECOMMENDED_SMOOTH_RIGHT`;
-- frente libre: `NAV_RECOMMENDED_ADVANCE_LINE`;
-- izquierda libre: `NAV_RECOMMENDED_SMOOTH_LEFT`;
-- todo bloqueado: `NAV_RECOMMENDED_PIVOT_180`.
-
-### MAP_PREFER_UNVISITED
-
-Usa la pose logica del mapa para mirar vecinas:
-
-1. derecha;
-2. frente;
-3. izquierda.
-
-Solo elige una salida si esta libre, la vecina esta dentro del mapa y `visited == false`. No elige volver hacia atras por mapa. Si no encuentra vecina no visitada inmediata, usa fallback de mano derecha.
-
-### SMART_RECOGNITION
-
-Estados/debug principales:
-
-- `supervisor_smart_state`;
-- `supervisor_smart_decision_reason`;
-- `supervisor_requested_action`;
-- `supervisor_request_plan_to_frontier`;
-- `supervisor_request_execute_plan`;
-- `smart_recognition_state` como vista/cache de `MainWindow`.
+SMART esta controlado por `nav_supervisor`.
 
 Flujo:
 
-1. Si hay plan en ejecucion, el supervisor queda en `EXECUTING_FRONTIER_ROUTE`.
-2. Si hay accion local hacia vecina no visitada, el supervisor pide iniciar esa accion.
-3. Si no hay vecina no visitada inmediata, el supervisor pide plan a frontera.
-4. `MainWindow` llama a `nav_core_route_plan_to_nearest_frontier()` solo por request.
-5. Si hay ruta, el supervisor pide ejecutar la cola.
-6. Al llegar a la frontera, vuelve a decidir localmente.
-7. Si no hay frontera, detiene autonomia con estado `NO_FRONTIER`.
+1. Si hay vecina local no visitada y accion viable, pide accion local.
+2. Si no hay salida local, pide plan a frontera.
+3. `MainWindow` llama `nav_core_route_plan_to_nearest_frontier()` solo por request.
+4. Si hay plan, el supervisor pide ejecutar cola.
+5. Si no hay frontera, queda en `NO_FRONTIER`.
+6. La mision puede bloquear SMART durante retorno o final scan.
 
-La mision modo 1 puede bloquear SMART al encontrar las N especiales requeridas.
-
-## Mapa logico
-
-Structs principales:
-
-- `NavMap`.
-- `NavMapCell`.
-- `NavMapDebugSnapshot`.
-
-Campos relevantes de celda:
-
-- `visited`.
-- `special_detected`.
-- `walls_known`.
-- `walls_present`.
-
-La orientacion discreta usa `NavMapDirection`:
-
-- `NAV_MAP_DIR_NORTH`.
-- `NAV_MAP_DIR_EAST`.
-- `NAV_MAP_DIR_SOUTH`.
-- `NAV_MAP_DIR_WEST`.
-
-El mapa se inicializa con `nav_core_map_init(...)` y `nav_map_init(...)`:
-
-- marca la celda inicial como visitada;
-- habilita mapa;
-- deja pendiente snapshot inicial de paredes;
-- deja pendiente snapshot inicial de especial.
-
-El mapa sombra se muestra en overlay desde `MainWindow`.
-
-## Mision modo 1 segura
-
-La mision modo 1 vive en `nav_supervisor` y esta activada por defecto en la
-configuracion actual del simulador.
+## Mision modo 1
 
 Estados principales:
 
-- `NAV_SUPERVISOR_STATE_SEARCH_SPECIALS`;
-- `NAV_SUPERVISOR_STATE_FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE`;
-- `NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN`;
-- `NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE`;
-- `NAV_SUPERVISOR_STATE_DONE`;
-- `NAV_SUPERVISOR_STATE_ERROR`;
-- `NAV_SUPERVISOR_STATE_CANCELLED`.
-
-Flujo:
-
-1. En `SEARCH_SPECIALS`, SMART explora normalmente.
-2. Si `special_cells_found_count >= required_special_count`, el supervisor latchea la
-   condicion inmediatamente.
-3. Pide limpiar exploracion pendiente sin cortar la accion fisica actual.
-4. Espera `nav_ready`.
-5. Pide a `MainWindow` planificar retorno seguro con
-   `nav_core_route_plan_to_cell(start_x, start_y)`.
-6. Si hay plan, pide ejecutar la cola.
-7. Al llegar a la celda inicial, termina en `DONE`.
-
-Si SMART llega a `NO_FRONTIER` antes de encontrar las especiales requeridas, la mision
-termina en `ERROR` con reason equivalente a `NO_FRONTIER_BEFORE_REQUIRED_SPECIALS`.
-
-## Cola FIFO de acciones planificadas
-
-Enum real: `NavPlanAction`.
-
-Acciones actuales:
-
-- `NAV_PLAN_ACTION_NONE`.
-- `NAV_PLAN_ACTION_ADVANCE_LINE`.
-- `NAV_PLAN_ACTION_SMOOTH_LEFT`.
-- `NAV_PLAN_ACTION_SMOOTH_RIGHT`.
-- `NAV_PLAN_ACTION_PIVOT_180`.
-- `NAV_PLAN_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT`.
-- `NAV_PLAN_ACTION_CENTER_AND_PIVOT_180`.
-
-Funciones publicas:
-
-- `nav_core_plan_clear()`.
-- `nav_core_plan_push(...)`.
-- `nav_core_plan_count()`.
-- `nav_core_plan_is_empty()`.
-- `nav_core_plan_peek_next()`.
-- `nav_core_plan_pop_next()`.
-- `nav_core_plan_debug_snapshot(...)`.
-
-La cola es FIFO, fija y sin memoria dinamica. `NAV_PLAN_MAX_ACTIONS = 64`.
-
-## Planner BFS
-
-El planner esta en `nav_core.c`.
-
-Estados:
-
-```text
-(cell_x, cell_y, dir)
-```
-
-Acciones permitidas por BFS:
-
-- `ADVANCE_LINE`: avanza una celda en `dir`.
-- `SMOOTH_RIGHT`: gira a la derecha y avanza una celda.
-- `SMOOTH_LEFT`: gira a la izquierda y avanza una celda.
-- `CENTER_AND_PIVOT_180`: no cambia celda y cambia `dir` a la opuesta.
-
-Reglas de cruce:
-
-- la pared en direccion de cruce debe ser conocida;
-- la pared debe estar ausente;
-- la celda destino debe estar dentro del mapa;
-- la celda destino debe tener `visited == true`.
-
-El target de `nav_core_route_plan_to_cell(...)` tambien debe estar visitado; si no, devuelve `NAV_ROUTE_STATUS_TARGET_NOT_VISITED`.
-
-### Workspace estatico
-
-El BFS usa `NavRouteWorkspace` estatico en `nav_core.c`:
-
-- `visited[NAV_ROUTE_MAX_STATES]`;
-- `parent[NAV_ROUTE_MAX_STATES]`;
-- `parent_action[NAV_ROUTE_MAX_STATES]`;
-- `queue[NAV_ROUTE_MAX_STATES]`;
-- `reverse_actions[NAV_PLAN_MAX_ACTIONS]`.
-
-`NAV_ROUTE_MAX_STATES = NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT * 4`.
-
-El workspace no es reentrante. Esto es intencional para evitar buffers grandes en stack y facilitar portabilidad a STM32.
-
-### Planificacion a frontera
-
-Funcion:
-
-- `nav_core_route_plan_to_nearest_frontier()`.
-
-Una frontera util es una celda visitada con una salida:
-
-- pared conocida;
-- pared ausente;
-- vecina dentro del mapa;
-- vecina no visitada.
-
-El estado objetivo debe orientar esa salida hacia:
-
-- frente;
-- derecha;
-- izquierda.
-
-No se considera una salida hacia atras como frontera directamente util.
-
-Limitaciones actuales:
-
-- no hay costos distintos;
-- no hay flood fill;
-- no hay Dijkstra;
-- no hay pivots 90 generales;
-- `CENTER_AND_PIVOT_180` es la unica reorientacion general en ruta;
-- despues de `CENTER_AND_PIVOT_180`, el planner evita `SMOOTH_LEFT/RIGHT` inmediatamente y permite `ADVANCE_LINE` o terminar.
-
-## Flood fill y debug de fronteras
-
-`nav_flood` esta implementado como capa portable de costos. No modifica la cola ni la
-navegacion actual.
-
-Uso actual:
-
-- `I`: calcula flood hacia la celda inicial guardada;
-- overlay logico: muestra costos flood si hay flood valido;
-- `Shift+F`: evalua fronteras candidatas con el flood vigente.
-
-La evaluacion de fronteras calcula:
-
-- cantidad de salidas candidatas;
-- cantidad de celdas frontera visitadas unicas;
-- cantidad de vecinas no visitadas unicas;
-- mejor frontera por score;
-- comparacion debug contra retorno seguro;
-- accion de entrada sugerida segun orientacion.
-
-Todo esto sigue siendo debug en `MainWindow`. No ejecuta acciones y no forma parte de
-`GOAL_DIRECTED_RETURN` todavia.
-
-## Acciones y primitivas
-
-Enum real: `NavAction`.
-
-| Accion | Estado |
-| --- | --- |
-| `NAV_ACTION_ADVANCE_UNTIL_REAR_BLACK` | Implementada. Avance hasta cinta trasera. Tiene modos `NAV_ADVANCE_START_REAR_LINE` y `NAV_ADVANCE_START_CENTERED_POSE`. |
-| `NAV_ACTION_SMOOTH_TURN_LEFT` | Implementada. Curva con yaw-rate PI y fase final recta. |
-| `NAV_ACTION_SMOOTH_TURN_RIGHT` | Implementada. Curva con yaw-rate PI y fase final recta. |
-| `NAV_ACTION_PIVOT_TURN_LEFT` | Implementada como pivot in-cell logico. |
-| `NAV_ACTION_PIVOT_TURN_RIGHT` | Implementada como pivot in-cell logico. |
-| `NAV_ACTION_PIVOT_TURN_180` | Implementada como pivot in-cell logico. |
-| `NAV_ACTION_CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE` | Implementada. Avanza hasta que `floor_front_black` detecta la proxima cinta, con brake settle. |
-| `NAV_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT` | Implementada. Acerca a pared frontal hasta target o timeout, con brake settle. |
-
-`CENTER_AND_PIVOT_180` no es `NavAction`; es `NavPlanAction` compuesta. `MainWindow` la ejecuta como:
-
-- si hay pared frontal: `APPROACH_FRONT_WALL_FOR_PIVOT -> PIVOT_180`;
-- si no hay pared frontal: `CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE -> PIVOT_180`.
-
-## Reglas de actualizacion del mapa por accion
-
-`map_update_count` representa cambios logicos de pose/celda/orientacion. `map_wall_update_count` representa snapshots de paredes.
-
-Reglas logicas actuales:
-
-| Accion completada | Celda | Direccion | Paredes |
-| --- | --- | --- | --- |
-| `ADVANCE_UNTIL_REAR_BLACK` | `cell = cell + dir` | igual | registra paredes |
-| `SMOOTH_TURN_RIGHT` | `cell = cell + right(dir)` | derecha | registra paredes |
-| `SMOOTH_TURN_LEFT` | `cell = cell + left(dir)` | izquierda | registra paredes |
-| `PIVOT_TURN_180` | no cambia | opuesta | no registra paredes |
-| `PIVOT_TURN_RIGHT` | no cambia | derecha | no registra paredes |
-| `PIVOT_TURN_LEFT` | no cambia | izquierda | no registra paredes |
-| `APPROACH_FRONT_WALL_FOR_PIVOT` | no cambia | no cambia | no registra paredes |
-| `CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE` | no cambia | no cambia | no registra paredes |
-
-La foto inicial de paredes se toma con `map_initial_wall_snapshot_pending`, sin exigir `floor_rear_black`.
-
-## Deteccion de celdas especiales
-
-Las marcas especiales son negras igual que las cintas. `nav_core` no recibe informacion magica del JSON. Detecta usando:
-
-```text
-floor_front_black && floor_rear_black
-```
-
-El JSON define marcas fisicas en `SimWorld`:
-
-```json
-"special_cells": [
-  { "cell_x": 2, "cell_y": 3, "size_mm": 120 }
-]
-```
-
-Si falta `size_mm`, el default actual es `120`.
-
-### Deteccion normal
-
-Contextos internos:
-
-- `NAV_SPECIAL_DETECT_TRANSLATION_TO_NEXT_CELL`.
-- `NAV_SPECIAL_DETECT_IN_CELL_AUX_TRANSLATION`.
-- `NAV_SPECIAL_DETECT_DISABLED`.
-
-Durante `ADVANCE_LINE` y `SMOOTH_LEFT/RIGHT`:
-
-- no se confirma durante salida de la linea inicial;
-- se requiere que la accion haya comenzado desde una linea trasera confiable;
-- se usa ventana temporal de deteccion;
-- `special_ignore_rear_until_white` evita que la marca central corte el avance como si fuera linea destino.
-
-### Deteccion en smooth
-
-Durante smooths se permite detectar especiales en traslacion. La telemetria expone:
-
-- `special_mark_target_cell`;
-- `special_mark_target_source`;
-- `last_special_mark_action`.
-
-Esto ayuda a distinguir si se marco la celda actual, destino de smooth o una fuente invalida.
-
-### Deteccion en maniobras auxiliares
-
-Esta habilitada para:
-
-- `CENTER_IN_CELL_FOR_PIVOT_BY_FRONT_LINE`;
-- `APPROACH_FRONT_WALL_FOR_PIVOT`.
-
-En estos casos se marca la celda logica actual y no se modifica el criterio de finalizacion de la maniobra.
-
-No se detectan especiales durante pivots puros.
-
-### Arranque ambiguo sobre marca especial
-
-Existe snapshot inicial de especial:
-
-- `initial_special_snapshot_pending`;
-- `initial_special_snapshot_done`.
-
-Si en el primer update ambos sensores de piso estan en negro, se marca la celda inicial como especial.
-
-Para no tratar una marca especial como punto de decision se usa:
-
-- `rear_line_trusted_for_decision`;
-- `rear_line_trust_source`.
-
-La autonomia no debe iniciar decisiones locales solo por `floor_rear_black == true` si la linea trasera no es confiable.
-
-## Control de movimiento
-
-### Smooth yaw-rate PI
-
-La curva principal de `SMOOTH_LEFT/RIGHT` usa yaw-rate PI. La fase principal no usa wall assist ni diagonal guidance.
-
-### Fase final del smooth
-
-Fase real:
-
-- `NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE`.
-
-Prioridad actual:
-
-1. Diagonales.
-2. Wall hold lateral dinamico.
-3. Yaw hold relativo.
-
-Modo diagonal configurable:
-
-- `NAV_SMOOTH_FINAL_DIAG_MODE_HOLD_RELATIVE`;
-- `NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT`.
-
-Default actual:
-
-- `SETPOINT`.
-
-### Diagonal guidance
-
-Config:
-
-- `NavDiagonalGuidanceConfig`.
-
-En modo `SETPOINT`:
-
-- `DIAG_CENTER`: `diag_right_mm - diag_left_mm`.
-- `DIAG_LEFT`: `2 * (diag_target_mm - diag_left_mm)`.
-- `DIAG_RIGHT`: `2 * (diag_right_mm - diag_target_mm)`.
-
-En modo `HOLD_RELATIVE`:
-
-- `DIAG_CENTER_HOLD`: mantiene diferencia capturada.
-- `DIAG_LEFT_HOLD`: mantiene distancia izquierda capturada.
-- `DIAG_RIGHT_HOLD`: mantiene distancia derecha capturada.
-
-El control diagonal usa Kp/Kd/limite propios. El tuning actual es P-only.
-
-### Advance yaw PD y wall PD
-
-`ADVANCE_LINE` usa:
-
-1. `WALL_CENTER`, `WALL_LEFT`, `WALL_RIGHT` si hay referencia lateral confirmada.
-2. `WALL_LEFT_CAUTION` o `WALL_RIGHT_CAUTION` si no hay pared confirmada y hay cautela activa.
-3. Preview diagonal si el latch frontal esta activo.
-4. `YAW_ONLY` con yaw hold relativo.
-
-El wall PD normal usa targets fijos `60 mm`.
-
-### Preview diagonal de ADVANCE_LINE
-
-Se aplica solo en `ADVANCE_LINE`, fase `SEEK_TARGET_LINE`.
-
-Mecanica:
-
-- `advance_front_diag_preview_armed` se arma despues de ver `floor_front_black == false`;
-- `advance_front_diag_preview_latched` se activa cuando luego aparece `floor_front_black == true` con `floor_rear_black == false`;
-- el latch queda activo hasta terminar/cancelar la accion;
-- laterales confirmados o cautela tienen prioridad.
-
-El armado evita falsos disparos con marcas especiales centrales o celdas especiales contiguas.
-
-### Wall caution
-
-Aplica solo en `ADVANCE_LINE`.
-
-Estados por lado:
-
-- `NAV_WALL_CAUTION_CONFIDENCE_LOST`;
-- `NAV_WALL_CAUTION_CONFIDENCE_CONFIRMED`;
-- `NAV_WALL_CAUTION_CONFIDENCE_CAUTION`.
-
-Entrada a `CAUTION`:
-
-- venia confirmada;
-- se pierde la confirmacion diagonal;
-- el lateral sigue valido.
-
-En `CAUTION`:
-
-- se mantiene la distancia lateral capturada;
-- usa Kp/Kd/limite propios;
-- no intenta recentrar a target absoluto.
-
-Salida:
-
-- vuelve a `CONFIRMED` si retorna la confirmacion diagonal;
-- pasa a `LOST` si se pierde lateral, salta mas que `delta_max_mm`, vence timeout, termina accion o se deshabilita.
-
-### Smooth yaw carry
-
-Config:
-
-- `NavSmoothYawCarryConfig`.
-
-Fuentes de candidato:
-
-- `NAV_YAW_CARRY_CANDIDATE_SMOOTH_FINAL_DIAG`;
-- `NAV_YAW_CARRY_CANDIDATE_ADVANCE_FRONT_DIAG_PREVIEW`.
-
-Si una fase con diagonales cambia la orientacion y la siguiente accion inmediata es `SMOOTH_LEFT` o `SMOOTH_RIGHT`, `MainWindow` puede iniciar el smooth con referencia corregida en vez de resetear el yaw actual como cero.
-
-`MainWindow::resetNavigationYawReferenceForSmoothStart()` consume el offset pendiente y evita borrar la compensacion.
-
-## Telemetria importante
-
-Grupos utiles:
-
-- `Pinned debug`.
-- `Pose`.
-- `Floor sensors`.
-- `Nav perception`.
-- `Advance debug`.
-- `Smooth debug`.
-- `Special detection`.
-- `Logical map`.
-- `Route planner`.
-- `Frontier planner`.
-- `Smart recognition`.
-- `Plan executor`.
-- `Motor command`.
-
-Variables clave:
-
-- `nav_policy`.
-- `nav_action`.
-- `nav_recommended_action`.
-- `nav_last_decision`.
-- `supervisor_state`.
-- `supervisor_done_reason`.
-- `supervisor_active_as_source`.
-- `supervisor_smart_state`.
-- `supervisor_smart_decision_reason`.
-- `supervisor_smart_active_as_source`.
-- `supervisor_request_plan_to_frontier`.
-- `supervisor_request_execute_plan`.
-- `smart_recognition_state`.
-- `logical_cell_x`, `logical_cell_y`, `logical_dir`.
-- `map_update_count`, `map_wall_update_count`.
-- `current_cell_visited`, `current_cell_special`.
-- `special_candidate`, `special_confirmed`.
-- `special_mark_target_cell`, `special_mark_target_source`.
-- `rear_line_trusted_for_decision`.
-- `route_status`, `frontier_route_status`.
-- `plan_execution_enabled`, `plan_queue_count`.
-- `plan_current_action`, `plan_next_action`.
-- `plan_composite_prepare_method`.
-- `advance_final_correction_source`.
-- `advance_front_diag_preview_armed`.
-- `advance_front_diag_preview_latched`.
-- `smooth_final_guidance_source`.
-- `smooth_final_diag_mode`.
-- `smooth_yaw_carry_candidate_pending`.
-- `smooth_yaw_carry_used`.
-- `wall_left_confidence`, `wall_right_confidence`.
-
-## Lo que sigue en MainWindow y podria portarse luego
-
-Todavia esta en `MainWindow`:
-
-- ejecucion fisica de la cola;
-- secuencias compuestas;
-- seleccion de preparacion para `CENTER_AND_PIVOT_180`;
-- reseteo/aplicacion de referencia de yaw del simulador;
-- lectura de sensores simulados y adaptacion a `RobotSensors`;
-- llamadas reales a planner cuando el supervisor las pide;
-- debug de flood frontier;
-- ayuda de controles y telemetria UI.
-
-Esto funciona para simulador. La parte pendiente mas importante para portabilidad es
-definir una HAL STM32 y decidir cuanto del ejecutor de cola/secuencias compuestas debe
-migrar fuera de `MainWindow`.
+- `SEARCH_SPECIALS`;
+- `FOUND_REQUIRED_SPECIALS_WAIT_ACTION_DONE`;
+- `FINAL_SAFE_SCAN_RETURN_PLAN`;
+- `FINAL_SAFE_SCAN_RETURN_EXECUTE`;
+- `RETURN_SMART_DECIDE`;
+- `RETURN_FRONTIER_PLAN`;
+- `RETURN_FRONTIER_EXECUTE`;
+- `RETURN_FRONTIER_ENTER`;
+- `RETURN_SAFE_PLAN`;
+- `RETURN_SAFE_EXECUTE`;
+- `DONE`;
+- `ERROR`;
+- `CANCELLED`.
+
+Si SMART llega a `NO_FRONTIER` con `found < required`, la mision intenta una vez
+`FINAL_SAFE_SCAN_RETURN`: vuelve al inicio por ruta conocida permitiendo detectar
+especiales durante el retorno. Si llega al inicio sin completar required, falla con
+`NO_FRONTIER_BEFORE_REQUIRED_SPECIALS`.
+
+## Retornos
+
+### Retorno seguro
+
+Usa mapa conocido:
+
+- planifica al inicio con BFS orientado;
+- ejecuta cola;
+- termina en `DONE` si llega a start;
+- falla claro si no hay ruta.
+
+### `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`
+
+Es el default actual.
+
+No planifica un camino desconocido completo. En cada decision:
+
+1. calcula costo de retorno seguro conocido;
+2. evalua una ruta optimista hacia inicio permitiendo desconocido;
+3. identifica la primera frontera del camino optimista;
+4. valida ruta conocida hasta `frontier_cell` con mascara de orientaciones;
+5. ejecuta esa cola;
+6. revalida:
+   - celda actual == `frontier_cell`;
+   - vecino dentro del mapa;
+   - vecino no visitado;
+   - pared compartida no conocida presente desde ningun lado;
+   - accion de entrada recalculada con orientacion actual;
+   - nav/cola libres;
+7. entra una sola celda desconocida con `ADVANCE_LINE`, `SMOOTH_LEFT` o
+   `SMOOTH_RIGHT`;
+8. cuenta intento solo si la primitiva arranca correctamente;
+9. al terminar, verifica que la celda actual sea `frontier_neighbor`;
+10. recalcula si quedan intentos; si no, usa retorno seguro.
+
+`BACK` no esta soportado por defecto (`goal_allow_back_entry = false`).
+
+Fallback seguro ante:
+
+- decision `FALLBACK_SAFE`;
+- intentos agotados;
+- ruta a frontera fallida;
+- plan no cargado;
+- mismatch de `frontier_cell`;
+- vecino invalido/visitado;
+- pared compartida conocida presente;
+- accion `BACK`/unsupported;
+- nav ocupado;
+- primitiva no inicia;
+- entrada no avanza o cae en otra celda;
+- cancelacion.
+
+## Configuracion F3 por defecto
+
+- `return_strategy = GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`.
+- `goal_required_improvement = 0`.
+- `goal_unknown_cell_penalty = 0`.
+- `goal_unknown_edge_penalty = 0`.
+- `goal_max_unknown_cells = 32`.
+- `goal_max_unknown_edges = 32`.
+- `goal_min_safe_return_cost_to_try = 4`.
+- `goal_max_shortcut_attempts = 32`.
+- `goal_allow_back_entry = false`.
+- `batch_fast_mode_enabled = true`.
+- `batch_fast_ticks_per_ui_update = 10`.
+
+`goal_max_unknown_cells/edges` afecta al evaluador optimista. `goal_max_shortcut_attempts`
+limita entradas reales a celdas desconocidas; siempre se recalcula entre entradas.
+
+## Planner y route eval
+
+El planner BFS usa estados `(cell_x, cell_y, dir)` y acciones:
+
+- `ADVANCE_LINE`;
+- `SMOOTH_LEFT`;
+- `SMOOTH_RIGHT`;
+- `CENTER_AND_PIVOT_180`.
+
+Las rutas reales solo atraviesan celdas visitadas y paredes conocidas ausentes.
+
+APIs relevantes:
+
+- `nav_core_route_plan_to_cell(...)`;
+- `nav_core_route_plan_to_nearest_frontier()`;
+- `nav_core_route_eval_to_cell_with_dir_mask(...)`;
+- `nav_core_route_plan_to_cell_with_dir_mask(...)`.
+
+La version `eval` no carga cola. La version `plan` carga cola si encuentra ruta.
+
+## Acciones y mapa
+
+Actualizacion logica:
+
+- `ADVANCE_LINE`: avanza una celda en direccion actual.
+- `SMOOTH_RIGHT`: avanza a la celda derecha y rota derecha.
+- `SMOOTH_LEFT`: avanza a la celda izquierda y rota izquierda.
+- pivots: cambian orientacion, no celda.
+- `CENTER`/`APPROACH`: no cambian celda ni orientacion.
+
+Las especiales se detectan durante avances, smooths y auxiliares habilitadas. Los pivots
+puros no detectan especiales.
+
+## Testing y herramientas
+
+- `Shift+R`: test modo 1 del mapa actual.
+- `Shift+B`: batch de `data/test_maps`.
+- Fast Batch Mode: activo por defecto; ejecuta multiples ticks logicos por refresh UI
+  sin cambiar `kSimulationDtS`.
+- Autocheck Monitor: corre durante tests y batch; puede fallar un mapa con
+  `AUTOCHECK_FAIL`.
+- Export CSV/JSON: `data/test_results/`, con wall time, sim time, speedup y failures
+  de autocheck.
+- `I`: flood hacia inicio.
+- `Shift+F`: debug de fronteras flood via `nav_frontier_eval`.
+
+## Telemetria util
+
+Modo 1 y supervisor:
+
+- `supervisor_state`;
+- `supervisor_done_reason`;
+- `mode1_found_special_count`;
+- `mode1_return_route_status`;
+- `supervisor_request_plan_return`;
+- `supervisor_request_execute_return`.
+
+Goal-directed:
+
+- `goal_directed_shadow_decision`;
+- `goal_directed_shadow_reason`;
+- `goal_directed_score_improvement`;
+- `goal_exec_attempt_count`;
+- `goal_exec_max_attempts`;
+- `goal_exec_attempts_remaining`;
+- `goal_exec_frontier_cell`;
+- `goal_exec_frontier_neighbor`;
+- `goal_exec_entry_requested`;
+- `goal_exec_entry_started`;
+- `goal_exec_entry_completed`;
+- `goal_exec_entry_action`;
+- `goal_exec_revalidation_status`;
+- `goal_exec_fallback_reason`.
 
 ## Limitaciones conocidas
 
 - No hay modo 2 final.
-- `GOAL_DIRECTED_RETURN` no esta implementado como control real.
-- La evaluacion de fronteras con flood es debug en `MainWindow`.
-- El planner usa BFS de costo uniforme.
+- No hay blacklist temporal de fronteras fallidas.
+- No hay soporte real de entrada `BACK`.
+- El planner sigue siendo BFS de costo uniforme.
 - No hay pivots 90 generales en rutas.
-- `CENTER_AND_PIVOT_180` es robusto, pero fisicamente mas lento que una ruta con turns suaves.
-- Las decisiones siguen dependiendo de la confiabilidad de `rear_line_trusted_for_decision`.
-- Los valores de sensores IR y controles estan tuneados para simulador.
-- El planner no es reentrante por usar workspace estatico.
+- `MainWindow` todavia ejecuta cola, secuencias compuestas y yaw del simulador.
+- El planner no es reentrante por workspace estatico.
 - El mapa maximo portable actual es `16 x 16`.

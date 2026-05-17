@@ -1,264 +1,200 @@
 # Notas de portabilidad a STM32 Bluepill
 
-Este documento resume el estado actual de portabilidad del codigo de navegacion hacia STM32F103 Bluepill.
+Estado de portabilidad de la navegacion hacia STM32F103 Bluepill.
 
-## Archivos portables
+## Modulos portables actuales
 
-La logica portable esta principalmente en:
+La logica portable esta en:
 
 - `nav/nav_core.h`
 - `nav/nav_core.c`
 - `nav/nav_map.h`
 - `nav/nav_map.c`
 - `nav/nav_types.h`
-- `nav/pid_controller.h`
-- `nav/pid_controller.c`
 - `nav/nav_flood.h`
 - `nav/nav_flood.c`
+- `nav/nav_frontier_eval.h`
+- `nav/nav_frontier_eval.c`
+- `nav/nav_goal_return_eval.h`
+- `nav/nav_goal_return_eval.c`
 - `nav/nav_supervisor.h`
 - `nav/nav_supervisor.c`
+- `nav/pid_controller.h`
+- `nav/pid_controller.c`
 
-Caracteristicas actuales:
+Caracteristicas:
 
-- sin Qt;
-- sin `float`/`double`;
+- C/C++ portable sin Qt;
 - sin `malloc/free`;
-- sin `new/delete`;
-- sin funciones matematicas pesadas tipo `sin`, `cos`, `sqrt`, `atan2`;
+- sin `float/double` en `nav/`;
 - arrays fijos;
-- tipos de ancho fijo donde corresponde;
+- tipos de ancho fijo;
 - fixed-point Q16.16 para PID;
-- supervisor portable para mision modo 1 segura y SMART;
-- flood fill portable para costos/debug.
+- workspaces estaticos para planner/flood/evaluadores;
+- supervisor portable para mision, SMART y retorno.
 
-## Archivos no portables
+## Modulos no portables
 
-No deberian ir directo al firmware:
+No deben ir directo al firmware:
 
-- `app/mainwindow.h`
-- `app/mainwindow.cpp`
-- `sim/sim_world.h`
-- `sim/sim_world.cpp`
-- `sim/sim_robot.h`
-- `sim/sim_robot.cpp`
+- `app/mainwindow.h`;
+- `app/mainwindow.cpp`;
+- `sim/sim_world.*`;
+- `sim/sim_robot.*`;
 - UI Qt;
-- dibujo del overlay;
-- JSON parsing del simulador;
-- telemetria UI;
-- logica de teclado.
+- overlay;
+- parsing JSON del simulador;
+- teclado;
+- telemetria UI.
 
-`MainWindow` aun contiene adaptacion importante que no es portable. Ya no es la fuente
-principal de decision de mision modo 1 segura ni de SMART, pero todavia aplica requests
-del supervisor y ejecuta la parte fisica en Qt.
+`MainWindow` hoy es el adaptador Qt: aplica requests, arranca primitivas, ejecuta cola,
+resetea yaw del simulador y corre tests/batch.
 
-## Estado actual del codigo portable
+## Estado por modulo
 
-### Numeros
+### `nav_core`
 
-`nav_types.h` define:
+Portable. Incluye:
 
-- `q16_16_t`;
-- `RobotSensors`;
-- `RobotCommand`.
+- primitivas;
+- deteccion de especiales;
+- cola de plan;
+- planner BFS orientado;
+- `nav_core_route_eval_to_cell_with_dir_mask(...)`;
+- `nav_core_route_plan_to_cell_with_dir_mask(...)`.
 
-`pid_controller` usa:
+El workspace del planner es estatico y no reentrante. Es aceptable para control
+single-thread, pero debe medirse en SRAM.
 
-- Q16.16;
-- `int64_t` para multiplicaciones y divisiones intermedias;
-- salida limitada por enteros.
+### `nav_map`
 
-### Planner BFS
+Portable. Mantiene:
 
-El planner usa `NavRouteWorkspace` estatico en `nav_core.c`.
-
-Esto evita buffers grandes en stack:
-
-- `visited[NAV_ROUTE_MAX_STATES]`;
-- `parent[NAV_ROUTE_MAX_STATES]`;
-- `parent_action[NAV_ROUTE_MAX_STATES]`;
-- `queue[NAV_ROUTE_MAX_STATES]`;
-- `reverse_actions[NAV_PLAN_MAX_ACTIONS]`.
-
-El workspace es compartido por:
-
-- `nav_core_route_plan_to_cell(...)`;
-- `nav_core_route_plan_to_nearest_frontier()`.
-
-No es reentrante. Es aceptable para el flujo actual de control single-thread y para STM32.
-
-### `nav_supervisor`
-
-`nav_supervisor` ya es parte del codigo portable.
-
-Controla:
-
-- mision modo 1 segura;
-- bloqueo de SMART al completar busqueda de especiales;
-- retorno seguro al inicio mediante requests;
-- acciones locales de `SMART_RECOGNITION`;
-- planificacion a frontera de `SMART_RECOGNITION`;
-- estados y debug portable.
-
-No llama directamente a Qt ni a `SimWorld`/`SimRobot`. Produce requests que hoy aplica
-`MainWindow`; en firmware deberia aplicarlos una capa HAL/adaptador.
+- mapa `16 x 16` maximo;
+- visitadas;
+- paredes conocidas/presentes;
+- celda/orientacion;
+- especiales.
 
 ### `nav_flood`
 
-`nav_flood` calcula costos por celda con arrays fijos y workspace estatico. Hoy se usa
-para debug/costos:
+Portable. Calcula costos por celda con arrays fijos.
 
-- tecla `I`: flood hacia inicio;
-- overlay: costos por celda;
-- `Shift+F`: evaluacion experimental de fronteras desde `MainWindow`.
+### `nav_frontier_eval`
 
-No controla todavia el retorno inteligente.
+Portable. Evalua fronteras clasicas con flood para `Shift+F`/debug. No ejecuta
+acciones.
 
-### Memoria maxima del mapa
+### `nav_goal_return_eval`
 
-`nav_map.h` define:
+Portable. Evalua retorno optimista hacia inicio:
 
-- `NAV_MAP_MAX_WIDTH = 16`;
-- `NAV_MAP_MAX_HEIGHT = 16`.
+- C puro;
+- arrays fijos;
+- sin heap;
+- sin `float/double`;
+- Dijkstra/flood optimista O(N^2) sobre grilla maxima `16 x 16`;
+- revisa paredes compartidas desde ambos lados;
+- bloquea paredes conocidas presentes;
+- permite paredes/celdas desconocidas con penalty y presupuesto;
+- distingue ruta optimista general de ruta que usa desconocido;
+- devuelve primera frontera util.
 
-El maximo teorico de estados BFS es:
+Riesgo principal: costo CPU si se evalua demasiado seguido. En el flujo actual se evalua
+en puntos de decision del retorno, no en cada tick de control.
 
-```text
-16 * 16 * 4 = 1024 estados
-```
+### `nav_supervisor`
+
+Portable. Controla:
+
+- mision modo 1;
+- SMART_RECOGNITION;
+- retorno seguro;
+- `FINAL_SAFE_SCAN_RETURN`;
+- `GOAL_DIRECTED_RETURN_SHADOW`;
+- `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`;
+- requests y debug snapshots.
+
+No llama Qt ni simulacion. En firmware una HAL/adaptador debe aplicar sus requests.
+
+### `pid_controller`
+
+Portable con Q16.16. Usa `int64_t` para multiplicacion/division intermedia.
 
 ## Riesgos para Bluepill
 
 ### SRAM
 
-Bluepill STM32F103 tiene SRAM limitada. Aunque los buffers grandes salieron del stack, siguen ocupando memoria estatica.
-
-Riesgo:
+Vigilar:
 
 - mapa;
 - workspace BFS;
+- workspaces flood/evaluadores;
 - cola de plan;
 - debug snapshots;
-- buffers propios del firmware.
+- buffers de firmware.
 
-Recomendacion:
+Recomendaciones:
 
-- medir `.bss` y `.data` en el linker map;
-- bajar `NAV_MAP_MAX_WIDTH/HEIGHT` si el laberinto real lo permite;
-- compilar sin telemetria pesada en firmware final si hace falta.
+- medir `.bss` y `.data` con linker map;
+- compilar telemetria pesada solo en debug;
+- bajar `NAV_MAP_MAX_WIDTH/HEIGHT` si el laberinto real lo permite.
 
-### `int64_t`
+### CPU
 
-El PID usa `int64_t` para operaciones Q16.16.
+Riesgos:
 
-Riesgo:
+- `int64_t` en PID;
+- divisiones enteras;
+- planner BFS;
+- `nav_goal_return_eval` O(N^2);
+- flood si se recalcula demasiado.
 
-- costo CPU mayor en Cortex-M3;
-- latencia si se llama en loop rapido.
+Recomendaciones:
 
-Recomendacion:
+- mantener `dt` fijo;
+- medir peor caso;
+- evaluar goal-directed solo en puntos de decision;
+- precomputar escalas si tuning queda fijo.
 
-- mantener por seguridad numerica al inicio;
-- medir tiempo real de loop;
-- si hace falta, migrar a escalas Q mas chicas o ganancias preescaladas.
+### Sensores reales
 
-### Divisiones
+El simulador es limpio. En robot real hacen falta:
 
-Hay divisiones enteras en:
+- calibracion IR;
+- filtros simples;
+- debouncing de piso;
+- validacion de yaw/gyro;
+- thresholds revisados con datos reales.
 
-- PID/fixed-point;
-- escalas de yaw carry;
-- escalas de diagonal guidance;
-- calculos de control.
+## Que falta para firmware real
 
-Riesgo:
+- HAL STM32 para sensores, yaw, tiempo y motores.
+- Adaptador que aplique requests de `nav_supervisor`.
+- Telemetria serial compacta.
+- Config/tuning sin Qt.
+- Tests unitarios fuera de Qt.
+- Medicion de SRAM/CPU.
+- Watchdog/timeouts reales.
 
-- costo CPU si se ejecutan a alta frecuencia.
+## Orden recomendado de bring-up
 
-Recomendacion:
+1. Sensores de piso.
+2. Yaw/gyro.
+3. Motores/PWM.
+4. `ADVANCE_LINE` yaw-only.
+5. Wall assist lateral.
+6. Smooth turns.
+7. `nav_map`.
+8. Deteccion de especiales.
+9. Cola de plan.
+10. Planner BFS.
+11. `nav_supervisor` con SMART.
+12. Retorno seguro.
+13. `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION` con limites conservadores.
 
-- usar `dt` fijo;
-- limitar divisiones en paths criticos;
-- precomputar escalas si el tuning queda fijo.
+## Recomendacion actual
 
-### Tuning de sensores reales
-
-El simulador usa thresholds y distancias ideales:
-
-- pared frontal;
-- pared lateral;
-- diagonal;
-- marcas de piso;
-- velocidades de motor.
-
-Riesgo:
-
-- IR reales no lineales;
-- ruido;
-- saturacion;
-- luz ambiente;
-- diferencia mecanica del robot real.
-
-Recomendacion:
-
-- calibrar tablas o curvas de IR reales;
-- agregar filtros simples;
-- validar umbrales con datos reales antes de activar SMART.
-
-### Adaptacion aun en MainWindow
-
-Actualmente `MainWindow` conserva:
-
-- ejecucion de cola;
-- secuencias compuestas;
-- seleccion `FRONT_LINE` vs `FRONT_WALL`;
-- validaciones de `J`;
-- referencias de yaw del simulador.
-- debug experimental de flood frontier;
-- UI/overlay/teclado/telemetria.
-
-Riesgo:
-
-- port directo incompleto si solo se copia `nav_core`;
-- todavia falta una HAL STM32 que aplique los requests de `nav_supervisor`.
-
-Recomendacion:
-
-- mantener `nav_supervisor` como fuente de decision de mision/SMART;
-- mover o redisenar gradualmente ejecucion de cola si hace falta;
-- dejar HAL/firmware solo para sensores, motores y tiempo.
-
-## Recomendaciones para firmware real
-
-- Mantener fixed-point.
-- Usar loop con `dt` fijo.
-- Empezar con controles menos agresivos.
-- Deshabilitar features experimentales si complican bring-up.
-- Validar primero:
-  - lectura de piso;
-  - deteccion de cintas;
-  - yaw;
-  - control de motores;
-  - distancias IR.
-- Activar en orden:
-  1. `ADVANCE_LINE` con yaw only.
-  2. Wall assist lateral.
-  3. Smooth turns.
-  4. Mapa sombra.
-  5. Deteccion de especiales.
-  6. Plan queue.
-  7. Planner BFS.
-  8. `nav_supervisor` con SMART.
-- Mantener `GOAL_DIRECTED_RETURN` deshabilitado hasta validar flood frontier en firmware.
-- Considerar compilacion condicional para telemetria pesada.
-- Revisar watchdog y timeout de primitivas.
-
-## Estado recomendado antes de portar
-
-Antes del firmware:
-
-- conservar `nav_supervisor` como interfaz portable de decision;
-- definir HAL minima para sensores y motores;
-- definir formato de telemetria serial liviano;
-- medir SRAM;
-- medir peor caso de tiempo de `nav_core_update`;
-- crear tests unitarios de `nav_map` y planner BFS fuera de Qt.
+El codigo portable ya contiene la logica de decision principal. La parte pendiente no es
+redisenar `nav/`, sino crear una HAL/adaptador STM32 que reemplace el trabajo que hoy
+hace `MainWindow`.
