@@ -182,7 +182,10 @@ typedef struct NavSupervisorDebugSnapshot {
     NavRouteStatus goal_directed_safe_return_status;
     uint16_t goal_directed_safe_return_cost;
     NavGoalReturnEvalStatus goal_directed_optimistic_eval_status;
+    uint16_t goal_directed_optimistic_any_cost;
+    uint16_t goal_directed_optimistic_shortcut_cost;
     uint16_t goal_directed_optimistic_return_cost;
+    bool goal_directed_unknown_used_path_found;
     uint8_t goal_directed_unknown_cells_on_path;
     uint8_t goal_directed_unknown_edges_on_path;
     NavFrontierEvalStatus goal_directed_frontier_eval_status;

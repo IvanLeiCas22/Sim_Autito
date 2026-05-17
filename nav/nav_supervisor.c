@@ -51,7 +51,10 @@ typedef struct NavSupervisorStateData {
     NavRouteStatus goal_directed_safe_return_status;
     uint16_t goal_directed_safe_return_cost;
     NavGoalReturnEvalStatus goal_directed_optimistic_eval_status;
+    uint16_t goal_directed_optimistic_any_cost;
+    uint16_t goal_directed_optimistic_shortcut_cost;
     uint16_t goal_directed_optimistic_return_cost;
+    bool goal_directed_unknown_used_path_found;
     uint8_t goal_directed_unknown_cells_on_path;
     uint8_t goal_directed_unknown_edges_on_path;
     NavFrontierEvalStatus goal_directed_frontier_eval_status;
@@ -86,7 +89,10 @@ static void clear_goal_directed_shadow_debug(void)
     supervisor_state.goal_directed_safe_return_cost = NAV_SUPERVISOR_COST_INF;
     supervisor_state.goal_directed_optimistic_eval_status =
         NAV_GOAL_RETURN_EVAL_STATUS_IDLE;
+    supervisor_state.goal_directed_optimistic_any_cost = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_optimistic_shortcut_cost = NAV_SUPERVISOR_COST_INF;
     supervisor_state.goal_directed_optimistic_return_cost = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_unknown_used_path_found = false;
     supervisor_state.goal_directed_unknown_cells_on_path = 0u;
     supervisor_state.goal_directed_unknown_edges_on_path = 0u;
     supervisor_state.goal_directed_frontier_eval_status =
@@ -114,14 +120,14 @@ static NavSupervisorConfig nav_supervisor_default_config(void)
     config.mission_enabled = false;
     config.required_special_count = NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_DEFAULT;
     config.return_strategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
-    config.goal_directed_score_margin = 2u;
+    config.goal_directed_score_margin = 0u;
     config.goal_directed_min_safe_return_cost_to_try = 4u;
     config.goal_directed_max_frontier_attempts = 1u;
     config.goal_directed_allow_back_entry = false;
-    config.goal_directed_unknown_wall_penalty = 1u;
-    config.goal_directed_unknown_cell_penalty = 1u;
-    config.goal_directed_max_unknown_cells = 4u;
-    config.goal_directed_max_unknown_edges = 4u;
+    config.goal_directed_unknown_wall_penalty = 0u;
+    config.goal_directed_unknown_cell_penalty = 0u;
+    config.goal_directed_max_unknown_cells = 32u;
+    config.goal_directed_max_unknown_edges = 32u;
     return config;
 }
 
@@ -273,8 +279,14 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
         supervisor_state.goal_directed_safe_return_cost;
     snapshot->goal_directed_optimistic_eval_status =
         supervisor_state.goal_directed_optimistic_eval_status;
+    snapshot->goal_directed_optimistic_any_cost =
+        supervisor_state.goal_directed_optimistic_any_cost;
+    snapshot->goal_directed_optimistic_shortcut_cost =
+        supervisor_state.goal_directed_optimistic_shortcut_cost;
     snapshot->goal_directed_optimistic_return_cost =
         supervisor_state.goal_directed_optimistic_return_cost;
+    snapshot->goal_directed_unknown_used_path_found =
+        supervisor_state.goal_directed_unknown_used_path_found;
     snapshot->goal_directed_unknown_cells_on_path =
         supervisor_state.goal_directed_unknown_cells_on_path;
     snapshot->goal_directed_unknown_edges_on_path =
@@ -516,8 +528,14 @@ static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input
     const NavGoalReturnEvalStatus eval_status =
         nav_goal_return_eval_evaluate(&eval_config, &eval_result);
     supervisor_state.goal_directed_optimistic_eval_status = eval_status;
+    supervisor_state.goal_directed_optimistic_any_cost =
+        eval_result.optimistic_any_cost;
+    supervisor_state.goal_directed_optimistic_shortcut_cost =
+        eval_result.optimistic_shortcut_cost;
     supervisor_state.goal_directed_optimistic_return_cost =
         eval_result.optimistic_return_cost;
+    supervisor_state.goal_directed_unknown_used_path_found =
+        eval_result.unknown_used_path_found;
     supervisor_state.goal_directed_unknown_cells_on_path =
         eval_result.unknown_cells_on_path;
     supervisor_state.goal_directed_unknown_edges_on_path =

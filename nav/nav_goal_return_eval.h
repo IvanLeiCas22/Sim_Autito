@@ -64,9 +64,12 @@ typedef struct NavGoalReturnEvalResult {
     NavGoalReturnReason reason;
 
     uint16_t safe_return_cost;
+    uint16_t optimistic_any_cost;
+    uint16_t optimistic_shortcut_cost;
     uint16_t optimistic_return_cost;
     int32_t score_improvement;
 
+    bool unknown_used_path_found;
     uint8_t unknown_cells_on_path;
     uint8_t unknown_edges_on_path;
 

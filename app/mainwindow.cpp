@@ -2904,8 +2904,19 @@ void MainWindow::createTelemetryPanel()
     goalDirectedShadowDecisionValueLabel = new QLabel(panel);
     goalDirectedShadowReasonValueLabel = new QLabel(panel);
     goalDirectedSafeReturnCostValueLabel = new QLabel(panel);
+    goalDirectedRequiredImprovementValueLabel = new QLabel(panel);
+    goalDirectedUnknownCellPenaltyValueLabel = new QLabel(panel);
+    goalDirectedUnknownEdgePenaltyValueLabel = new QLabel(panel);
+    goalDirectedMaxUnknownCellsValueLabel = new QLabel(panel);
+    goalDirectedMaxUnknownEdgesValueLabel = new QLabel(panel);
+    goalDirectedMinSafeReturnCostToTryValueLabel = new QLabel(panel);
+    goalDirectedMaxShortcutAttemptsValueLabel = new QLabel(panel);
+    goalDirectedAllowBackEntryValueLabel = new QLabel(panel);
     goalDirectedOptimisticEvalStatusValueLabel = new QLabel(panel);
+    goalDirectedOptimisticAnyCostValueLabel = new QLabel(panel);
+    goalDirectedOptimisticShortcutCostValueLabel = new QLabel(panel);
     goalDirectedOptimisticReturnCostValueLabel = new QLabel(panel);
+    goalDirectedUnknownUsedPathFoundValueLabel = new QLabel(panel);
     goalDirectedUnknownCellsValueLabel = new QLabel(panel);
     goalDirectedUnknownEdgesValueLabel = new QLabel(panel);
     goalDirectedFrontierRouteStatusValueLabel = new QLabel(panel);
@@ -3390,8 +3401,19 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(goalDirectedShadowDecisionValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowReasonValueLabel);
     configureTelemetryValueLabel(goalDirectedSafeReturnCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedRequiredImprovementValueLabel);
+    configureTelemetryValueLabel(goalDirectedUnknownCellPenaltyValueLabel);
+    configureTelemetryValueLabel(goalDirectedUnknownEdgePenaltyValueLabel);
+    configureTelemetryValueLabel(goalDirectedMaxUnknownCellsValueLabel);
+    configureTelemetryValueLabel(goalDirectedMaxUnknownEdgesValueLabel);
+    configureTelemetryValueLabel(goalDirectedMinSafeReturnCostToTryValueLabel);
+    configureTelemetryValueLabel(goalDirectedMaxShortcutAttemptsValueLabel);
+    configureTelemetryValueLabel(goalDirectedAllowBackEntryValueLabel);
     configureTelemetryValueLabel(goalDirectedOptimisticEvalStatusValueLabel);
+    configureTelemetryValueLabel(goalDirectedOptimisticAnyCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedOptimisticShortcutCostValueLabel);
     configureTelemetryValueLabel(goalDirectedOptimisticReturnCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedUnknownUsedPathFoundValueLabel);
     configureTelemetryValueLabel(goalDirectedUnknownCellsValueLabel);
     configureTelemetryValueLabel(goalDirectedUnknownEdgesValueLabel);
     configureTelemetryValueLabel(goalDirectedFrontierRouteStatusValueLabel);
@@ -4009,10 +4031,32 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("goal_directed_shadow_decision:", goalDirectedShadowDecisionValueLabel);
     layout->addRow("goal_directed_shadow_reason:", goalDirectedShadowReasonValueLabel);
     layout->addRow("goal_directed_safe_return_cost:", goalDirectedSafeReturnCostValueLabel);
+    layout->addRow("goal_directed_required_improvement:",
+                   goalDirectedRequiredImprovementValueLabel);
+    layout->addRow("goal_directed_unknown_cell_penalty:",
+                   goalDirectedUnknownCellPenaltyValueLabel);
+    layout->addRow("goal_directed_unknown_edge_penalty:",
+                   goalDirectedUnknownEdgePenaltyValueLabel);
+    layout->addRow("goal_directed_max_unknown_cells:",
+                   goalDirectedMaxUnknownCellsValueLabel);
+    layout->addRow("goal_directed_max_unknown_edges:",
+                   goalDirectedMaxUnknownEdgesValueLabel);
+    layout->addRow("goal_directed_min_safe_return_cost_to_try:",
+                   goalDirectedMinSafeReturnCostToTryValueLabel);
+    layout->addRow("goal_directed_max_shortcut_attempts:",
+                   goalDirectedMaxShortcutAttemptsValueLabel);
+    layout->addRow("goal_directed_allow_back_entry:",
+                   goalDirectedAllowBackEntryValueLabel);
     layout->addRow("goal_directed_optimistic_eval_status:",
                    goalDirectedOptimisticEvalStatusValueLabel);
+    layout->addRow("goal_directed_optimistic_any_cost:",
+                   goalDirectedOptimisticAnyCostValueLabel);
+    layout->addRow("goal_directed_optimistic_shortcut_cost:",
+                   goalDirectedOptimisticShortcutCostValueLabel);
     layout->addRow("goal_directed_optimistic_return_cost:",
                    goalDirectedOptimisticReturnCostValueLabel);
+    layout->addRow("goal_directed_unknown_used_path_found:",
+                   goalDirectedUnknownUsedPathFoundValueLabel);
     layout->addRow("goal_directed_unknown_cells:",
                    goalDirectedUnknownCellsValueLabel);
     layout->addRow("goal_directed_unknown_edges:",
@@ -5995,15 +6039,64 @@ void MainWindow::updateTelemetryPanel()
                 ? "INF"
                 : QString::number(supervisorDebug.goal_directed_safe_return_cost));
     }
+    if (goalDirectedRequiredImprovementValueLabel) {
+        goalDirectedRequiredImprovementValueLabel->setText(
+            QString::number(supervisorDebug.config.goal_directed_score_margin));
+    }
+    if (goalDirectedUnknownCellPenaltyValueLabel) {
+        goalDirectedUnknownCellPenaltyValueLabel->setText(
+            QString::number(supervisorDebug.config.goal_directed_unknown_cell_penalty));
+    }
+    if (goalDirectedUnknownEdgePenaltyValueLabel) {
+        goalDirectedUnknownEdgePenaltyValueLabel->setText(
+            QString::number(supervisorDebug.config.goal_directed_unknown_wall_penalty));
+    }
+    if (goalDirectedMaxUnknownCellsValueLabel) {
+        goalDirectedMaxUnknownCellsValueLabel->setText(
+            QString::number(supervisorDebug.config.goal_directed_max_unknown_cells));
+    }
+    if (goalDirectedMaxUnknownEdgesValueLabel) {
+        goalDirectedMaxUnknownEdgesValueLabel->setText(
+            QString::number(supervisorDebug.config.goal_directed_max_unknown_edges));
+    }
+    if (goalDirectedMinSafeReturnCostToTryValueLabel) {
+        goalDirectedMinSafeReturnCostToTryValueLabel->setText(
+            QString::number(
+                supervisorDebug.config.goal_directed_min_safe_return_cost_to_try));
+    }
+    if (goalDirectedMaxShortcutAttemptsValueLabel) {
+        goalDirectedMaxShortcutAttemptsValueLabel->setText(
+            QString::number(supervisorDebug.config.goal_directed_max_frontier_attempts));
+    }
+    if (goalDirectedAllowBackEntryValueLabel) {
+        goalDirectedAllowBackEntryValueLabel->setText(
+            supervisorDebug.config.goal_directed_allow_back_entry ? "true" : "false");
+    }
     if (goalDirectedOptimisticEvalStatusValueLabel) {
         goalDirectedOptimisticEvalStatusValueLabel->setText(
             goalReturnEvalStatusText(supervisorDebug.goal_directed_optimistic_eval_status));
+    }
+    if (goalDirectedOptimisticAnyCostValueLabel) {
+        goalDirectedOptimisticAnyCostValueLabel->setText(
+            supervisorDebug.goal_directed_optimistic_any_cost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(supervisorDebug.goal_directed_optimistic_any_cost));
+    }
+    if (goalDirectedOptimisticShortcutCostValueLabel) {
+        goalDirectedOptimisticShortcutCostValueLabel->setText(
+            supervisorDebug.goal_directed_optimistic_shortcut_cost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(supervisorDebug.goal_directed_optimistic_shortcut_cost));
     }
     if (goalDirectedOptimisticReturnCostValueLabel) {
         goalDirectedOptimisticReturnCostValueLabel->setText(
             supervisorDebug.goal_directed_optimistic_return_cost == NAV_FLOOD_COST_INF
                 ? "INF"
                 : QString::number(supervisorDebug.goal_directed_optimistic_return_cost));
+    }
+    if (goalDirectedUnknownUsedPathFoundValueLabel) {
+        goalDirectedUnknownUsedPathFoundValueLabel->setText(
+            supervisorDebug.goal_directed_unknown_used_path_found ? "true" : "false");
     }
     if (goalDirectedUnknownCellsValueLabel) {
         goalDirectedUnknownCellsValueLabel->setText(
@@ -6601,7 +6694,7 @@ void MainWindow::syncNavSupervisorConfig()
                              1,
                              NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_MAX));
     config.return_strategy = mode1ReturnStrategy;
-    config.goal_directed_score_margin = goalDirectedScoreMargin;
+    config.goal_directed_score_margin = goalDirectedRequiredImprovement;
     config.goal_directed_min_safe_return_cost_to_try =
         goalDirectedMinSafeReturnCostToTry;
     config.goal_directed_max_frontier_attempts = goalDirectedMaxFrontierAttempts;
@@ -7860,7 +7953,11 @@ void MainWindow::showControlTuningDialog()
     auto *mode1MissionEnabledCheck = new QCheckBox(mode1MissionGroup);
     auto *mode1RequiredSpecialCountSpin = new QSpinBox(mode1MissionGroup);
     auto *mode1ReturnStrategyCombo = new QComboBox(mode1MissionGroup);
-    auto *goalDirectedScoreMarginSpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedRequiredImprovementSpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedUnknownCellPenaltySpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedUnknownEdgePenaltySpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedMaxUnknownCellsSpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedMaxUnknownEdgesSpin = new QSpinBox(mode1MissionGroup);
     auto *goalDirectedMinSafeReturnSpin = new QSpinBox(mode1MissionGroup);
     auto *goalDirectedMaxAttemptsSpin = new QSpinBox(mode1MissionGroup);
     auto *goalDirectedAllowBackEntryCheck = new QCheckBox(mode1MissionGroup);
@@ -7928,9 +8025,13 @@ void MainWindow::showControlTuningDialog()
     mode1ReturnStrategyCombo->addItem("GOAL_DIRECTED_RETURN (shadow)",
                                       static_cast<int>(
                                           NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN));
-    goalDirectedScoreMarginSpin->setRange(0, 100);
+    goalDirectedRequiredImprovementSpin->setRange(0, 20);
+    goalDirectedUnknownCellPenaltySpin->setRange(0, 10);
+    goalDirectedUnknownEdgePenaltySpin->setRange(0, 10);
+    goalDirectedMaxUnknownCellsSpin->setRange(0, 255);
+    goalDirectedMaxUnknownEdgesSpin->setRange(0, 255);
     goalDirectedMinSafeReturnSpin->setRange(0, 100);
-    goalDirectedMaxAttemptsSpin->setRange(0, 16);
+    goalDirectedMaxAttemptsSpin->setRange(0, 10);
     batchFastTicksPerUiUpdateSpin->setRange(1, 50);
     batchFastTicksPerUiUpdateSpin->setSingleStep(1);
 
@@ -7973,13 +8074,21 @@ void MainWindow::showControlTuningDialog()
     mode1MissionLayout->addRow("mode1_mission_enabled:", mode1MissionEnabledCheck);
     mode1MissionLayout->addRow("required_special_count:", mode1RequiredSpecialCountSpin);
     mode1MissionLayout->addRow("return_strategy:", mode1ReturnStrategyCombo);
-    mode1MissionLayout->addRow("goal_directed_score_margin:",
-                               goalDirectedScoreMarginSpin);
+    mode1MissionLayout->addRow("goal_required_improvement:",
+                               goalDirectedRequiredImprovementSpin);
+    mode1MissionLayout->addRow("goal_unknown_cell_penalty:",
+                               goalDirectedUnknownCellPenaltySpin);
+    mode1MissionLayout->addRow("goal_unknown_edge_penalty:",
+                               goalDirectedUnknownEdgePenaltySpin);
+    mode1MissionLayout->addRow("goal_max_unknown_cells:",
+                               goalDirectedMaxUnknownCellsSpin);
+    mode1MissionLayout->addRow("goal_max_unknown_edges:",
+                               goalDirectedMaxUnknownEdgesSpin);
     mode1MissionLayout->addRow("goal_directed_min_safe_return_cost_to_try:",
                                goalDirectedMinSafeReturnSpin);
-    mode1MissionLayout->addRow("goal_directed_max_frontier_attempts:",
+    mode1MissionLayout->addRow("goal_max_shortcut_attempts:",
                                goalDirectedMaxAttemptsSpin);
-    mode1MissionLayout->addRow("goal_directed_allow_back_entry:",
+    mode1MissionLayout->addRow("goal_allow_back_entry:",
                                goalDirectedAllowBackEntryCheck);
     batchRunnerLayout->addRow("batch_fast_mode_enabled:", batchFastModeEnabledCheck);
     batchRunnerLayout->addRow("batch_fast_ticks_per_ui_update:",
@@ -8067,8 +8176,16 @@ void MainWindow::showControlTuningDialog()
             static_cast<int>(supervisorConfig.return_strategy));
         mode1ReturnStrategyCombo->setCurrentIndex(
             returnStrategyIndex >= 0 ? returnStrategyIndex : 0);
-        goalDirectedScoreMarginSpin->setValue(
+        goalDirectedRequiredImprovementSpin->setValue(
             static_cast<int>(supervisorConfig.goal_directed_score_margin));
+        goalDirectedUnknownCellPenaltySpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_unknown_cell_penalty));
+        goalDirectedUnknownEdgePenaltySpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_unknown_wall_penalty));
+        goalDirectedMaxUnknownCellsSpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_max_unknown_cells));
+        goalDirectedMaxUnknownEdgesSpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_max_unknown_edges));
         goalDirectedMinSafeReturnSpin->setValue(
             static_cast<int>(supervisorConfig.goal_directed_min_safe_return_cost_to_try));
         goalDirectedMaxAttemptsSpin->setValue(
@@ -8144,8 +8261,16 @@ void MainWindow::showControlTuningDialog()
             static_cast<uint16_t>(mode1RequiredSpecialCountSpin->value());
         mode1ReturnStrategy = static_cast<NavSupervisorReturnStrategy>(
             mode1ReturnStrategyCombo->currentData().toInt());
-        goalDirectedScoreMargin =
-            static_cast<uint16_t>(goalDirectedScoreMarginSpin->value());
+        goalDirectedRequiredImprovement =
+            static_cast<uint16_t>(goalDirectedRequiredImprovementSpin->value());
+        goalDirectedUnknownCellPenalty =
+            static_cast<uint16_t>(goalDirectedUnknownCellPenaltySpin->value());
+        goalDirectedUnknownWallPenalty =
+            static_cast<uint16_t>(goalDirectedUnknownEdgePenaltySpin->value());
+        goalDirectedMaxUnknownCells =
+            static_cast<uint8_t>(goalDirectedMaxUnknownCellsSpin->value());
+        goalDirectedMaxUnknownEdges =
+            static_cast<uint8_t>(goalDirectedMaxUnknownEdgesSpin->value());
         goalDirectedMinSafeReturnCostToTry =
             static_cast<uint16_t>(goalDirectedMinSafeReturnSpin->value());
         goalDirectedMaxFrontierAttempts =
@@ -8168,10 +8293,14 @@ void MainWindow::showControlTuningDialog()
         nav_core_reset_wall_caution_defaults();
         mode1RequiredSpecialCount = 3;
         mode1ReturnStrategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
-        goalDirectedScoreMargin = 2;
+        goalDirectedRequiredImprovement = 0;
         goalDirectedMinSafeReturnCostToTry = 4;
         goalDirectedMaxFrontierAttempts = 1;
         goalDirectedAllowBackEntry = false;
+        goalDirectedUnknownCellPenalty = 0;
+        goalDirectedUnknownWallPenalty = 0;
+        goalDirectedMaxUnknownCells = 32;
+        goalDirectedMaxUnknownEdges = 32;
         setMode1MissionEnabled(true);
         batchFastModeEnabled = false;
         batchFastTicksPerUiUpdate = 10;

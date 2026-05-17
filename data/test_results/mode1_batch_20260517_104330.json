@@ -1,0 +1,54 @@
+{
+    "batch_fast_mode_enabled": true,
+    "batch_fast_ticks_per_ui_update": 10,
+    "batch_reason": "MANUAL_CANCELLED",
+    "batch_sim_time_s": 108.89999999999547,
+    "batch_speedup": 3.7817752465618653,
+    "batch_state": "BATCH_CANCELLED",
+    "batch_wall_time_s": 28.796,
+    "cancelled_count": 1,
+    "fail_count": 0,
+    "pass_count": 1,
+    "results": [
+        {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
+            "final_done_reason": "FOUND_REQUIRED_SPECIALS_AND_RETURNED",
+            "final_mission_state": "DONE",
+            "found_specials": 3,
+            "index": 1,
+            "map_name": "normal_pass_open_3_specials.json",
+            "map_path": "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/data/test_maps/normal_pass_open_3_specials.json",
+            "reason": "PASS_FOUND_REQUIRED_SPECIALS_AND_RETURNED",
+            "required_specials": 3,
+            "result": "PASS",
+            "returned_to_start": true,
+            "sim_time_s": 54.79999999999767,
+            "ticks": 5480
+        },
+        {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
+            "final_done_reason": "NONE",
+            "final_mission_state": "DISABLED",
+            "found_specials": 0,
+            "index": 2,
+            "map_name": "shortcut_perimeter_return_3_specials.json",
+            "map_path": "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/data/test_maps/shortcut_perimeter_return_3_specials.json",
+            "reason": "MANUAL_CANCELLED",
+            "required_specials": 3,
+            "result": "CANCELLED",
+            "returned_to_start": false,
+            "sim_time_s": 54.099999999997806,
+            "ticks": 5410
+        }
+    ],
+    "runner": "mode1_batch",
+    "timeout_count": 0,
+    "timestamp": "2026-05-17T10:43:30",
+    "total_maps": 12
+}
