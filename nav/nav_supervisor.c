@@ -135,11 +135,33 @@ static NavSupervisorReturnStrategy sanitize_return_strategy(NavSupervisorReturnS
 {
     switch (strategy) {
     case NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN:
-    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN:
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW:
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION:
         return strategy;
     }
 
     return NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+}
+
+static bool goal_directed_shadow_should_evaluate(void)
+{
+    return supervisor_state.config.return_strategy
+        == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW
+        || supervisor_state.config.return_strategy
+            == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION;
+}
+
+static NavSupervisorGoalDirectedExecutionMode goal_directed_execution_mode(void)
+{
+    switch (supervisor_state.config.return_strategy) {
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_SHADOW;
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED;
+    case NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN:
+    default:
+        return NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_DISABLED;
+    }
 }
 
 static NavSupervisorConfig sanitize_config(const NavSupervisorConfig *config)
@@ -264,9 +286,9 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
     snapshot->final_safe_scan_return_ready = supervisor_state.final_safe_scan_return_ready;
     snapshot->final_safe_scan_return_wait_reason =
         supervisor_state.final_safe_scan_return_wait_reason;
-    snapshot->goal_directed_shadow_enabled =
-        supervisor_state.config.return_strategy
-        == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN;
+    snapshot->goal_directed_shadow_enabled = goal_directed_shadow_should_evaluate();
+    snapshot->goal_directed_execution_mode = goal_directed_execution_mode();
+    snapshot->goal_directed_execution_connected = false;
     snapshot->goal_directed_shadow_evaluated =
         supervisor_state.goal_directed_shadow_evaluated;
     snapshot->goal_directed_shadow_valid = supervisor_state.goal_directed_shadow_valid;
@@ -468,8 +490,7 @@ static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input
     clear_goal_directed_shadow_debug();
     supervisor_state.goal_directed_shadow_evaluated = true;
 
-    if (supervisor_state.config.return_strategy
-        != NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN) {
+    if (!goal_directed_shadow_should_evaluate()) {
         goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_DISABLED);
         return;
     }
@@ -864,8 +885,7 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
         supervisor_state.waiting_action_done = false;
         if (!supervisor_state.return_plan_requested
             && !supervisor_state.goal_directed_shadow_evaluated
-            && supervisor_state.config.return_strategy
-                == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN) {
+            && goal_directed_shadow_should_evaluate()) {
             evaluate_goal_directed_return_shadow(input);
         }
         supervisor_state.state = NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN;

@@ -790,6 +790,8 @@ private:
     QLabel *supervisorBlockSmartActionsValueLabel = nullptr;
     QLabel *supervisorActiveAsSourceValueLabel = nullptr;
     QLabel *goalDirectedShadowEnabledValueLabel = nullptr;
+    QLabel *goalDirectedExecutionModeValueLabel = nullptr;
+    QLabel *goalDirectedExecutionConnectedValueLabel = nullptr;
     QLabel *goalDirectedShadowEvaluatedValueLabel = nullptr;
     QLabel *goalDirectedShadowDecisionValueLabel = nullptr;
     QLabel *goalDirectedShadowReasonValueLabel = nullptr;

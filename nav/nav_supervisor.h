@@ -45,8 +45,17 @@ typedef enum NavSupervisorDoneReason {
 
 typedef enum NavSupervisorReturnStrategy {
     NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN = 0,
-    NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN
+    NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW,
+    NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION,
+    NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN =
+        NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW
 } NavSupervisorReturnStrategy;
+
+typedef enum NavSupervisorGoalDirectedExecutionMode {
+    NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_DISABLED = 0,
+    NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_SHADOW,
+    NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED
+} NavSupervisorGoalDirectedExecutionMode;
 
 typedef enum NavSupervisorGoalDirectedDecision {
     NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_NONE = 0,
@@ -175,6 +184,8 @@ typedef struct NavSupervisorDebugSnapshot {
     bool final_safe_scan_return_ready;
     NavSupervisorFinalSafeScanReturnWaitReason final_safe_scan_return_wait_reason;
     bool goal_directed_shadow_enabled;
+    NavSupervisorGoalDirectedExecutionMode goal_directed_execution_mode;
+    bool goal_directed_execution_connected;
     bool goal_directed_shadow_evaluated;
     bool goal_directed_shadow_valid;
     NavSupervisorGoalDirectedDecision goal_directed_shadow_decision;

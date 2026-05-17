@@ -1368,8 +1368,24 @@ QString supervisorReturnStrategyText(NavSupervisorReturnStrategy strategy)
     switch (strategy) {
     case NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN:
         return "SAFE_KNOWN_RETURN";
-    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN:
-        return "GOAL_DIRECTED_RETURN";
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW:
+        return "GOAL_DIRECTED_RETURN_SHADOW";
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION:
+        return "GOAL_DIRECTED_RETURN_LIMITED_EXECUTION";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalDirectedExecutionModeText(NavSupervisorGoalDirectedExecutionMode mode)
+{
+    switch (mode) {
+    case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_DISABLED:
+        return "DISABLED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_SHADOW:
+        return "SHADOW";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED:
+        return "LIMITED_EXECUTION_SELECTED_NOT_CONNECTED";
     }
 
     return "UNKNOWN";
@@ -2900,6 +2916,8 @@ void MainWindow::createTelemetryPanel()
     supervisorBlockSmartActionsValueLabel = new QLabel(panel);
     supervisorActiveAsSourceValueLabel = new QLabel(panel);
     goalDirectedShadowEnabledValueLabel = new QLabel(panel);
+    goalDirectedExecutionModeValueLabel = new QLabel(panel);
+    goalDirectedExecutionConnectedValueLabel = new QLabel(panel);
     goalDirectedShadowEvaluatedValueLabel = new QLabel(panel);
     goalDirectedShadowDecisionValueLabel = new QLabel(panel);
     goalDirectedShadowReasonValueLabel = new QLabel(panel);
@@ -3397,6 +3415,8 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(supervisorBlockSmartActionsValueLabel);
     configureTelemetryValueLabel(supervisorActiveAsSourceValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowEnabledValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecutionModeValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecutionConnectedValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowEvaluatedValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowDecisionValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowReasonValueLabel);
@@ -4027,6 +4047,10 @@ void MainWindow::createTelemetryPanel()
     auto *goalDirectedTitle = new QLabel("<b>Goal-directed return shadow</b>", panel);
     layout->addRow(goalDirectedTitle);
     layout->addRow("goal_directed_shadow_enabled:", goalDirectedShadowEnabledValueLabel);
+    layout->addRow("goal_directed_execution_mode:",
+                   goalDirectedExecutionModeValueLabel);
+    layout->addRow("goal_directed_execution_connected:",
+                   goalDirectedExecutionConnectedValueLabel);
     layout->addRow("goal_directed_shadow_evaluated:", goalDirectedShadowEvaluatedValueLabel);
     layout->addRow("goal_directed_shadow_decision:", goalDirectedShadowDecisionValueLabel);
     layout->addRow("goal_directed_shadow_reason:", goalDirectedShadowReasonValueLabel);
@@ -6020,6 +6044,14 @@ void MainWindow::updateTelemetryPanel()
     if (goalDirectedShadowEnabledValueLabel) {
         goalDirectedShadowEnabledValueLabel->setText(
             supervisorDebug.goal_directed_shadow_enabled ? "true" : "false");
+    }
+    if (goalDirectedExecutionModeValueLabel) {
+        goalDirectedExecutionModeValueLabel->setText(
+            goalDirectedExecutionModeText(supervisorDebug.goal_directed_execution_mode));
+    }
+    if (goalDirectedExecutionConnectedValueLabel) {
+        goalDirectedExecutionConnectedValueLabel->setText(
+            supervisorDebug.goal_directed_execution_connected ? "true" : "false");
     }
     if (goalDirectedShadowEvaluatedValueLabel) {
         goalDirectedShadowEvaluatedValueLabel->setText(
@@ -8022,9 +8054,13 @@ void MainWindow::showControlTuningDialog()
     mode1ReturnStrategyCombo->addItem("SAFE_KNOWN_RETURN",
                                       static_cast<int>(
                                           NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN));
-    mode1ReturnStrategyCombo->addItem("GOAL_DIRECTED_RETURN (shadow)",
+    mode1ReturnStrategyCombo->addItem("GOAL_DIRECTED_RETURN_SHADOW",
                                       static_cast<int>(
-                                          NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN));
+                                          NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW));
+    mode1ReturnStrategyCombo->addItem(
+        "GOAL_DIRECTED_RETURN_LIMITED_EXECUTION (not connected)",
+        static_cast<int>(
+            NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION));
     goalDirectedRequiredImprovementSpin->setRange(0, 20);
     goalDirectedUnknownCellPenaltySpin->setRange(0, 10);
     goalDirectedUnknownEdgePenaltySpin->setRange(0, 10);
