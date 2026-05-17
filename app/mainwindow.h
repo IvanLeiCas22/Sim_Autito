@@ -257,6 +257,7 @@ private:
     bool advancePlanCompositeActionIfNeeded();
     void startPlanCompositeCenterAndPivot180();
     bool startPlanAction(NavPlanAction action);
+    bool startGoalDirectedEntryAction(NavFrontierEntryAction action);
     void advancePlanExecutionIfNeeded();
     void toggleBasicNavAutonomy();
     void setBasicNavAutonomyEnabled(bool enabled);
@@ -803,6 +804,18 @@ private:
     QLabel *goalDirectedExecRouteLengthValueLabel = nullptr;
     QLabel *goalDirectedExecFoundArrivalDirValueLabel = nullptr;
     QLabel *goalDirectedExecFallbackReasonValueLabel = nullptr;
+    QLabel *goalDirectedExecAttemptsRemainingValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryRequestedValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryStartedValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryCompletedValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryActionValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryRelativeValueLabel = nullptr;
+    QLabel *goalDirectedExecEntrySupportedValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryStartCellValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryTargetCellValueLabel = nullptr;
+    QLabel *goalDirectedExecEntryDoneReasonValueLabel = nullptr;
+    QLabel *goalDirectedExecRevalidationStatusValueLabel = nullptr;
+    QLabel *goalDirectedExecRevalidationReasonValueLabel = nullptr;
     QLabel *goalDirectedShadowEvaluatedValueLabel = nullptr;
     QLabel *goalDirectedShadowDecisionValueLabel = nullptr;
     QLabel *goalDirectedShadowReasonValueLabel = nullptr;
@@ -973,10 +986,10 @@ private:
     uint16_t mode1RequiredSpecialCount = 3;
     uint16_t mode1FoundSpecialCount = 0;
     NavSupervisorReturnStrategy mode1ReturnStrategy =
-        NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+        NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION;
     uint16_t goalDirectedRequiredImprovement = 0;
     uint16_t goalDirectedMinSafeReturnCostToTry = 4;
-    uint8_t goalDirectedMaxFrontierAttempts = 1;
+    uint8_t goalDirectedMaxFrontierAttempts = 32;
     bool goalDirectedAllowBackEntry = false;
     uint16_t goalDirectedUnknownWallPenalty = 0;
     uint16_t goalDirectedUnknownCellPenalty = 0;
@@ -1107,7 +1120,7 @@ private:
     QString batchRunnerResultsJsonPath;
     bool batchRunnerExportOk = false;
     QString batchRunnerExportError;
-    bool batchFastModeEnabled = false;
+    bool batchFastModeEnabled = true;
     uint16_t batchFastTicksPerUiUpdate = 10;
     uint16_t batchFastTicksExecutedLastTimer = 0;
     uint32_t batchFastUiFlushCount = 0;

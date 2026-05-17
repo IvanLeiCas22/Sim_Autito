@@ -1387,7 +1387,7 @@ QString goalDirectedExecutionModeText(NavSupervisorGoalDirectedExecutionMode mod
     case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_SELECTED_NOT_CONNECTED:
         return "LIMITED_EXECUTION_SELECTED_NOT_CONNECTED";
     case NAV_SUPERVISOR_GOAL_DIRECTED_EXECUTION_MODE_LIMITED_EXECUTION_PLAN_CONNECTED:
-        return "LIMITED_EXECUTION_PLAN_CONNECTED_ENTRY_DISABLED";
+        return "LIMITED_EXECUTION_PLAN_AND_ENTRY_CONNECTED";
     }
 
     return "UNKNOWN";
@@ -1408,10 +1408,43 @@ QString goalDirectedFallbackReasonText(NavSupervisorGoalDirectedFallbackReason r
         return "GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED";
     case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_CELL_MISMATCH:
         return "GOAL_FRONTIER_CELL_MISMATCH";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ATTEMPTS_EXHAUSTED:
+        return "GOAL_ATTEMPTS_EXHAUSTED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_NEIGHBOR_INVALID:
+        return "GOAL_FRONTIER_NEIGHBOR_INVALID";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_NEIGHBOR_VISITED:
+        return "GOAL_FRONTIER_NEIGHBOR_VISITED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_WALL_BLOCKED:
+        return "GOAL_FRONTIER_WALL_BLOCKED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_UNSUPPORTED:
+        return "GOAL_ENTRY_UNSUPPORTED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_NAV_NOT_READY:
+        return "GOAL_ENTRY_NAV_NOT_READY";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_START_FAILED:
+        return "GOAL_ENTRY_START_FAILED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_DID_NOT_ADVANCE:
+        return "GOAL_ENTRY_DID_NOT_ADVANCE";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_CELL_MISMATCH:
+        return "GOAL_ENTRY_CELL_MISMATCH";
     case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_CANCELLED:
         return "GOAL_CANCELLED";
     case NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_UNKNOWN_ERROR:
         return "GOAL_UNKNOWN_ERROR";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalDirectedRevalidationStatusText(
+    NavSupervisorGoalDirectedRevalidationStatus status)
+{
+    switch (status) {
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REVALIDATION_STATUS_IDLE:
+        return "IDLE";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REVALIDATION_STATUS_OK:
+        return "OK";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REVALIDATION_STATUS_FAILED:
+        return "FAILED";
     }
 
     return "UNKNOWN";
@@ -2955,6 +2988,18 @@ void MainWindow::createTelemetryPanel()
     goalDirectedExecRouteLengthValueLabel = new QLabel(panel);
     goalDirectedExecFoundArrivalDirValueLabel = new QLabel(panel);
     goalDirectedExecFallbackReasonValueLabel = new QLabel(panel);
+    goalDirectedExecAttemptsRemainingValueLabel = new QLabel(panel);
+    goalDirectedExecEntryRequestedValueLabel = new QLabel(panel);
+    goalDirectedExecEntryStartedValueLabel = new QLabel(panel);
+    goalDirectedExecEntryCompletedValueLabel = new QLabel(panel);
+    goalDirectedExecEntryActionValueLabel = new QLabel(panel);
+    goalDirectedExecEntryRelativeValueLabel = new QLabel(panel);
+    goalDirectedExecEntrySupportedValueLabel = new QLabel(panel);
+    goalDirectedExecEntryStartCellValueLabel = new QLabel(panel);
+    goalDirectedExecEntryTargetCellValueLabel = new QLabel(panel);
+    goalDirectedExecEntryDoneReasonValueLabel = new QLabel(panel);
+    goalDirectedExecRevalidationStatusValueLabel = new QLabel(panel);
+    goalDirectedExecRevalidationReasonValueLabel = new QLabel(panel);
     goalDirectedShadowEvaluatedValueLabel = new QLabel(panel);
     goalDirectedShadowDecisionValueLabel = new QLabel(panel);
     goalDirectedShadowReasonValueLabel = new QLabel(panel);
@@ -3465,6 +3510,18 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(goalDirectedExecRouteLengthValueLabel);
     configureTelemetryValueLabel(goalDirectedExecFoundArrivalDirValueLabel);
     configureTelemetryValueLabel(goalDirectedExecFallbackReasonValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecAttemptsRemainingValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryRequestedValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryStartedValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryCompletedValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryActionValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryRelativeValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntrySupportedValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryStartCellValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryTargetCellValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecEntryDoneReasonValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecRevalidationStatusValueLabel);
+    configureTelemetryValueLabel(goalDirectedExecRevalidationReasonValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowEvaluatedValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowDecisionValueLabel);
     configureTelemetryValueLabel(goalDirectedShadowReasonValueLabel);
@@ -4113,6 +4170,28 @@ void MainWindow::createTelemetryPanel()
                    goalDirectedExecFoundArrivalDirValueLabel);
     layout->addRow("goal_exec_fallback_reason:",
                    goalDirectedExecFallbackReasonValueLabel);
+    layout->addRow("goal_exec_attempts_remaining:",
+                   goalDirectedExecAttemptsRemainingValueLabel);
+    layout->addRow("goal_exec_entry_requested:",
+                   goalDirectedExecEntryRequestedValueLabel);
+    layout->addRow("goal_exec_entry_started:", goalDirectedExecEntryStartedValueLabel);
+    layout->addRow("goal_exec_entry_completed:",
+                   goalDirectedExecEntryCompletedValueLabel);
+    layout->addRow("goal_exec_entry_action:", goalDirectedExecEntryActionValueLabel);
+    layout->addRow("goal_exec_entry_relative:",
+                   goalDirectedExecEntryRelativeValueLabel);
+    layout->addRow("goal_exec_entry_supported:",
+                   goalDirectedExecEntrySupportedValueLabel);
+    layout->addRow("goal_exec_entry_start_cell:",
+                   goalDirectedExecEntryStartCellValueLabel);
+    layout->addRow("goal_exec_entry_target_cell:",
+                   goalDirectedExecEntryTargetCellValueLabel);
+    layout->addRow("goal_exec_entry_done_reason:",
+                   goalDirectedExecEntryDoneReasonValueLabel);
+    layout->addRow("goal_exec_revalidation_status:",
+                   goalDirectedExecRevalidationStatusValueLabel);
+    layout->addRow("goal_exec_revalidation_reason:",
+                   goalDirectedExecRevalidationReasonValueLabel);
     layout->addRow("goal_directed_shadow_evaluated:", goalDirectedShadowEvaluatedValueLabel);
     layout->addRow("goal_directed_shadow_decision:", goalDirectedShadowDecisionValueLabel);
     layout->addRow("goal_directed_shadow_reason:", goalDirectedShadowReasonValueLabel);
@@ -6179,6 +6258,69 @@ void MainWindow::updateTelemetryPanel()
             goalDirectedFallbackReasonText(
                 supervisorDebug.goal_directed_exec_fallback_reason));
     }
+    if (goalDirectedExecAttemptsRemainingValueLabel) {
+        goalDirectedExecAttemptsRemainingValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_attempts_remaining));
+    }
+    if (goalDirectedExecEntryRequestedValueLabel) {
+        goalDirectedExecEntryRequestedValueLabel->setText(
+            supervisorDebug.goal_directed_entry_requested ? "true" : "false");
+    }
+    if (goalDirectedExecEntryStartedValueLabel) {
+        goalDirectedExecEntryStartedValueLabel->setText(
+            supervisorDebug.goal_directed_entry_started ? "true" : "false");
+    }
+    if (goalDirectedExecEntryCompletedValueLabel) {
+        goalDirectedExecEntryCompletedValueLabel->setText(
+            supervisorDebug.goal_directed_entry_completed ? "true" : "false");
+    }
+    if (goalDirectedExecEntryActionValueLabel) {
+        goalDirectedExecEntryActionValueLabel->setText(
+            goalDirectedEntryActionText(
+                supervisorDebug.goal_directed_exec_entry_action));
+    }
+    if (goalDirectedExecEntryRelativeValueLabel) {
+        goalDirectedExecEntryRelativeValueLabel->setText(
+            floodFrontierEntryRelativeText(floodFrontierEntryRelativeFromNav(
+                supervisorDebug.goal_directed_exec_entry_relative)));
+    }
+    if (goalDirectedExecEntrySupportedValueLabel) {
+        goalDirectedExecEntrySupportedValueLabel->setText(
+            supervisorDebug.goal_directed_exec_entry_supported ? "true" : "false");
+    }
+    if (goalDirectedExecEntryStartCellValueLabel) {
+        goalDirectedExecEntryStartCellValueLabel->setText(
+            supervisorDebug.goal_directed_entry_start_cell_x >= 0
+                    && supervisorDebug.goal_directed_entry_start_cell_y >= 0
+                ? QString("(%1,%2)")
+                      .arg(supervisorDebug.goal_directed_entry_start_cell_x)
+                      .arg(supervisorDebug.goal_directed_entry_start_cell_y)
+                : "none");
+    }
+    if (goalDirectedExecEntryTargetCellValueLabel) {
+        goalDirectedExecEntryTargetCellValueLabel->setText(
+            supervisorDebug.goal_directed_entry_target_cell_x >= 0
+                    && supervisorDebug.goal_directed_entry_target_cell_y >= 0
+                ? QString("(%1,%2)")
+                      .arg(supervisorDebug.goal_directed_entry_target_cell_x)
+                      .arg(supervisorDebug.goal_directed_entry_target_cell_y)
+                : "none");
+    }
+    if (goalDirectedExecEntryDoneReasonValueLabel) {
+        goalDirectedExecEntryDoneReasonValueLabel->setText(
+            goalDirectedFallbackReasonText(
+                supervisorDebug.goal_directed_entry_done_reason));
+    }
+    if (goalDirectedExecRevalidationStatusValueLabel) {
+        goalDirectedExecRevalidationStatusValueLabel->setText(
+            goalDirectedRevalidationStatusText(
+                supervisorDebug.goal_directed_revalidation_status));
+    }
+    if (goalDirectedExecRevalidationReasonValueLabel) {
+        goalDirectedExecRevalidationReasonValueLabel->setText(
+            goalDirectedFallbackReasonText(
+                supervisorDebug.goal_directed_revalidation_reason));
+    }
     if (goalDirectedShadowEvaluatedValueLabel) {
         goalDirectedShadowEvaluatedValueLabel->setText(
             supervisorDebug.goal_directed_shadow_evaluated ? "true" : "false");
@@ -7014,6 +7156,11 @@ void MainWindow::applyNavSupervisorOutput(const NavSupervisorOutput &output)
         }
     }
 
+    if (output.request_goal_enter_frontier) {
+        const bool started = startGoalDirectedEntryAction(output.goal_entry_action);
+        nav_supervisor_notify_goal_entry_started(started);
+    }
+
     if (output.request_execute_return_plan) {
         NavPlanDebugSnapshot planDebug = {};
         nav_core_plan_debug_snapshot(&planDebug);
@@ -7382,6 +7529,48 @@ bool MainWindow::startPlanAction(NavPlanAction action)
     planLastExecutedAction = action;
     ++planActionsExecutedCount;
     return true;
+}
+
+bool MainWindow::startGoalDirectedEntryAction(NavFrontierEntryAction action)
+{
+    const bool planCompositeActive =
+        planCompositeActionPhase == CenterPivotSequencePhase::Centering
+        || planCompositeActionPhase == CenterPivotSequencePhase::ApproachFront
+        || planCompositeActionPhase == CenterPivotSequencePhase::Pivot180;
+    const bool centerPivotSequenceActive =
+        centerPivotSequencePhase == CenterPivotSequencePhase::Centering
+        || centerPivotSequencePhase == CenterPivotSequencePhase::ApproachFront
+        || centerPivotSequencePhase == CenterPivotSequencePhase::Pivot180;
+    const bool deadEndRecoveryActive = deadEndRecoveryPhase != DeadEndRecoveryPhase::None;
+    const bool navReady =
+        nav_core_action() == NAV_ACTION_NONE
+        && (nav_core_state() == NAV_STATE_IDLE || nav_core_state() == NAV_STATE_DONE);
+    if (!navReady || planExecutionEnabled || planCompositeActive
+        || centerPivotSequenceActive || deadEndRecoveryActive) {
+        return false;
+    }
+
+    RobotSensors sensors = buildRobotSensorsSnapshot();
+    switch (action) {
+    case NAV_FRONTIER_ENTRY_ACTION_ADVANCE_LINE:
+        resetNavigationYawReference();
+        nav_core_start_advance_until_rear_black();
+        break;
+    case NAV_FRONTIER_ENTRY_ACTION_SMOOTH_LEFT:
+        resetNavigationYawReferenceForSmoothStart();
+        nav_core_start_smooth_turn_left(&sensors);
+        break;
+    case NAV_FRONTIER_ENTRY_ACTION_SMOOTH_RIGHT:
+        resetNavigationYawReferenceForSmoothStart();
+        nav_core_start_smooth_turn_right(&sensors);
+        break;
+    case NAV_FRONTIER_ENTRY_ACTION_UNSUPPORTED_BACK_EXIT:
+    case NAV_FRONTIER_ENTRY_ACTION_NONE:
+    default:
+        return false;
+    }
+
+    return nav_core_action() != NAV_ACTION_NONE;
 }
 
 void MainWindow::advancePlanExecutionIfNeeded()
@@ -8228,7 +8417,7 @@ void MainWindow::showControlTuningDialog()
                                       static_cast<int>(
                                           NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_SHADOW));
     mode1ReturnStrategyCombo->addItem(
-        "GOAL_DIRECTED_RETURN_LIMITED_EXECUTION (plan only)",
+        "GOAL_DIRECTED_RETURN_LIMITED_EXECUTION",
         static_cast<int>(
             NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION));
     goalDirectedRequiredImprovementSpin->setRange(0, 20);
@@ -8237,7 +8426,7 @@ void MainWindow::showControlTuningDialog()
     goalDirectedMaxUnknownCellsSpin->setRange(0, 255);
     goalDirectedMaxUnknownEdgesSpin->setRange(0, 255);
     goalDirectedMinSafeReturnSpin->setRange(0, 100);
-    goalDirectedMaxAttemptsSpin->setRange(0, 10);
+    goalDirectedMaxAttemptsSpin->setRange(0, 255);
     batchFastTicksPerUiUpdateSpin->setRange(1, 50);
     batchFastTicksPerUiUpdateSpin->setSingleStep(1);
 
@@ -8498,17 +8687,18 @@ void MainWindow::showControlTuningDialog()
         nav_core_reset_smooth_yaw_carry_defaults();
         nav_core_reset_wall_caution_defaults();
         mode1RequiredSpecialCount = 3;
-        mode1ReturnStrategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+        mode1ReturnStrategy =
+            NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN_LIMITED_EXECUTION;
         goalDirectedRequiredImprovement = 0;
         goalDirectedMinSafeReturnCostToTry = 4;
-        goalDirectedMaxFrontierAttempts = 1;
+        goalDirectedMaxFrontierAttempts = 32;
         goalDirectedAllowBackEntry = false;
         goalDirectedUnknownCellPenalty = 0;
         goalDirectedUnknownWallPenalty = 0;
         goalDirectedMaxUnknownCells = 32;
         goalDirectedMaxUnknownEdges = 32;
         setMode1MissionEnabled(true);
-        batchFastModeEnabled = false;
+        batchFastModeEnabled = true;
         batchFastTicksPerUiUpdate = 10;
         loadCurrentValues();
         updateTelemetryPanel();

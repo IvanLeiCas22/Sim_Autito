@@ -65,9 +65,24 @@ typedef enum NavSupervisorGoalDirectedFallbackReason {
     NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_PLAN_NOT_LOADED,
     NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_REACHED_ENTRY_NOT_CONNECTED,
     NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_CELL_MISMATCH,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ATTEMPTS_EXHAUSTED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_NEIGHBOR_INVALID,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_NEIGHBOR_VISITED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_FRONTIER_WALL_BLOCKED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_UNSUPPORTED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_NAV_NOT_READY,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_START_FAILED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_DID_NOT_ADVANCE,
+    NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_ENTRY_CELL_MISMATCH,
     NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_CANCELLED,
     NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_GOAL_UNKNOWN_ERROR
 } NavSupervisorGoalDirectedFallbackReason;
+
+typedef enum NavSupervisorGoalDirectedRevalidationStatus {
+    NAV_SUPERVISOR_GOAL_DIRECTED_REVALIDATION_STATUS_IDLE = 0,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REVALIDATION_STATUS_OK,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REVALIDATION_STATUS_FAILED
+} NavSupervisorGoalDirectedRevalidationStatus;
 
 typedef enum NavSupervisorGoalDirectedDecision {
     NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_NONE = 0,
@@ -201,6 +216,7 @@ typedef struct NavSupervisorDebugSnapshot {
     bool goal_directed_entry_connected;
     uint8_t goal_directed_attempt_count;
     uint8_t goal_directed_max_attempts;
+    uint8_t goal_directed_attempts_remaining;
     int8_t goal_directed_exec_frontier_cell_x;
     int8_t goal_directed_exec_frontier_cell_y;
     int8_t goal_directed_exec_frontier_neighbor_x;
@@ -211,6 +227,19 @@ typedef struct NavSupervisorDebugSnapshot {
     uint16_t goal_directed_exec_route_length;
     int8_t goal_directed_exec_found_arrival_dir;
     NavSupervisorGoalDirectedFallbackReason goal_directed_exec_fallback_reason;
+    bool goal_directed_entry_requested;
+    bool goal_directed_entry_started;
+    bool goal_directed_entry_completed;
+    NavFrontierEntryAction goal_directed_exec_entry_action;
+    NavFrontierEntryRelative goal_directed_exec_entry_relative;
+    bool goal_directed_exec_entry_supported;
+    int8_t goal_directed_entry_start_cell_x;
+    int8_t goal_directed_entry_start_cell_y;
+    int8_t goal_directed_entry_target_cell_x;
+    int8_t goal_directed_entry_target_cell_y;
+    NavSupervisorGoalDirectedFallbackReason goal_directed_entry_done_reason;
+    NavSupervisorGoalDirectedRevalidationStatus goal_directed_revalidation_status;
+    NavSupervisorGoalDirectedFallbackReason goal_directed_revalidation_reason;
     bool goal_directed_shadow_evaluated;
     bool goal_directed_shadow_valid;
     NavSupervisorGoalDirectedDecision goal_directed_shadow_decision;
@@ -274,6 +303,11 @@ typedef struct NavSupervisorOutput {
     int8_t goal_plan_target_y;
     uint8_t goal_plan_target_dir_mask;
     bool request_goal_execute_frontier_plan;
+    bool request_goal_enter_frontier;
+    NavFrontierEntryAction goal_entry_action;
+    int8_t goal_entry_target_x;
+    int8_t goal_entry_target_y;
+    NavMapDirection goal_entry_exit_dir;
     bool request_stop_autonomy;
     bool request_stop_motors;
 } NavSupervisorOutput;
@@ -326,6 +360,7 @@ void nav_supervisor_notify_goal_frontier_route_status(NavRouteStatus status,
                                                       bool plan_loaded,
                                                       uint16_t route_length,
                                                       int8_t found_arrival_dir);
+void nav_supervisor_notify_goal_entry_started(bool success);
 void nav_supervisor_update_smart(const NavSupervisorSmartInput *input,
                                  NavSupervisorSmartOutput *output);
 void nav_supervisor_notify_frontier_route_status(NavRouteStatus status, bool plan_loaded);
