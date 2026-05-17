@@ -1,0 +1,36 @@
+{
+    "batch_fast_mode_enabled": true,
+    "batch_fast_ticks_per_ui_update": 10,
+    "batch_reason": "MANUAL_CANCELLED",
+    "batch_sim_time_s": 155.50000000000355,
+    "batch_speedup": 9.997428314260226,
+    "batch_state": "BATCH_CANCELLED",
+    "batch_wall_time_s": 15.554,
+    "cancelled_count": 1,
+    "fail_count": 0,
+    "pass_count": 0,
+    "results": [
+        {
+            "autocheck_failure_count": 0,
+            "autocheck_failures": [
+            ],
+            "autocheck_warning_count": 0,
+            "final_done_reason": "NONE",
+            "final_mission_state": "SEARCH_SPECIALS",
+            "found_specials": 0,
+            "index": 1,
+            "map_name": "goal_frontier_entry_08.json",
+            "map_path": "C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/data/test_maps/goal_frontier_entry_08.json",
+            "reason": "MANUAL_CANCELLED",
+            "required_specials": 3,
+            "result": "CANCELLED",
+            "returned_to_start": true,
+            "sim_time_s": 155.50000000000355,
+            "ticks": 15550
+        }
+    ],
+    "runner": "mode1_batch",
+    "timeout_count": 0,
+    "timestamp": "2026-05-17T17:41:04",
+    "total_maps": 8
+}

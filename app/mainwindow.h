@@ -167,7 +167,11 @@ public:
         FinalScanReadyNoPlanRequest,
         ReturnPlanRequestNoEffect,
         ReturnExecuteRequestNoEffect,
-        MissionConsumedNoFrontierButAutonomyStopped
+        MissionConsumedNoFrontierButAutonomyStopped,
+        GoalPlanRequestNoEffect,
+        GoalExecuteRequestNoEffect,
+        GoalEnterRequestNoAction,
+        GoalEntryStuck
     };
 
     enum class NavigationAutocheckPendingKind {
@@ -175,7 +179,11 @@ public:
         FinalScanReadyWaitingPlanRequest,
         ReturnPlanRequestWaitingResult,
         ReturnExecuteRequestWaitingPlanExecution,
-        MissionConsumedNoFrontierWaitingAutonomyAlive
+        MissionConsumedNoFrontierWaitingAutonomyAlive,
+        GoalPlanRequestWaitingResult,
+        GoalExecuteRequestWaitingPlanExecution,
+        GoalEnterRequestWaitingActionStart,
+        GoalEntryWaitingCompletion
     };
 
     enum class Mode1BatchRunnerState {
@@ -1034,8 +1042,13 @@ private:
         double simTimeS = 0.0;
         NavSupervisorState supervisorState = NAV_SUPERVISOR_STATE_IDLE;
         NavSupervisorDoneReason supervisorDoneReason = NAV_SUPERVISOR_DONE_REASON_NONE;
+        NavSupervisorReturnStrategy returnStrategy =
+            NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
         bool requestPlanReturnToStart = false;
         bool requestExecuteReturnPlan = false;
+        bool requestGoalPlanToFrontier = false;
+        bool requestGoalExecuteFrontierPlan = false;
+        bool requestGoalEnterFrontier = false;
         bool blockSmartActions = false;
         Mode1MissionState mode1MissionState = Mode1MissionState::Disabled;
         uint16_t foundSpecials = 0;
@@ -1052,6 +1065,16 @@ private:
         NavPlanAction planNextAction = NAV_PLAN_ACTION_NONE;
         NavState navCoreState = NAV_STATE_IDLE;
         NavAction navCoreAction = NAV_ACTION_NONE;
+        NavRouteStatus goalExecPlanStatus = NAV_ROUTE_STATUS_IDLE;
+        bool goalExecPlanLoaded = false;
+        NavSupervisorGoalDirectedFallbackReason goalExecFallbackReason =
+            NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_NONE;
+        bool goalExecEntryStarted = false;
+        bool goalExecEntryCompleted = false;
+        int8_t goalExecEntryTargetCellX = -1;
+        int8_t goalExecEntryTargetCellY = -1;
+        int8_t currentCellX = -1;
+        int8_t currentCellY = -1;
         bool basicNavAutonomyEnabled = false;
         bool autoModeEnabled = false;
         bool mode1ConsumedSmartNoFrontier = false;
@@ -1094,7 +1117,7 @@ private:
         QString autocheckLastFailure;
         std::vector<NavigationAutocheckFailureRecord> autocheckFailures;
     };
-    static constexpr uint8_t kNavigationAutocheckMaxPendingChecks = 8;
+    static constexpr uint8_t kNavigationAutocheckMaxPendingChecks = 16;
     bool navigationAutocheckEnabled = true;
     NavigationAutocheckState navigationAutocheckState = NavigationAutocheckState::Idle;
     NavigationAutocheckPendingCheck navigationAutocheckPendingChecks

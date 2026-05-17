@@ -1220,6 +1220,14 @@ QString navigationAutocheckFailureReasonText(
         return "RETURN_EXECUTE_REQUEST_NO_EFFECT";
     case MainWindow::NavigationAutocheckFailureReason::MissionConsumedNoFrontierButAutonomyStopped:
         return "MISSION_CONSUMED_NO_FRONTIER_BUT_AUTONOMY_STOPPED";
+    case MainWindow::NavigationAutocheckFailureReason::GoalPlanRequestNoEffect:
+        return "GOAL_PLAN_REQUEST_NO_EFFECT";
+    case MainWindow::NavigationAutocheckFailureReason::GoalExecuteRequestNoEffect:
+        return "GOAL_EXECUTE_REQUEST_NO_EFFECT";
+    case MainWindow::NavigationAutocheckFailureReason::GoalEnterRequestNoAction:
+        return "GOAL_ENTER_REQUEST_NO_ACTION";
+    case MainWindow::NavigationAutocheckFailureReason::GoalEntryStuck:
+        return "GOAL_ENTRY_STUCK";
     }
 
     return "UNKNOWN";
@@ -9109,14 +9117,21 @@ MainWindow::NavigationAutocheckSnapshot MainWindow::buildNavigationAutocheckSnap
     nav_supervisor_get_debug(&supervisorDebug);
     NavPlanDebugSnapshot planDebug = {};
     nav_core_plan_debug_snapshot(&planDebug);
+    NavMapDebugSnapshot mapDebug = {};
+    nav_core_get_map_debug(&mapDebug);
 
     NavigationAutocheckSnapshot snapshot;
     snapshot.tick = testRunnerTicks;
     snapshot.simTimeS = testRunnerSimTimeS;
     snapshot.supervisorState = supervisorDebug.state;
     snapshot.supervisorDoneReason = supervisorDebug.done_reason;
+    snapshot.returnStrategy = supervisorDebug.return_strategy;
     snapshot.requestPlanReturnToStart = supervisorLastOutput.request_plan_return_to_start;
     snapshot.requestExecuteReturnPlan = supervisorLastOutput.request_execute_return_plan;
+    snapshot.requestGoalPlanToFrontier = supervisorLastOutput.request_goal_plan_to_frontier;
+    snapshot.requestGoalExecuteFrontierPlan =
+        supervisorLastOutput.request_goal_execute_frontier_plan;
+    snapshot.requestGoalEnterFrontier = supervisorLastOutput.request_goal_enter_frontier;
     snapshot.blockSmartActions = supervisorLastOutput.block_smart_actions;
     snapshot.mode1MissionState = mode1MissionState;
     snapshot.foundSpecials = supervisorDebug.found_special_count;
@@ -9135,6 +9150,15 @@ MainWindow::NavigationAutocheckSnapshot MainWindow::buildNavigationAutocheckSnap
     snapshot.planNextAction = planDebug.next_action;
     snapshot.navCoreState = nav_core_state();
     snapshot.navCoreAction = nav_core_action();
+    snapshot.goalExecPlanStatus = supervisorDebug.goal_directed_exec_plan_status;
+    snapshot.goalExecPlanLoaded = supervisorDebug.goal_directed_exec_plan_loaded;
+    snapshot.goalExecFallbackReason = supervisorDebug.goal_directed_exec_fallback_reason;
+    snapshot.goalExecEntryStarted = supervisorDebug.goal_directed_entry_started;
+    snapshot.goalExecEntryCompleted = supervisorDebug.goal_directed_entry_completed;
+    snapshot.goalExecEntryTargetCellX = supervisorDebug.goal_directed_entry_target_cell_x;
+    snapshot.goalExecEntryTargetCellY = supervisorDebug.goal_directed_entry_target_cell_y;
+    snapshot.currentCellX = mapDebug.cell_x;
+    snapshot.currentCellY = mapDebug.cell_y;
     snapshot.basicNavAutonomyEnabled = basicNavAutonomyEnabled;
     snapshot.autoModeEnabled = autoModeEnabled;
     snapshot.mode1ConsumedSmartNoFrontier = mode1ConsumedSmartNoFrontier;
@@ -9265,6 +9289,21 @@ void MainWindow::advanceNavigationAutocheckIfNeeded()
         return;
     }
 
+    const bool supervisorSafeOrTerminal =
+        snapshot.supervisorState == NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_RETURN_SAFE_EXECUTE
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_DONE
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_ERROR
+        || snapshot.supervisorState == NAV_SUPERVISOR_STATE_CANCELLED;
+    const bool goalFallbackActive =
+        snapshot.goalExecFallbackReason
+        != NAV_SUPERVISOR_GOAL_DIRECTED_FALLBACK_REASON_NONE;
+    const bool goalEntryTargetReached =
+        snapshot.goalExecEntryTargetCellX >= 0
+        && snapshot.goalExecEntryTargetCellY >= 0
+        && snapshot.currentCellX == snapshot.goalExecEntryTargetCellX
+        && snapshot.currentCellY == snapshot.goalExecEntryTargetCellY;
+
     if (snapshot.supervisorState == NAV_SUPERVISOR_STATE_FINAL_SAFE_SCAN_RETURN_PLAN
         && snapshot.finalSafeScanReturnReady
         && !snapshot.atStartCell
@@ -9291,6 +9330,31 @@ void MainWindow::advanceNavigationAutocheckIfNeeded()
             NavigationAutocheckPendingKind::MissionConsumedNoFrontierWaitingAutonomyAlive,
             snapshot.tick,
             snapshot.tick + 2u);
+    }
+    if (snapshot.requestGoalPlanToFrontier) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalPlanRequestWaitingResult,
+            snapshot.tick,
+            snapshot.tick + 5u);
+    }
+    if (snapshot.requestGoalExecuteFrontierPlan) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalExecuteRequestWaitingPlanExecution,
+            snapshot.tick,
+            snapshot.tick + 5u);
+    }
+    if (snapshot.requestGoalEnterFrontier) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalEnterRequestWaitingActionStart,
+            snapshot.tick,
+            snapshot.tick + 5u);
+    }
+    if (snapshot.goalExecEntryStarted && !snapshot.goalExecEntryCompleted
+        && !goalEntryTargetReached && !goalFallbackActive && !supervisorSafeOrTerminal) {
+        startNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalEntryWaitingCompletion,
+            snapshot.tick,
+            snapshot.tick + 1500u);
     }
 
     if (snapshot.requestPlanReturnToStart || snapshot.finalSafeScanReturnPlanRequested) {
@@ -9319,6 +9383,25 @@ void MainWindow::advanceNavigationAutocheckIfNeeded()
         closeNavigationAutocheckPending(
             NavigationAutocheckPendingKind::MissionConsumedNoFrontierWaitingAutonomyAlive);
     }
+    if (snapshot.goalExecPlanStatus != NAV_ROUTE_STATUS_IDLE || snapshot.goalExecPlanLoaded
+        || goalFallbackActive || supervisorSafeOrTerminal) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalPlanRequestWaitingResult);
+    }
+    if (snapshot.planExecutionEnabled || goalFallbackActive || supervisorSafeOrTerminal) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalExecuteRequestWaitingPlanExecution);
+    }
+    if (snapshot.goalExecEntryStarted || snapshot.navCoreAction != NAV_ACTION_NONE
+        || goalFallbackActive || supervisorSafeOrTerminal) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalEnterRequestWaitingActionStart);
+    }
+    if (snapshot.goalExecEntryCompleted || goalEntryTargetReached
+        || goalFallbackActive || supervisorSafeOrTerminal) {
+        closeNavigationAutocheckPending(
+            NavigationAutocheckPendingKind::GoalEntryWaitingCompletion);
+    }
 
     for (uint8_t i = 0; i < kNavigationAutocheckMaxPendingChecks; ++i) {
         NavigationAutocheckPendingCheck &pending = navigationAutocheckPendingChecks[i];
@@ -9346,6 +9429,26 @@ void MainWindow::advanceNavigationAutocheckIfNeeded()
             reason =
                 NavigationAutocheckFailureReason::MissionConsumedNoFrontierButAutonomyStopped;
             message = "mission consumed SMART NO_FRONTIER but autonomy/state did not remain valid";
+            break;
+        case NavigationAutocheckPendingKind::GoalPlanRequestWaitingResult:
+            reason = NavigationAutocheckFailureReason::GoalPlanRequestNoEffect;
+            message =
+                "goal plan request did not update route status, load a plan, or fallback";
+            break;
+        case NavigationAutocheckPendingKind::GoalExecuteRequestWaitingPlanExecution:
+            reason = NavigationAutocheckFailureReason::GoalExecuteRequestNoEffect;
+            message =
+                "goal execute request did not enable plan execution or fallback";
+            break;
+        case NavigationAutocheckPendingKind::GoalEnterRequestWaitingActionStart:
+            reason = NavigationAutocheckFailureReason::GoalEnterRequestNoAction;
+            message =
+                "goal enter request did not start a navigation action or fallback";
+            break;
+        case NavigationAutocheckPendingKind::GoalEntryWaitingCompletion:
+            reason = NavigationAutocheckFailureReason::GoalEntryStuck;
+            message =
+                "goal entry started but did not complete, reach target cell, or fallback";
             break;
         case NavigationAutocheckPendingKind::None:
             break;
