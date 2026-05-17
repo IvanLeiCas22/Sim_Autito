@@ -71,14 +71,14 @@ Config portable actual en `NavDiagonalGuidanceConfig`.
 
 | Parametro | Valor actual |
 | --- | ---: |
-| `diag_kp` | `30` |
+| `diag_kp` | `70` |
 | `diag_kd` | `0` |
 | `diag_correction_limit_pwm` | `1000` |
 | `diag_error_scale_num` | `1` |
 | `diag_error_scale_den` | `1` |
 | `diag_error_scale` | `1/1` |
 | `diag_target_mm` | `99` |
-| `smooth_final_mode` | `SETPOINT` |
+| `smooth_final_mode` | `HOLD_RELATIVE` |
 
 El control diagonal usa control propio separado del wall PD lateral. En el tuning actual queda en P-only (`diag_kd = 0`).
 
@@ -87,7 +87,9 @@ Uso actual:
 - En `NAV_SMOOTH_PHASE_POST_YAW_SEEK_REAR_LINE`:
   - prioridad a diagonales;
   - modo configurable `HOLD_RELATIVE` o `SETPOINT`;
-  - default actual: `SETPOINT`.
+  - default actual: `HOLD_RELATIVE`, mas estable en curvas encadenadas que
+    `SETPOINT` porque conserva una referencia relativa en vez de perseguir una
+    diagonal absoluta.
 - En preview diagonal de `ADVANCE_LINE`:
   - se activa por latch cuando el sensor frontal detecta la cinta siguiente;
   - requiere armado previo para evitar que una marca especial central dispare el latch.
@@ -114,6 +116,12 @@ Fuentes actuales de candidato:
 - `NAV_YAW_CARRY_CANDIDATE_ADVANCE_FRONT_DIAG_PREVIEW`.
 
 La compensacion se consume solo antes de iniciar `SMOOTH_LEFT` o `SMOOTH_RIGHT`.
+
+Nota: `smooth_yaw_carry_only_setpoint` mantiene su nombre historico. Con el default
+`smooth_final_mode = HOLD_RELATIVE`, ese flag sigue limitando candidatos generados por
+la fase final smooth a fuentes diagonales tipo setpoint; el carry desde
+`ADVANCE_FRONT_DIAG_PREVIEW` puede seguir generandose cuando
+`smooth_yaw_carry_allow_advance_preview = true`.
 
 ## Wall caution
 

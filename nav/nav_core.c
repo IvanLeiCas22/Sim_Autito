@@ -23,7 +23,7 @@ enum {
     NAV_DIAG_GUIDANCE_TARGET_MM_DEFAULT = 99,
     NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT = 1,
     NAV_DIAG_GUIDANCE_ERROR_SCALE_DEN_DEFAULT = 1,
-    NAV_DIAG_GUIDANCE_KP_PWM_PER_MM_DEFAULT = 30,
+    NAV_DIAG_GUIDANCE_KP_PWM_PER_MM_DEFAULT = 70,
     NAV_DIAG_GUIDANCE_KD_PWM_PER_MM_DEFAULT = 0,
     NAV_DIAG_GUIDANCE_OUTPUT_LIMIT_PWM_DEFAULT = 1000,
     NAV_SMOOTH_TARGET_YAW_RATE_DEFAULT_DEG_S = 120,
@@ -210,7 +210,7 @@ static NavDiagonalGuidanceConfig diagonal_guidance_config = {
     NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT,
     NAV_DIAG_GUIDANCE_ERROR_SCALE_DEN_DEFAULT,
     NAV_DIAG_GUIDANCE_TARGET_MM_DEFAULT,
-    NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT
+    NAV_SMOOTH_FINAL_DIAG_MODE_HOLD_RELATIVE
 };
 static q16_16_t diagonal_guidance_previous_error_q16 = 0;
 static bool diagonal_guidance_has_previous_error = false;
@@ -645,7 +645,7 @@ static void reset_diagonal_guidance_config(void)
     diagonal_guidance_config.error_scale_num = NAV_DIAG_GUIDANCE_ERROR_SCALE_NUM_DEFAULT;
     diagonal_guidance_config.error_scale_den = NAV_DIAG_GUIDANCE_ERROR_SCALE_DEN_DEFAULT;
     diagonal_guidance_config.target_mm = NAV_DIAG_GUIDANCE_TARGET_MM_DEFAULT;
-    diagonal_guidance_config.smooth_final_mode = NAV_SMOOTH_FINAL_DIAG_MODE_SETPOINT;
+    diagonal_guidance_config.smooth_final_mode = NAV_SMOOTH_FINAL_DIAG_MODE_HOLD_RELATIVE;
 }
 
 static void reset_wall_caution_config(void)

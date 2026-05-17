@@ -1,0 +1,35 @@
+{
+  "name": "stress_center_pivot_cases",
+  "cells": {
+    "width": 7,
+    "height": 6,
+    "cell_size_mm": 200
+  },
+  "start": {
+    "x_mm": 100,
+    "y_mm": 300,
+    "yaw_deg": 0
+  },
+  "special_cells": [
+    { "cell_x": 1, "cell_y": 1, "size_mm": 120 },
+    { "cell_x": 2, "cell_y": 1, "size_mm": 120 },
+    { "cell_x": 4, "cell_y": 3, "size_mm": 120 }
+  ],
+  "walls": [
+    { "cell_x": 2, "cell_y": 0, "dir": "S" },
+    { "cell_x": 3, "cell_y": 0, "dir": "S" },
+    { "cell_x": 4, "cell_y": 0, "dir": "S" },
+    { "cell_x": 2, "cell_y": 1, "dir": "E" },
+    { "cell_x": 2, "cell_y": 1, "dir": "S" },
+    { "cell_x": 4, "cell_y": 1, "dir": "E" },
+    { "cell_x": 5, "cell_y": 1, "dir": "S" },
+    { "cell_x": 1, "cell_y": 2, "dir": "N" },
+    { "cell_x": 1, "cell_y": 3, "dir": "S" },
+    { "cell_x": 3, "cell_y": 3, "dir": "N" },
+    { "cell_x": 3, "cell_y": 3, "dir": "E" },
+    { "cell_x": 5, "cell_y": 4, "dir": "N" },
+    { "cell_x": 5, "cell_y": 4, "dir": "E" },
+    { "cell_x": 4, "cell_y": 3, "dir": "N" },
+    { "cell_x": 4, "cell_y": 3, "dir": "S" }
+  ]
+}
