@@ -11,7 +11,7 @@ Checklist para validar navegacion, batch y retorno inteligente.
 - `Y`: overlay logico.
 - `I`: flood hacia inicio.
 - `Shift+F`: evaluacion debug de fronteras flood.
-- `F3`: tuning, mision modo 1, goal-directed return y Fast Batch Mode.
+- `F3`: tuning, mision modo 1, goal-directed return y Fast Test Mode.
 
 ## Defaults actuales a verificar en F3
 
@@ -24,8 +24,8 @@ Checklist para validar navegacion, batch y retorno inteligente.
 - `goal_min_safe_return_cost_to_try = 4`.
 - `goal_max_shortcut_attempts = 32`.
 - `goal_allow_back_entry = false`.
-- `batch_fast_mode_enabled = true`.
-- `batch_fast_ticks_per_ui_update = 10`.
+- `test_fast_mode_enabled = true`.
+- `test_fast_ticks_per_ui_update = 10`.
 
 `goal_max_shortcut_attempts` cuenta entradas reales a celdas desconocidas. No significa
 que el robot planifique muchas celdas desconocidas de una vez.
@@ -45,20 +45,22 @@ que el robot planifique muchas celdas desconocidas de una vez.
 Los mapas en `data/test_maps` deben ser esperados a `PASS`. Mapas `expected_fail`,
 experimentales o de desarrollo deben vivir en otra carpeta o estar documentados aparte.
 
-## Fast Batch Mode
+## Fast Test Mode
 
-Activo por defecto para `Shift+B`.
+Activo por defecto para `Shift+R` y `Shift+B`.
 
 Propiedades:
 
 - no cambia `kSimulationDtS`;
 - no multiplica velocidades;
 - no cambia control/PID;
-- ejecuta varios ticks logicos por actualizacion UI;
+- ejecuta varios ticks logicos por actualizacion UI mientras corre el test runner o el
+  batch runner;
 - sensores, `nav_core`, `nav_supervisor`, test runner, batch runner, autocheck y
   movimiento fisico siguen corriendo en cada tick logico.
 
-Solo se reduce la frecuencia de UI/overlay/telemetria.
+Solo se reduce la frecuencia de UI/overlay/telemetria. No se aplica a navegacion manual
+libre por ahora.
 
 Si batch normal y fast producen resultados distintos para los mismos mapas, investigar
 antes de confiar en el resultado fast.
@@ -96,6 +98,9 @@ CSV:
 - `batch_wall_time_s`;
 - `batch_sim_time_s`;
 - `batch_speedup`.
+
+Los nombres exportados siguen siendo `batch_fast_*` porque el speedup exportado es del
+batch. En F3/telemetria visible se muestran como `test_fast_*`.
 
 JSON:
 

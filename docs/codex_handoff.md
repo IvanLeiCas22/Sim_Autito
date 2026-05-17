@@ -15,7 +15,7 @@ Funciona actualmente:
 - `FINAL_SAFE_SCAN_RETURN`;
 - Test Runner `Shift+R`;
 - Batch Runner `Shift+B`;
-- Fast Batch Mode;
+- Fast Test Mode para `Shift+R` y `Shift+B`;
 - Navigation Autocheck Monitor;
 - export CSV/JSON en `data/test_results`;
 - `nav_goal_return_eval`;
@@ -36,7 +36,7 @@ Adaptador Qt/UI/simulacion:
 - reset de yaw del simulador;
 - overlay y telemetria;
 - carga JSON;
-- test runner, batch runner, fast batch y autocheck.
+- test runner, batch runner, fast test mode y autocheck.
 
 No debe volver a concentrar logica de decision de mision/SMART/retorno.
 
@@ -84,8 +84,8 @@ El retorno inteligente:
 - `goal_min_safe_return_cost_to_try = 4`.
 - `goal_max_shortcut_attempts = 32`.
 - `goal_allow_back_entry = false`.
-- `batch_fast_mode_enabled = true`.
-- `batch_fast_ticks_per_ui_update = 10`.
+- `test_fast_mode_enabled = true`.
+- `test_fast_ticks_per_ui_update = 10`.
 
 ## Testing recomendado
 

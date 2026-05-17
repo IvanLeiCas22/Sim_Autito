@@ -29,7 +29,7 @@ El modo 1:
 - resetea yaw del simulador antes de acciones;
 - carga JSON;
 - dibuja overlay/telemetria;
-- corre `Shift+R`, `Shift+B`, Fast Batch Mode y Autocheck.
+- corre `Shift+R`, `Shift+B`, Fast Test Mode y Autocheck.
 
 ### `nav_core`
 
@@ -196,8 +196,8 @@ Fallback seguro ante:
 - `goal_min_safe_return_cost_to_try = 4`.
 - `goal_max_shortcut_attempts = 32`.
 - `goal_allow_back_entry = false`.
-- `batch_fast_mode_enabled = true`.
-- `batch_fast_ticks_per_ui_update = 10`.
+- `test_fast_mode_enabled = true`.
+- `test_fast_ticks_per_ui_update = 10`.
 
 `goal_max_unknown_cells/edges` afecta al evaluador optimista. `goal_max_shortcut_attempts`
 limita entradas reales a celdas desconocidas; siempre se recalcula entre entradas.
@@ -239,8 +239,8 @@ puros no detectan especiales.
 
 - `Shift+R`: test modo 1 del mapa actual.
 - `Shift+B`: batch de `data/test_maps`.
-- Fast Batch Mode: activo por defecto; ejecuta multiples ticks logicos por refresh UI
-  sin cambiar `kSimulationDtS`.
+- Fast Test Mode: activo por defecto para `Shift+R` y `Shift+B`; ejecuta multiples
+  ticks logicos por refresh UI sin cambiar `kSimulationDtS`.
 - Autocheck Monitor: corre durante tests y batch; puede fallar un mapa con
   `AUTOCHECK_FAIL`.
 - Export CSV/JSON: `data/test_results/`, con wall time, sim time, speedup y failures

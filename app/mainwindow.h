@@ -324,6 +324,7 @@ private:
     void finishMode1BatchRunner(Mode1BatchRunnerState state,
                                 Mode1BatchRunnerReason reason);
     void restoreMode1BatchRunnerConfig();
+    bool mode1TestRunnerIsActive() const;
     bool mode1BatchRunnerIsActive() const;
     bool batchFastModeActive() const;
     void resetNavigationAutocheckForMap();

@@ -169,7 +169,7 @@ Actual:
 
 - `Shift+R`;
 - `Shift+B`;
-- Fast Batch Mode;
+- Fast Test Mode;
 - Autocheck Monitor;
 - export CSV/JSON.
 

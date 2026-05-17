@@ -88,7 +88,7 @@ Con defaults actuales:
 
 - `return_strategy = GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`;
 - `goal_max_shortcut_attempts = 32`;
-- `batch_fast_mode_enabled = true`;
+- `test_fast_mode_enabled = true`;
 - `required_special_count` recomendado: `3`.
 
 Para que un mapa entre en `data/test_maps`:

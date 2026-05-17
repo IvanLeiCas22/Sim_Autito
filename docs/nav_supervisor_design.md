@@ -160,8 +160,8 @@ arranque de primitiva, mismatch de celda o cancelacion.
 - `goal_min_safe_return_cost_to_try = 4`.
 - `goal_max_shortcut_attempts = 32`.
 - `goal_allow_back_entry = false`.
-- `batch_fast_mode_enabled = true`.
-- `batch_fast_ticks_per_ui_update = 10`.
+- `test_fast_mode_enabled = true`.
+- `test_fast_ticks_per_ui_update = 10`.
 
 Notas:
 

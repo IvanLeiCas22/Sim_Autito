@@ -4116,14 +4116,14 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("batch_runner_results_json_path:", batchRunnerResultsJsonPathValueLabel);
     layout->addRow("batch_runner_export_ok:", batchRunnerExportOkValueLabel);
     layout->addRow("batch_runner_export_error:", batchRunnerExportErrorValueLabel);
-    auto *batchFastTitle = new QLabel("<b>Batch fast mode</b>", panel);
+    auto *batchFastTitle = new QLabel("<b>Test fast mode</b>", panel);
     layout->addRow(batchFastTitle);
-    layout->addRow("batch_fast_mode_enabled:", batchFastModeEnabledValueLabel);
-    layout->addRow("batch_fast_ticks_per_ui_update:", batchFastTicksPerUiUpdateValueLabel);
-    layout->addRow("batch_fast_active:", batchFastActiveValueLabel);
-    layout->addRow("batch_fast_ticks_executed_last_timer:",
+    layout->addRow("test_fast_mode_enabled:", batchFastModeEnabledValueLabel);
+    layout->addRow("test_fast_ticks_per_ui_update:", batchFastTicksPerUiUpdateValueLabel);
+    layout->addRow("test_fast_active:", batchFastActiveValueLabel);
+    layout->addRow("test_fast_ticks_executed_last_timer:",
                    batchFastTicksExecutedLastTimerValueLabel);
-    layout->addRow("batch_fast_ui_flush_count:", batchFastUiFlushCountValueLabel);
+    layout->addRow("test_fast_ui_flush_count:", batchFastUiFlushCountValueLabel);
     layout->addRow("batch_wall_time_s:", batchWallTimeValueLabel);
     layout->addRow("batch_sim_time_s:", batchSimTimeValueLabel);
     layout->addRow("batch_speedup:", batchSpeedupValueLabel);
@@ -4455,8 +4455,8 @@ void MainWindow::createTelemetryPanel()
     addPinnedRow("batch_runner_fail_count", batchRunnerFailCountValueLabel);
     addPinnedRow("batch_runner_export_ok", batchRunnerExportOkValueLabel);
     addPinnedRow("batch_runner_results_csv_path", batchRunnerResultsCsvPathValueLabel);
-    addPinnedRow("batch_fast_active", batchFastActiveValueLabel);
-    addPinnedRow("batch_fast_ticks_per_ui_update", batchFastTicksPerUiUpdateValueLabel);
+    addPinnedRow("test_fast_active", batchFastActiveValueLabel);
+    addPinnedRow("test_fast_ticks_per_ui_update", batchFastTicksPerUiUpdateValueLabel);
     addPinnedRow("batch_speedup", batchSpeedupValueLabel);
     addPinnedRow("batch_wall_time_s", batchWallTimeValueLabel);
     addPinnedRow("autocheck_failure_count", autocheckFailureCountValueLabel);
@@ -8353,7 +8353,7 @@ void MainWindow::showControlTuningDialog()
     auto *goalDirectedMaxAttemptsSpin = new QSpinBox(mode1MissionGroup);
     auto *goalDirectedAllowBackEntryCheck = new QCheckBox(mode1MissionGroup);
 
-    auto *batchRunnerGroup = new QGroupBox("Batch runner", &dialog);
+    auto *batchRunnerGroup = new QGroupBox("Test runners", &dialog);
     auto *batchRunnerLayout = new QFormLayout(batchRunnerGroup);
     auto *batchFastModeEnabledCheck = new QCheckBox(batchRunnerGroup);
     auto *batchFastTicksPerUiUpdateSpin = new QSpinBox(batchRunnerGroup);
@@ -8485,8 +8485,8 @@ void MainWindow::showControlTuningDialog()
                                goalDirectedMaxAttemptsSpin);
     mode1MissionLayout->addRow("goal_allow_back_entry:",
                                goalDirectedAllowBackEntryCheck);
-    batchRunnerLayout->addRow("batch_fast_mode_enabled:", batchFastModeEnabledCheck);
-    batchRunnerLayout->addRow("batch_fast_ticks_per_ui_update:",
+    batchRunnerLayout->addRow("test_fast_mode_enabled:", batchFastModeEnabledCheck);
+    batchRunnerLayout->addRow("test_fast_ticks_per_ui_update:",
                               batchFastTicksPerUiUpdateSpin);
 
     scrollLayout->addWidget(turnGroup);
@@ -9382,6 +9382,10 @@ void MainWindow::startMode1TestRunner(bool restoreConfigOnFinish)
     testRunnerReturnedToStart = false;
     testRunnerFinalMissionState = Mode1MissionState::Disabled;
     testRunnerFinalDoneReason = Mode1MissionDoneReason::None;
+    if (!mode1BatchRunnerIsActive()) {
+        batchFastTicksExecutedLastTimer = 0;
+        batchFastUiFlushCount = 0;
+    }
     resetNavigationAutocheckForMap();
 
     if (restoreConfigOnFinish) {
@@ -9577,6 +9581,12 @@ void MainWindow::restoreMode1TestRunnerConfig()
     testRunnerSavedConfigValid = false;
 }
 
+bool MainWindow::mode1TestRunnerIsActive() const
+{
+    return testRunnerState == Mode1TestRunnerState::Prepare
+        || testRunnerState == Mode1TestRunnerState::Running;
+}
+
 bool MainWindow::mode1BatchRunnerIsActive() const
 {
     return batchRunnerState == Mode1BatchRunnerState::DiscoverMaps
@@ -9589,7 +9599,8 @@ bool MainWindow::mode1BatchRunnerIsActive() const
 
 bool MainWindow::batchFastModeActive() const
 {
-    return batchFastModeEnabled && mode1BatchRunnerIsActive();
+    return batchFastModeEnabled
+        && (mode1BatchRunnerIsActive() || mode1TestRunnerIsActive());
 }
 
 void MainWindow::toggleMode1BatchRunner()

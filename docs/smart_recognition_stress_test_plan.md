@@ -13,7 +13,7 @@ Para cada mapa:
    `F3`.
 5. Para probar modo 1 completo, dejar los defaults actuales:
    `GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`, `goal_max_shortcut_attempts = 32` y
-   Fast Batch Mode activo.
+   Fast Test Mode activo.
 6. Activar `auto_mode` con `M`.
 7. Presionar `Space` para correr simulacion.
 8. Activar autonomia con `B`.
