@@ -44,9 +44,60 @@ typedef struct NavSupervisorStateData {
     bool final_safe_scan_return_found_required_during_return;
     bool final_safe_scan_return_ready;
     NavSupervisorFinalSafeScanReturnWaitReason final_safe_scan_return_wait_reason;
+    bool goal_directed_shadow_evaluated;
+    bool goal_directed_shadow_valid;
+    NavSupervisorGoalDirectedDecision goal_directed_shadow_decision;
+    NavSupervisorGoalDirectedReason goal_directed_shadow_reason;
+    NavRouteStatus goal_directed_safe_return_status;
+    uint16_t goal_directed_safe_return_cost;
+    NavFrontierEvalStatus goal_directed_frontier_eval_status;
+    bool goal_directed_best_found;
+    int8_t goal_directed_best_cell_x;
+    int8_t goal_directed_best_cell_y;
+    int8_t goal_directed_best_neighbor_x;
+    int8_t goal_directed_best_neighbor_y;
+    NavMapDirection goal_directed_best_exit_dir;
+    uint8_t goal_directed_supported_arrival_dir_mask;
+    NavRouteStatus goal_directed_frontier_route_status;
+    uint16_t goal_directed_frontier_route_cost;
+    int8_t goal_directed_frontier_found_arrival_dir;
+    NavFrontierEntryAction goal_directed_entry_action;
+    bool goal_directed_entry_supported;
+    uint16_t goal_directed_estimated_after_entry_to_start;
+    uint16_t goal_directed_attempt_total_score;
+    int32_t goal_directed_score_improvement;
 } NavSupervisorStateData;
 
 static NavSupervisorStateData supervisor_state;
+
+static void clear_goal_directed_shadow_debug(void)
+{
+    supervisor_state.goal_directed_shadow_evaluated = false;
+    supervisor_state.goal_directed_shadow_valid = false;
+    supervisor_state.goal_directed_shadow_decision =
+        NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_NONE;
+    supervisor_state.goal_directed_shadow_reason =
+        NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NONE;
+    supervisor_state.goal_directed_safe_return_status = NAV_ROUTE_STATUS_IDLE;
+    supervisor_state.goal_directed_safe_return_cost = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_frontier_eval_status =
+        NAV_FRONTIER_EVAL_STATUS_IDLE;
+    supervisor_state.goal_directed_best_found = false;
+    supervisor_state.goal_directed_best_cell_x = -1;
+    supervisor_state.goal_directed_best_cell_y = -1;
+    supervisor_state.goal_directed_best_neighbor_x = -1;
+    supervisor_state.goal_directed_best_neighbor_y = -1;
+    supervisor_state.goal_directed_best_exit_dir = NAV_DIR_NORTH;
+    supervisor_state.goal_directed_supported_arrival_dir_mask = 0u;
+    supervisor_state.goal_directed_frontier_route_status = NAV_ROUTE_STATUS_IDLE;
+    supervisor_state.goal_directed_frontier_route_cost = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_frontier_found_arrival_dir = -1;
+    supervisor_state.goal_directed_entry_action = NAV_FRONTIER_ENTRY_ACTION_NONE;
+    supervisor_state.goal_directed_entry_supported = false;
+    supervisor_state.goal_directed_estimated_after_entry_to_start = 0u;
+    supervisor_state.goal_directed_attempt_total_score = NAV_SUPERVISOR_COST_INF;
+    supervisor_state.goal_directed_score_improvement = 0;
+}
 
 static NavSupervisorConfig nav_supervisor_default_config(void)
 {
@@ -54,6 +105,10 @@ static NavSupervisorConfig nav_supervisor_default_config(void)
     config.mission_enabled = false;
     config.required_special_count = NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_DEFAULT;
     config.return_strategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+    config.goal_directed_score_margin = 2u;
+    config.goal_directed_min_safe_return_cost_to_try = 4u;
+    config.goal_directed_max_frontier_attempts = 1u;
+    config.goal_directed_allow_back_entry = false;
     return config;
 }
 
@@ -83,6 +138,12 @@ static NavSupervisorConfig sanitize_config(const NavSupervisorConfig *config)
         sanitized.required_special_count = NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_MAX;
     }
     sanitized.return_strategy = sanitize_return_strategy(config->return_strategy);
+    sanitized.goal_directed_score_margin = config->goal_directed_score_margin;
+    sanitized.goal_directed_min_safe_return_cost_to_try =
+        config->goal_directed_min_safe_return_cost_to_try;
+    sanitized.goal_directed_max_frontier_attempts =
+        config->goal_directed_max_frontier_attempts;
+    sanitized.goal_directed_allow_back_entry = config->goal_directed_allow_back_entry;
     return sanitized;
 }
 
@@ -99,6 +160,7 @@ void nav_supervisor_reset(void)
     supervisor_state.safe_return_cost = NAV_SUPERVISOR_COST_INF;
     supervisor_state.flood_best_score = NAV_SUPERVISOR_COST_INF;
     supervisor_state.return_route_status = 0;
+    clear_goal_directed_shadow_debug();
 }
 
 void nav_supervisor_init(void)
@@ -175,6 +237,47 @@ void nav_supervisor_get_debug(NavSupervisorDebugSnapshot *snapshot)
     snapshot->final_safe_scan_return_ready = supervisor_state.final_safe_scan_return_ready;
     snapshot->final_safe_scan_return_wait_reason =
         supervisor_state.final_safe_scan_return_wait_reason;
+    snapshot->goal_directed_shadow_enabled =
+        supervisor_state.config.return_strategy
+        == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN;
+    snapshot->goal_directed_shadow_evaluated =
+        supervisor_state.goal_directed_shadow_evaluated;
+    snapshot->goal_directed_shadow_valid = supervisor_state.goal_directed_shadow_valid;
+    snapshot->goal_directed_shadow_decision =
+        supervisor_state.goal_directed_shadow_decision;
+    snapshot->goal_directed_shadow_reason = supervisor_state.goal_directed_shadow_reason;
+    snapshot->goal_directed_safe_return_status =
+        supervisor_state.goal_directed_safe_return_status;
+    snapshot->goal_directed_safe_return_cost =
+        supervisor_state.goal_directed_safe_return_cost;
+    snapshot->goal_directed_frontier_eval_status =
+        supervisor_state.goal_directed_frontier_eval_status;
+    snapshot->goal_directed_best_found = supervisor_state.goal_directed_best_found;
+    snapshot->goal_directed_best_cell_x = supervisor_state.goal_directed_best_cell_x;
+    snapshot->goal_directed_best_cell_y = supervisor_state.goal_directed_best_cell_y;
+    snapshot->goal_directed_best_neighbor_x =
+        supervisor_state.goal_directed_best_neighbor_x;
+    snapshot->goal_directed_best_neighbor_y =
+        supervisor_state.goal_directed_best_neighbor_y;
+    snapshot->goal_directed_best_exit_dir = supervisor_state.goal_directed_best_exit_dir;
+    snapshot->goal_directed_supported_arrival_dir_mask =
+        supervisor_state.goal_directed_supported_arrival_dir_mask;
+    snapshot->goal_directed_frontier_route_status =
+        supervisor_state.goal_directed_frontier_route_status;
+    snapshot->goal_directed_frontier_route_cost =
+        supervisor_state.goal_directed_frontier_route_cost;
+    snapshot->goal_directed_frontier_found_arrival_dir =
+        supervisor_state.goal_directed_frontier_found_arrival_dir;
+    snapshot->goal_directed_entry_action = supervisor_state.goal_directed_entry_action;
+    snapshot->goal_directed_entry_supported = supervisor_state.goal_directed_entry_supported;
+    snapshot->goal_directed_estimated_after_entry_to_start =
+        supervisor_state.goal_directed_estimated_after_entry_to_start;
+    snapshot->goal_directed_attempt_total_score =
+        supervisor_state.goal_directed_attempt_total_score;
+    snapshot->goal_directed_score_margin =
+        supervisor_state.config.goal_directed_score_margin;
+    snapshot->goal_directed_score_improvement =
+        supervisor_state.goal_directed_score_improvement;
 }
 
 void nav_supervisor_cancel(void)
@@ -224,6 +327,7 @@ static void set_inactive_state_from_input(const NavSupervisorInput *input)
     supervisor_state.final_safe_scan_return_found_required_during_return = false;
     supervisor_state.final_safe_scan_return_ready = false;
     supervisor_state.final_safe_scan_return_wait_reason = NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_NONE;
+    clear_goal_directed_shadow_debug();
 }
 
 static void sync_input_snapshot(const NavSupervisorInput *input)
@@ -239,6 +343,225 @@ static void sync_input_snapshot(const NavSupervisorInput *input)
     supervisor_state.final_safe_scan_return_ready = input->final_safe_scan_return_ready;
     supervisor_state.final_safe_scan_return_wait_reason =
         input->final_safe_scan_return_wait_reason;
+}
+
+static uint16_t supervisor_manhattan(int8_t ax, int8_t ay, int8_t bx, int8_t by)
+{
+    const int dx = (int)ax - (int)bx;
+    const int dy = (int)ay - (int)by;
+    const int abs_dx = dx < 0 ? -dx : dx;
+    const int abs_dy = dy < 0 ? -dy : dy;
+    return (uint16_t)(abs_dx + abs_dy);
+}
+
+static NavFrontierEntryAction goal_directed_entry_action_for_dirs(
+    NavMapDirection arrival_dir,
+    NavMapDirection exit_dir)
+{
+    const uint8_t delta =
+        (uint8_t)(((uint8_t)exit_dir - (uint8_t)arrival_dir) & 3u);
+    switch (delta) {
+    case 0u:
+        return NAV_FRONTIER_ENTRY_ACTION_ADVANCE_LINE;
+    case 1u:
+        return NAV_FRONTIER_ENTRY_ACTION_SMOOTH_RIGHT;
+    case 2u:
+        return NAV_FRONTIER_ENTRY_ACTION_UNSUPPORTED_BACK_EXIT;
+    case 3u:
+        return NAV_FRONTIER_ENTRY_ACTION_SMOOTH_LEFT;
+    }
+
+    return NAV_FRONTIER_ENTRY_ACTION_NONE;
+}
+
+static bool goal_directed_entry_action_is_supported(NavFrontierEntryAction action,
+                                                    bool allow_back_entry)
+{
+    return action == NAV_FRONTIER_ENTRY_ACTION_ADVANCE_LINE
+        || action == NAV_FRONTIER_ENTRY_ACTION_SMOOTH_RIGHT
+        || action == NAV_FRONTIER_ENTRY_ACTION_SMOOTH_LEFT
+        || (allow_back_entry
+            && action == NAV_FRONTIER_ENTRY_ACTION_UNSUPPORTED_BACK_EXIT);
+}
+
+static uint8_t goal_directed_supported_arrival_dir_mask(NavMapDirection exit_dir,
+                                                        bool allow_back_entry)
+{
+    uint8_t mask = 0u;
+    for (uint8_t dir_value = 0u; dir_value < 4u; ++dir_value) {
+        const NavMapDirection arrival_dir = (NavMapDirection)dir_value;
+        const NavFrontierEntryAction action =
+            goal_directed_entry_action_for_dirs(arrival_dir, exit_dir);
+        if (goal_directed_entry_action_is_supported(action, allow_back_entry)) {
+            mask |= (uint8_t)(1u << dir_value);
+        }
+    }
+    return mask;
+}
+
+static void goal_directed_set_fallback(NavSupervisorGoalDirectedReason reason)
+{
+    supervisor_state.goal_directed_shadow_decision =
+        NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_FALLBACK_SAFE;
+    supervisor_state.goal_directed_shadow_reason = reason;
+}
+
+static void evaluate_goal_directed_return_shadow(const NavSupervisorInput *input)
+{
+    clear_goal_directed_shadow_debug();
+    supervisor_state.goal_directed_shadow_evaluated = true;
+
+    if (supervisor_state.config.return_strategy
+        != NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN) {
+        goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_DISABLED);
+        return;
+    }
+
+    if (input == 0 || !input->start_cell_valid) {
+        goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_START_CELL);
+        return;
+    }
+
+    if (supervisor_state.config.goal_directed_max_frontier_attempts == 0u) {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED);
+        return;
+    }
+
+    const NavRouteStatus safe_status =
+        nav_core_route_eval_to_cell_with_dir_mask(input->start_cell_x,
+                                                  input->start_cell_y,
+                                                  0x0Fu);
+    NavRouteEvalDebugSnapshot safe_debug = {0};
+    nav_core_route_eval_get_debug(&safe_debug);
+    supervisor_state.goal_directed_safe_return_status = safe_status;
+    if (safe_status == NAV_ROUTE_STATUS_FOUND) {
+        supervisor_state.goal_directed_safe_return_cost = safe_debug.route_length;
+    }
+
+    if (safe_status != NAV_ROUTE_STATUS_FOUND) {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_NOT_FOUND);
+        return;
+    }
+
+    if (safe_debug.route_length
+        < supervisor_state.config.goal_directed_min_safe_return_cost_to_try) {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_TOO_SHORT);
+        return;
+    }
+
+    const NavFloodStatus flood_status =
+        nav_flood_fill_to_cell(input->start_cell_x, input->start_cell_y);
+    if (flood_status != NAV_FLOOD_STATUS_OK) {
+        goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FLOOD_FAILED);
+        return;
+    }
+
+    NavFrontierEvalConfig frontier_config = {0};
+    frontier_config.start_cell_x = input->start_cell_x;
+    frontier_config.start_cell_y = input->start_cell_y;
+    frontier_config.score_margin = supervisor_state.config.goal_directed_score_margin;
+    frontier_config.allow_back_entry =
+        supervisor_state.config.goal_directed_allow_back_entry;
+    const NavFrontierEvalStatus frontier_status =
+        nav_frontier_eval_evaluate(&frontier_config);
+    NavFrontierEvalDebugSnapshot frontier_debug = {0};
+    nav_frontier_eval_get_debug(&frontier_debug);
+    supervisor_state.goal_directed_frontier_eval_status = frontier_status;
+    supervisor_state.goal_directed_best_found = frontier_debug.best_found;
+    supervisor_state.goal_directed_best_cell_x = frontier_debug.best_cell_x;
+    supervisor_state.goal_directed_best_cell_y = frontier_debug.best_cell_y;
+    supervisor_state.goal_directed_best_neighbor_x =
+        frontier_debug.best_neighbor_cell_x;
+    supervisor_state.goal_directed_best_neighbor_y =
+        frontier_debug.best_neighbor_cell_y;
+    supervisor_state.goal_directed_best_exit_dir = frontier_debug.best_exit_dir;
+
+    if (!frontier_debug.best_found) {
+        goal_directed_set_fallback(NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_FRONTIER);
+        return;
+    }
+
+    const uint8_t arrival_mask =
+        goal_directed_supported_arrival_dir_mask(
+            frontier_debug.best_exit_dir,
+            supervisor_state.config.goal_directed_allow_back_entry);
+    supervisor_state.goal_directed_supported_arrival_dir_mask = arrival_mask;
+    if (arrival_mask == 0u) {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ENTRY_UNSUPPORTED);
+        return;
+    }
+
+    const NavRouteStatus frontier_route_status =
+        nav_core_route_eval_to_cell_with_dir_mask(frontier_debug.best_cell_x,
+                                                  frontier_debug.best_cell_y,
+                                                  arrival_mask);
+    NavRouteEvalDebugSnapshot frontier_route_debug = {0};
+    nav_core_route_eval_get_debug(&frontier_route_debug);
+    supervisor_state.goal_directed_frontier_route_status = frontier_route_status;
+    supervisor_state.goal_directed_frontier_found_arrival_dir =
+        frontier_route_debug.found_target_dir;
+    if (frontier_route_status == NAV_ROUTE_STATUS_FOUND) {
+        supervisor_state.goal_directed_frontier_route_cost =
+            frontier_route_debug.route_length;
+    }
+
+    if (frontier_route_status != NAV_ROUTE_STATUS_FOUND
+        || frontier_route_debug.found_target_dir < 0
+        || frontier_route_debug.found_target_dir > 3) {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_ROUTE_NOT_FOUND);
+        return;
+    }
+
+    const NavMapDirection found_arrival_dir =
+        (NavMapDirection)frontier_route_debug.found_target_dir;
+    const NavFrontierEntryAction entry_action =
+        goal_directed_entry_action_for_dirs(found_arrival_dir,
+                                            frontier_debug.best_exit_dir);
+    supervisor_state.goal_directed_entry_action = entry_action;
+    supervisor_state.goal_directed_entry_supported =
+        goal_directed_entry_action_is_supported(
+            entry_action,
+            supervisor_state.config.goal_directed_allow_back_entry);
+    if (!supervisor_state.goal_directed_entry_supported) {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ENTRY_UNSUPPORTED);
+        return;
+    }
+
+    const uint16_t estimated_after_entry =
+        supervisor_manhattan(frontier_debug.best_neighbor_cell_x,
+                             frontier_debug.best_neighbor_cell_y,
+                             input->start_cell_x,
+                             input->start_cell_y);
+    supervisor_state.goal_directed_estimated_after_entry_to_start =
+        estimated_after_entry;
+
+    const uint32_t attempt_score =
+        (uint32_t)frontier_route_debug.route_length + 1u + (uint32_t)estimated_after_entry;
+    supervisor_state.goal_directed_attempt_total_score =
+        attempt_score > NAV_SUPERVISOR_COST_INF
+            ? NAV_SUPERVISOR_COST_INF
+            : (uint16_t)attempt_score;
+    supervisor_state.goal_directed_score_improvement =
+        (int32_t)safe_debug.route_length
+        - (int32_t)supervisor_state.goal_directed_attempt_total_score;
+    supervisor_state.goal_directed_shadow_valid = true;
+
+    if (attempt_score + (uint32_t)supervisor_state.config.goal_directed_score_margin
+        < (uint32_t)safe_debug.route_length) {
+        supervisor_state.goal_directed_shadow_decision =
+            NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_TRY_FRONTIER;
+        supervisor_state.goal_directed_shadow_reason =
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_BETTER_THAN_SAFE_RETURN;
+    } else {
+        goal_directed_set_fallback(
+            NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_NOT_BETTER_THAN_SAFE_RETURN);
+    }
 }
 
 static NavSupervisorDoneReason done_reason_from_return_route_status(int16_t route_status)
@@ -488,6 +811,12 @@ void nav_supervisor_update(const NavSupervisorInput *input, NavSupervisorOutput 
         }
 
         supervisor_state.waiting_action_done = false;
+        if (!supervisor_state.return_plan_requested
+            && !supervisor_state.goal_directed_shadow_evaluated
+            && supervisor_state.config.return_strategy
+                == NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN) {
+            evaluate_goal_directed_return_shadow(input);
+        }
         supervisor_state.state = NAV_SUPERVISOR_STATE_RETURN_SAFE_PLAN;
         supervisor_state.return_to_start_active = true;
         if (!supervisor_state.return_plan_requested) {

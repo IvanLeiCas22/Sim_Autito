@@ -789,6 +789,18 @@ private:
     QLabel *supervisorRequestExecuteReturnValueLabel = nullptr;
     QLabel *supervisorBlockSmartActionsValueLabel = nullptr;
     QLabel *supervisorActiveAsSourceValueLabel = nullptr;
+    QLabel *goalDirectedShadowEnabledValueLabel = nullptr;
+    QLabel *goalDirectedShadowEvaluatedValueLabel = nullptr;
+    QLabel *goalDirectedShadowDecisionValueLabel = nullptr;
+    QLabel *goalDirectedShadowReasonValueLabel = nullptr;
+    QLabel *goalDirectedSafeReturnCostValueLabel = nullptr;
+    QLabel *goalDirectedFrontierRouteStatusValueLabel = nullptr;
+    QLabel *goalDirectedFrontierRouteCostValueLabel = nullptr;
+    QLabel *goalDirectedAttemptTotalScoreValueLabel = nullptr;
+    QLabel *goalDirectedScoreImprovementValueLabel = nullptr;
+    QLabel *goalDirectedBestCellValueLabel = nullptr;
+    QLabel *goalDirectedBestNeighborValueLabel = nullptr;
+    QLabel *goalDirectedEntryActionValueLabel = nullptr;
     QLabel *floodStatusValueLabel = nullptr;
     QLabel *floodValidValueLabel = nullptr;
     QLabel *floodGoalCellValueLabel = nullptr;
@@ -932,6 +944,12 @@ private:
     Mode1MissionDoneReason mode1MissionDoneReason = Mode1MissionDoneReason::None;
     uint16_t mode1RequiredSpecialCount = 3;
     uint16_t mode1FoundSpecialCount = 0;
+    NavSupervisorReturnStrategy mode1ReturnStrategy =
+        NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+    uint16_t goalDirectedScoreMargin = 2;
+    uint16_t goalDirectedMinSafeReturnCostToTry = 4;
+    uint8_t goalDirectedMaxFrontierAttempts = 1;
+    bool goalDirectedAllowBackEntry = false;
     bool mode1PlanCancelledAfterRequiredFound = false;
     bool mode1PlanWasActiveWhenRequiredFound = false;
     uint16_t mode1SearchCompleteLatchedAtCount = 0;
@@ -962,6 +980,8 @@ private:
     bool testRunnerSavedConfigValid = false;
     bool testRunnerSavedMissionEnabled = true;
     uint16_t testRunnerSavedRequiredSpecialCount = 3;
+    NavSupervisorReturnStrategy testRunnerSavedReturnStrategy =
+        NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
     NavPolicy testRunnerSavedPolicy = NAV_POLICY_SMART_RECOGNITION;
     struct NavigationAutocheckSnapshot {
         uint32_t tick = 0;
@@ -1066,6 +1086,8 @@ private:
     bool batchRunnerSavedConfigValid = false;
     bool batchRunnerSavedMissionEnabled = true;
     uint16_t batchRunnerSavedRequiredSpecialCount = 3;
+    NavSupervisorReturnStrategy batchRunnerSavedReturnStrategy =
+        NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
     NavPolicy batchRunnerSavedPolicy = NAV_POLICY_SMART_RECOGNITION;
     bool floodFrontierEvalValid = false;
     uint16_t floodFrontierCandidateCount = 0;

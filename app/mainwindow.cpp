@@ -1363,6 +1363,82 @@ QString supervisorDoneReasonText(NavSupervisorDoneReason reason)
     return "UNKNOWN";
 }
 
+QString supervisorReturnStrategyText(NavSupervisorReturnStrategy strategy)
+{
+    switch (strategy) {
+    case NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN:
+        return "SAFE_KNOWN_RETURN";
+    case NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN:
+        return "GOAL_DIRECTED_RETURN";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalDirectedDecisionText(NavSupervisorGoalDirectedDecision decision)
+{
+    switch (decision) {
+    case NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_TRY_FRONTIER:
+        return "TRY_FRONTIER";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_FALLBACK_SAFE:
+        return "FALLBACK_SAFE";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalDirectedReasonText(NavSupervisorGoalDirectedReason reason)
+{
+    switch (reason) {
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NONE:
+        return "NONE";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_DISABLED:
+        return "DISABLED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_START_CELL:
+        return "NO_START_CELL";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FLOOD_FAILED:
+        return "FLOOD_FAILED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_FRONTIER:
+        return "NO_FRONTIER";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_NOT_FOUND:
+        return "SAFE_RETURN_NOT_FOUND";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_TOO_SHORT:
+        return "SAFE_RETURN_TOO_SHORT";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ENTRY_UNSUPPORTED:
+        return "ENTRY_UNSUPPORTED";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_ROUTE_NOT_FOUND:
+        return "FRONTIER_ROUTE_NOT_FOUND";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_NOT_BETTER_THAN_SAFE_RETURN:
+        return "FRONTIER_NOT_BETTER_THAN_SAFE_RETURN";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_BETTER_THAN_SAFE_RETURN:
+        return "FRONTIER_BETTER_THAN_SAFE_RETURN";
+    case NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED:
+        return "ATTEMPT_BUDGET_EXHAUSTED";
+    }
+
+    return "UNKNOWN";
+}
+
+QString goalDirectedEntryActionText(NavFrontierEntryAction action)
+{
+    switch (action) {
+    case NAV_FRONTIER_ENTRY_ACTION_NONE:
+        return "NONE";
+    case NAV_FRONTIER_ENTRY_ACTION_ADVANCE_LINE:
+        return "ADVANCE_LINE";
+    case NAV_FRONTIER_ENTRY_ACTION_SMOOTH_RIGHT:
+        return "SMOOTH_RIGHT";
+    case NAV_FRONTIER_ENTRY_ACTION_SMOOTH_LEFT:
+        return "SMOOTH_LEFT";
+    case NAV_FRONTIER_ENTRY_ACTION_UNSUPPORTED_BACK_EXIT:
+        return "UNSUPPORTED_BACK_EXIT";
+    }
+
+    return "UNKNOWN";
+}
+
 QString floodFrontierDecisionText(MainWindow::FloodFrontierDecision decision)
 {
     switch (decision) {
@@ -2795,6 +2871,18 @@ void MainWindow::createTelemetryPanel()
     supervisorRequestExecuteReturnValueLabel = new QLabel(panel);
     supervisorBlockSmartActionsValueLabel = new QLabel(panel);
     supervisorActiveAsSourceValueLabel = new QLabel(panel);
+    goalDirectedShadowEnabledValueLabel = new QLabel(panel);
+    goalDirectedShadowEvaluatedValueLabel = new QLabel(panel);
+    goalDirectedShadowDecisionValueLabel = new QLabel(panel);
+    goalDirectedShadowReasonValueLabel = new QLabel(panel);
+    goalDirectedSafeReturnCostValueLabel = new QLabel(panel);
+    goalDirectedFrontierRouteStatusValueLabel = new QLabel(panel);
+    goalDirectedFrontierRouteCostValueLabel = new QLabel(panel);
+    goalDirectedAttemptTotalScoreValueLabel = new QLabel(panel);
+    goalDirectedScoreImprovementValueLabel = new QLabel(panel);
+    goalDirectedBestCellValueLabel = new QLabel(panel);
+    goalDirectedBestNeighborValueLabel = new QLabel(panel);
+    goalDirectedEntryActionValueLabel = new QLabel(panel);
     floodStatusValueLabel = new QLabel(panel);
     floodValidValueLabel = new QLabel(panel);
     floodGoalCellValueLabel = new QLabel(panel);
@@ -3265,6 +3353,18 @@ void MainWindow::createTelemetryPanel()
     configureTelemetryValueLabel(supervisorRequestExecuteReturnValueLabel);
     configureTelemetryValueLabel(supervisorBlockSmartActionsValueLabel);
     configureTelemetryValueLabel(supervisorActiveAsSourceValueLabel);
+    configureTelemetryValueLabel(goalDirectedShadowEnabledValueLabel);
+    configureTelemetryValueLabel(goalDirectedShadowEvaluatedValueLabel);
+    configureTelemetryValueLabel(goalDirectedShadowDecisionValueLabel);
+    configureTelemetryValueLabel(goalDirectedShadowReasonValueLabel);
+    configureTelemetryValueLabel(goalDirectedSafeReturnCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedFrontierRouteStatusValueLabel);
+    configureTelemetryValueLabel(goalDirectedFrontierRouteCostValueLabel);
+    configureTelemetryValueLabel(goalDirectedAttemptTotalScoreValueLabel);
+    configureTelemetryValueLabel(goalDirectedScoreImprovementValueLabel);
+    configureTelemetryValueLabel(goalDirectedBestCellValueLabel);
+    configureTelemetryValueLabel(goalDirectedBestNeighborValueLabel);
+    configureTelemetryValueLabel(goalDirectedEntryActionValueLabel);
     configureTelemetryValueLabel(floodStatusValueLabel);
     configureTelemetryValueLabel(floodValidValueLabel);
     configureTelemetryValueLabel(floodGoalCellValueLabel);
@@ -3866,6 +3966,24 @@ void MainWindow::createTelemetryPanel()
     layout->addRow("supervisor_block_smart_actions:", supervisorBlockSmartActionsValueLabel);
     layout->addRow("supervisor_active_as_source:",
                    supervisorActiveAsSourceValueLabel);
+    auto *goalDirectedTitle = new QLabel("<b>Goal-directed return shadow</b>", panel);
+    layout->addRow(goalDirectedTitle);
+    layout->addRow("goal_directed_shadow_enabled:", goalDirectedShadowEnabledValueLabel);
+    layout->addRow("goal_directed_shadow_evaluated:", goalDirectedShadowEvaluatedValueLabel);
+    layout->addRow("goal_directed_shadow_decision:", goalDirectedShadowDecisionValueLabel);
+    layout->addRow("goal_directed_shadow_reason:", goalDirectedShadowReasonValueLabel);
+    layout->addRow("goal_directed_safe_return_cost:", goalDirectedSafeReturnCostValueLabel);
+    layout->addRow("goal_directed_frontier_route_status:",
+                   goalDirectedFrontierRouteStatusValueLabel);
+    layout->addRow("goal_directed_frontier_route_cost:",
+                   goalDirectedFrontierRouteCostValueLabel);
+    layout->addRow("goal_directed_attempt_total_score:",
+                   goalDirectedAttemptTotalScoreValueLabel);
+    layout->addRow("goal_directed_score_improvement:",
+                   goalDirectedScoreImprovementValueLabel);
+    layout->addRow("goal_directed_best_cell:", goalDirectedBestCellValueLabel);
+    layout->addRow("goal_directed_best_neighbor:", goalDirectedBestNeighborValueLabel);
+    layout->addRow("goal_directed_entry_action:", goalDirectedEntryActionValueLabel);
     layout->addRow("flood_status:", floodStatusValueLabel);
     layout->addRow("flood_valid:", floodValidValueLabel);
     layout->addRow("flood_goal_cell:", floodGoalCellValueLabel);
@@ -4096,6 +4214,9 @@ void MainWindow::createTelemetryPanel()
                  supervisorActiveAsSourceValueLabel);
     addPinnedRow("supervisor_request_plan_return", supervisorRequestPlanReturnValueLabel);
     addPinnedRow("supervisor_done_reason", supervisorDoneReasonValueLabel);
+    addPinnedRow("goal_directed_shadow_decision", goalDirectedShadowDecisionValueLabel);
+    addPinnedRow("goal_directed_shadow_reason", goalDirectedShadowReasonValueLabel);
+    addPinnedRow("goal_directed_score_improvement", goalDirectedScoreImprovementValueLabel);
     addPinnedRow("flood_status", floodStatusValueLabel);
     addPinnedRow("flood_current_cell_cost", floodCurrentCellCostValueLabel);
     addPinnedRow("flood_fr_candidate_edge_count", floodFrontierCandidateEdgeCountValueLabel);
@@ -5808,6 +5929,68 @@ void MainWindow::updateTelemetryPanel()
         supervisorActiveAsSourceValueLabel->setText(
             supervisorActiveAsSource ? "true" : "false");
     }
+    if (goalDirectedShadowEnabledValueLabel) {
+        goalDirectedShadowEnabledValueLabel->setText(
+            supervisorDebug.goal_directed_shadow_enabled ? "true" : "false");
+    }
+    if (goalDirectedShadowEvaluatedValueLabel) {
+        goalDirectedShadowEvaluatedValueLabel->setText(
+            supervisorDebug.goal_directed_shadow_evaluated ? "true" : "false");
+    }
+    if (goalDirectedShadowDecisionValueLabel) {
+        goalDirectedShadowDecisionValueLabel->setText(
+            goalDirectedDecisionText(supervisorDebug.goal_directed_shadow_decision));
+    }
+    if (goalDirectedShadowReasonValueLabel) {
+        goalDirectedShadowReasonValueLabel->setText(
+            goalDirectedReasonText(supervisorDebug.goal_directed_shadow_reason));
+    }
+    if (goalDirectedSafeReturnCostValueLabel) {
+        goalDirectedSafeReturnCostValueLabel->setText(
+            supervisorDebug.goal_directed_safe_return_cost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(supervisorDebug.goal_directed_safe_return_cost));
+    }
+    if (goalDirectedFrontierRouteStatusValueLabel) {
+        goalDirectedFrontierRouteStatusValueLabel->setText(
+            routeStatusText(supervisorDebug.goal_directed_frontier_route_status));
+    }
+    if (goalDirectedFrontierRouteCostValueLabel) {
+        goalDirectedFrontierRouteCostValueLabel->setText(
+            supervisorDebug.goal_directed_frontier_route_cost == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(supervisorDebug.goal_directed_frontier_route_cost));
+    }
+    if (goalDirectedAttemptTotalScoreValueLabel) {
+        goalDirectedAttemptTotalScoreValueLabel->setText(
+            supervisorDebug.goal_directed_attempt_total_score == NAV_FLOOD_COST_INF
+                ? "INF"
+                : QString::number(supervisorDebug.goal_directed_attempt_total_score));
+    }
+    if (goalDirectedScoreImprovementValueLabel) {
+        goalDirectedScoreImprovementValueLabel->setText(
+            QString::number(supervisorDebug.goal_directed_score_improvement));
+    }
+    if (goalDirectedBestCellValueLabel) {
+        goalDirectedBestCellValueLabel->setText(
+            supervisorDebug.goal_directed_best_found
+                ? QString("(%1,%2)")
+                      .arg(supervisorDebug.goal_directed_best_cell_x)
+                      .arg(supervisorDebug.goal_directed_best_cell_y)
+                : "none");
+    }
+    if (goalDirectedBestNeighborValueLabel) {
+        goalDirectedBestNeighborValueLabel->setText(
+            supervisorDebug.goal_directed_best_found
+                ? QString("(%1,%2)")
+                      .arg(supervisorDebug.goal_directed_best_neighbor_x)
+                      .arg(supervisorDebug.goal_directed_best_neighbor_y)
+                : "none");
+    }
+    if (goalDirectedEntryActionValueLabel) {
+        goalDirectedEntryActionValueLabel->setText(
+            goalDirectedEntryActionText(supervisorDebug.goal_directed_entry_action));
+    }
     NavFloodDebugSnapshot floodDebug = {};
     nav_core_flood_get_debug(&floodDebug);
     if (floodStatusValueLabel) {
@@ -6355,7 +6538,12 @@ void MainWindow::syncNavSupervisorConfig()
         std::clamp<uint16_t>(mode1RequiredSpecialCount,
                              1,
                              NAV_SUPERVISOR_REQUIRED_SPECIAL_COUNT_MAX));
-    config.return_strategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+    config.return_strategy = mode1ReturnStrategy;
+    config.goal_directed_score_margin = goalDirectedScoreMargin;
+    config.goal_directed_min_safe_return_cost_to_try =
+        goalDirectedMinSafeReturnCostToTry;
+    config.goal_directed_max_frontier_attempts = goalDirectedMaxFrontierAttempts;
+    config.goal_directed_allow_back_entry = goalDirectedAllowBackEntry;
     nav_supervisor_set_config(&config);
 }
 
@@ -7605,6 +7793,11 @@ void MainWindow::showControlTuningDialog()
     auto *mode1MissionLayout = new QFormLayout(mode1MissionGroup);
     auto *mode1MissionEnabledCheck = new QCheckBox(mode1MissionGroup);
     auto *mode1RequiredSpecialCountSpin = new QSpinBox(mode1MissionGroup);
+    auto *mode1ReturnStrategyCombo = new QComboBox(mode1MissionGroup);
+    auto *goalDirectedScoreMarginSpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedMinSafeReturnSpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedMaxAttemptsSpin = new QSpinBox(mode1MissionGroup);
+    auto *goalDirectedAllowBackEntryCheck = new QCheckBox(mode1MissionGroup);
 
     auto *batchRunnerGroup = new QGroupBox("Batch runner", &dialog);
     auto *batchRunnerLayout = new QFormLayout(batchRunnerGroup);
@@ -7663,6 +7856,15 @@ void MainWindow::showControlTuningDialog()
     wallCautionLimitSpin->setRange(0, kWallCorrectionLimitPwmMax);
     wallCautionLimitSpin->setSingleStep(50);
     mode1RequiredSpecialCountSpin->setRange(1, 16);
+    mode1ReturnStrategyCombo->addItem("SAFE_KNOWN_RETURN",
+                                      static_cast<int>(
+                                          NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN));
+    mode1ReturnStrategyCombo->addItem("GOAL_DIRECTED_RETURN (shadow)",
+                                      static_cast<int>(
+                                          NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN));
+    goalDirectedScoreMarginSpin->setRange(0, 100);
+    goalDirectedMinSafeReturnSpin->setRange(0, 100);
+    goalDirectedMaxAttemptsSpin->setRange(0, 16);
     batchFastTicksPerUiUpdateSpin->setRange(1, 50);
     batchFastTicksPerUiUpdateSpin->setSingleStep(1);
 
@@ -7704,6 +7906,15 @@ void MainWindow::showControlTuningDialog()
     wallCautionLayout->addRow("correction_limit_pwm:", wallCautionLimitSpin);
     mode1MissionLayout->addRow("mode1_mission_enabled:", mode1MissionEnabledCheck);
     mode1MissionLayout->addRow("required_special_count:", mode1RequiredSpecialCountSpin);
+    mode1MissionLayout->addRow("return_strategy:", mode1ReturnStrategyCombo);
+    mode1MissionLayout->addRow("goal_directed_score_margin:",
+                               goalDirectedScoreMarginSpin);
+    mode1MissionLayout->addRow("goal_directed_min_safe_return_cost_to_try:",
+                               goalDirectedMinSafeReturnSpin);
+    mode1MissionLayout->addRow("goal_directed_max_frontier_attempts:",
+                               goalDirectedMaxAttemptsSpin);
+    mode1MissionLayout->addRow("goal_directed_allow_back_entry:",
+                               goalDirectedAllowBackEntryCheck);
     batchRunnerLayout->addRow("batch_fast_mode_enabled:", batchFastModeEnabledCheck);
     batchRunnerLayout->addRow("batch_fast_ticks_per_ui_update:",
                               batchFastTicksPerUiUpdateSpin);
@@ -7786,6 +7997,18 @@ void MainWindow::showControlTuningDialog()
         mode1MissionEnabledCheck->setChecked(supervisorConfig.mission_enabled);
         mode1RequiredSpecialCountSpin->setValue(
             static_cast<int>(supervisorConfig.required_special_count));
+        const int returnStrategyIndex = mode1ReturnStrategyCombo->findData(
+            static_cast<int>(supervisorConfig.return_strategy));
+        mode1ReturnStrategyCombo->setCurrentIndex(
+            returnStrategyIndex >= 0 ? returnStrategyIndex : 0);
+        goalDirectedScoreMarginSpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_score_margin));
+        goalDirectedMinSafeReturnSpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_min_safe_return_cost_to_try));
+        goalDirectedMaxAttemptsSpin->setValue(
+            static_cast<int>(supervisorConfig.goal_directed_max_frontier_attempts));
+        goalDirectedAllowBackEntryCheck->setChecked(
+            supervisorConfig.goal_directed_allow_back_entry);
         batchFastModeEnabledCheck->setChecked(batchFastModeEnabled);
         batchFastTicksPerUiUpdateSpin->setValue(static_cast<int>(batchFastTicksPerUiUpdate));
     };
@@ -7853,6 +8076,15 @@ void MainWindow::showControlTuningDialog()
 
         mode1RequiredSpecialCount =
             static_cast<uint16_t>(mode1RequiredSpecialCountSpin->value());
+        mode1ReturnStrategy = static_cast<NavSupervisorReturnStrategy>(
+            mode1ReturnStrategyCombo->currentData().toInt());
+        goalDirectedScoreMargin =
+            static_cast<uint16_t>(goalDirectedScoreMarginSpin->value());
+        goalDirectedMinSafeReturnCostToTry =
+            static_cast<uint16_t>(goalDirectedMinSafeReturnSpin->value());
+        goalDirectedMaxFrontierAttempts =
+            static_cast<uint8_t>(goalDirectedMaxAttemptsSpin->value());
+        goalDirectedAllowBackEntry = goalDirectedAllowBackEntryCheck->isChecked();
         setMode1MissionEnabled(mode1MissionEnabledCheck->isChecked());
         batchFastModeEnabled = batchFastModeEnabledCheck->isChecked();
         batchFastTicksPerUiUpdate =
@@ -7869,6 +8101,11 @@ void MainWindow::showControlTuningDialog()
         nav_core_reset_smooth_yaw_carry_defaults();
         nav_core_reset_wall_caution_defaults();
         mode1RequiredSpecialCount = 3;
+        mode1ReturnStrategy = NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN;
+        goalDirectedScoreMargin = 2;
+        goalDirectedMinSafeReturnCostToTry = 4;
+        goalDirectedMaxFrontierAttempts = 1;
+        goalDirectedAllowBackEntry = false;
         setMode1MissionEnabled(true);
         batchFastModeEnabled = false;
         batchFastTicksPerUiUpdate = 10;
@@ -8559,6 +8796,7 @@ void MainWindow::startMode1TestRunner(bool restoreConfigOnFinish)
     if (restoreConfigOnFinish) {
         testRunnerSavedMissionEnabled = mode1MissionEnabled;
         testRunnerSavedRequiredSpecialCount = mode1RequiredSpecialCount;
+        testRunnerSavedReturnStrategy = mode1ReturnStrategy;
         testRunnerSavedPolicy = nav_core_get_policy();
         testRunnerSavedConfigValid = true;
     } else {
@@ -8742,6 +8980,7 @@ void MainWindow::restoreMode1TestRunnerConfig()
     }
 
     mode1RequiredSpecialCount = testRunnerSavedRequiredSpecialCount;
+    mode1ReturnStrategy = testRunnerSavedReturnStrategy;
     setMode1MissionEnabled(testRunnerSavedMissionEnabled);
     nav_core_set_policy(testRunnerSavedPolicy);
     testRunnerSavedConfigValid = false;
@@ -8776,6 +9015,7 @@ void MainWindow::startMode1BatchRunner()
 {
     batchRunnerSavedMissionEnabled = mode1MissionEnabled;
     batchRunnerSavedRequiredSpecialCount = mode1RequiredSpecialCount;
+    batchRunnerSavedReturnStrategy = mode1ReturnStrategy;
     batchRunnerSavedPolicy = nav_core_get_policy();
     batchRunnerSavedConfigValid = true;
 
@@ -9235,6 +9475,7 @@ void MainWindow::restoreMode1BatchRunnerConfig()
     }
 
     mode1RequiredSpecialCount = batchRunnerSavedRequiredSpecialCount;
+    mode1ReturnStrategy = batchRunnerSavedReturnStrategy;
     setMode1MissionEnabled(batchRunnerSavedMissionEnabled);
     nav_core_set_policy(batchRunnerSavedPolicy);
     batchRunnerSavedConfigValid = false;

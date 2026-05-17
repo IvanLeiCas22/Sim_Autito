@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "nav_core.h"
+#include "nav_frontier_eval.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +46,27 @@ typedef enum NavSupervisorReturnStrategy {
     NAV_SUPERVISOR_RETURN_STRATEGY_SAFE_KNOWN_RETURN = 0,
     NAV_SUPERVISOR_RETURN_STRATEGY_GOAL_DIRECTED_RETURN
 } NavSupervisorReturnStrategy;
+
+typedef enum NavSupervisorGoalDirectedDecision {
+    NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_NONE = 0,
+    NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_TRY_FRONTIER,
+    NAV_SUPERVISOR_GOAL_DIRECTED_DECISION_FALLBACK_SAFE
+} NavSupervisorGoalDirectedDecision;
+
+typedef enum NavSupervisorGoalDirectedReason {
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NONE = 0,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_DISABLED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_START_CELL,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FLOOD_FAILED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_NO_FRONTIER,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_NOT_FOUND,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_SAFE_RETURN_TOO_SHORT,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ENTRY_UNSUPPORTED,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_ROUTE_NOT_FOUND,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_NOT_BETTER_THAN_SAFE_RETURN,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_FRONTIER_BETTER_THAN_SAFE_RETURN,
+    NAV_SUPERVISOR_GOAL_DIRECTED_REASON_ATTEMPT_BUDGET_EXHAUSTED
+} NavSupervisorGoalDirectedReason;
 
 typedef enum NavSupervisorFinalSafeScanReturnWaitReason {
     NAV_SUPERVISOR_FINAL_SAFE_SCAN_WAIT_NONE = 0,
@@ -98,6 +120,10 @@ typedef struct NavSupervisorConfig {
     bool mission_enabled;
     uint8_t required_special_count;
     NavSupervisorReturnStrategy return_strategy;
+    uint16_t goal_directed_score_margin;
+    uint16_t goal_directed_min_safe_return_cost_to_try;
+    uint8_t goal_directed_max_frontier_attempts;
+    bool goal_directed_allow_back_entry;
 } NavSupervisorConfig;
 
 typedef struct NavSupervisorDebugSnapshot {
@@ -139,6 +165,30 @@ typedef struct NavSupervisorDebugSnapshot {
     bool final_safe_scan_return_found_required_during_return;
     bool final_safe_scan_return_ready;
     NavSupervisorFinalSafeScanReturnWaitReason final_safe_scan_return_wait_reason;
+    bool goal_directed_shadow_enabled;
+    bool goal_directed_shadow_evaluated;
+    bool goal_directed_shadow_valid;
+    NavSupervisorGoalDirectedDecision goal_directed_shadow_decision;
+    NavSupervisorGoalDirectedReason goal_directed_shadow_reason;
+    NavRouteStatus goal_directed_safe_return_status;
+    uint16_t goal_directed_safe_return_cost;
+    NavFrontierEvalStatus goal_directed_frontier_eval_status;
+    bool goal_directed_best_found;
+    int8_t goal_directed_best_cell_x;
+    int8_t goal_directed_best_cell_y;
+    int8_t goal_directed_best_neighbor_x;
+    int8_t goal_directed_best_neighbor_y;
+    NavMapDirection goal_directed_best_exit_dir;
+    uint8_t goal_directed_supported_arrival_dir_mask;
+    NavRouteStatus goal_directed_frontier_route_status;
+    uint16_t goal_directed_frontier_route_cost;
+    int8_t goal_directed_frontier_found_arrival_dir;
+    NavFrontierEntryAction goal_directed_entry_action;
+    bool goal_directed_entry_supported;
+    uint16_t goal_directed_estimated_after_entry_to_start;
+    uint16_t goal_directed_attempt_total_score;
+    uint16_t goal_directed_score_margin;
+    int32_t goal_directed_score_improvement;
 } NavSupervisorDebugSnapshot;
 
 typedef struct NavSupervisorInput {
