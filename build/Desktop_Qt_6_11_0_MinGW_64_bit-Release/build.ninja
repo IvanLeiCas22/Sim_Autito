@@ -113,6 +113,14 @@ build CMakeFiles/Sim_Autito.dir/nav/nav_flood.c.obj: C_COMPILER__Sim_Autito_unsc
   OBJECT_DIR = CMakeFiles\Sim_Autito.dir
   OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\nav
 
+build CMakeFiles/Sim_Autito.dir/nav/nav_frontier_eval.c.obj: C_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_frontier_eval.c || cmake_object_order_depends_target_Sim_Autito
+  DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
+  DEP_FILE = CMakeFiles\Sim_Autito.dir\nav\nav_frontier_eval.c.obj.d
+  FLAGS = -O3 -DNDEBUG -fdiagnostics-color=always
+  INCLUDES = -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/build/Desktop_Qt_6_11_0_MinGW_64_bit-Release/Sim_Autito_autogen/include -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/app -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/sim -IC:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtCore -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtWidgets -isystem D:/PROGRAMACOMPU/6.11.0/mingw_64/include/QtGui
+  OBJECT_DIR = CMakeFiles\Sim_Autito.dir
+  OBJECT_FILE_DIR = CMakeFiles\Sim_Autito.dir\nav
+
 build CMakeFiles/Sim_Autito.dir/nav/nav_supervisor.c.obj: C_COMPILER__Sim_Autito_unscanned_Release C$:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito/nav/nav_supervisor.c || cmake_object_order_depends_target_Sim_Autito
   DEFINES = -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NEEDS_QMAIN -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DSIM_AUTITO_SOURCE_DIR=\"C:/Users/GAMING/Desktop/Proyectos/Sim_Autito/Sim_Autito\" -DUNICODE -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64
   DEP_FILE = CMakeFiles\Sim_Autito.dir\nav\nav_supervisor.c.obj.d
@@ -137,7 +145,7 @@ build CMakeFiles/Sim_Autito.dir/nav/pid_controller.c.obj: C_COMPILER__Sim_Autito
 #############################################
 # Link the executable Sim_Autito.exe
 
-build Sim_Autito.exe: CXX_EXECUTABLE_LINKER__Sim_Autito_Release CMakeFiles/Sim_Autito.dir/Sim_Autito_autogen/mocs_compilation.cpp.obj CMakeFiles/Sim_Autito.dir/app/main.cpp.obj CMakeFiles/Sim_Autito.dir/app/mainwindow.cpp.obj CMakeFiles/Sim_Autito.dir/sim/sim_world.cpp.obj CMakeFiles/Sim_Autito.dir/sim/sim_robot.cpp.obj CMakeFiles/Sim_Autito.dir/nav/nav_core.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_map.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_flood.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_supervisor.c.obj CMakeFiles/Sim_Autito.dir/nav/pid_controller.c.obj | D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Widgets.a D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Gui.a D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Core.a D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6EntryPoint.a || Sim_Autito_autogen Sim_Autito_autogen_timestamp_deps
+build Sim_Autito.exe: CXX_EXECUTABLE_LINKER__Sim_Autito_Release CMakeFiles/Sim_Autito.dir/Sim_Autito_autogen/mocs_compilation.cpp.obj CMakeFiles/Sim_Autito.dir/app/main.cpp.obj CMakeFiles/Sim_Autito.dir/app/mainwindow.cpp.obj CMakeFiles/Sim_Autito.dir/sim/sim_world.cpp.obj CMakeFiles/Sim_Autito.dir/sim/sim_robot.cpp.obj CMakeFiles/Sim_Autito.dir/nav/nav_core.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_map.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_flood.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_frontier_eval.c.obj CMakeFiles/Sim_Autito.dir/nav/nav_supervisor.c.obj CMakeFiles/Sim_Autito.dir/nav/pid_controller.c.obj | D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Widgets.a D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Gui.a D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Core.a D$:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6EntryPoint.a || Sim_Autito_autogen Sim_Autito_autogen_timestamp_deps
   FLAGS = -O3 -DNDEBUG
   LINK_FLAGS = -mwindows
   LINK_LIBRARIES = D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Widgets.a  D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Gui.a  D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6Core.a  -lmpr  -luserenv  -lmingw32  D:/PROGRAMACOMPU/6.11.0/mingw_64/lib/libQt6EntryPoint.a  -lshell32  -ld3d11  -ldxgi  -ldxguid  -ld3d12  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32

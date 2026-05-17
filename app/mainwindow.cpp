@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include "nav_core.h"
+#include "nav_frontier_eval.h"
 
 #include <QAction>
 #include <QBrush>
@@ -96,78 +97,74 @@ QString csvEscaped(QString value)
     return needsQuotes ? QString("\"%1\"").arg(value) : value;
 }
 
-uint8_t mapWallBit(NavMapDirection dir)
+MainWindow::FloodFrontierDecision floodFrontierDecisionFromNav(
+    NavFrontierEvalDecision decision)
 {
-    switch (dir) {
-    case NAV_DIR_NORTH:
-        return NAV_MAP_WALL_NORTH;
-    case NAV_DIR_EAST:
-        return NAV_MAP_WALL_EAST;
-    case NAV_DIR_SOUTH:
-        return NAV_MAP_WALL_SOUTH;
-    case NAV_DIR_WEST:
-        return NAV_MAP_WALL_WEST;
+    switch (decision) {
+    case NAV_FRONTIER_EVAL_DECISION_TRY_FRONTIER:
+        return MainWindow::FloodFrontierDecision::TryFrontier;
+    case NAV_FRONTIER_EVAL_DECISION_FALLBACK_SAFE:
+        return MainWindow::FloodFrontierDecision::FallbackSafe;
+    case NAV_FRONTIER_EVAL_DECISION_NONE:
+        break;
     }
 
-    return 0;
+    return MainWindow::FloodFrontierDecision::None;
 }
 
-void neighborForDirection(int8_t cellX,
-                          int8_t cellY,
-                          NavMapDirection dir,
-                          int8_t *neighborX,
-                          int8_t *neighborY)
+MainWindow::FloodFrontierDecisionReason floodFrontierDecisionReasonFromNav(
+    NavFrontierEvalDecisionReason reason)
 {
-    *neighborX = cellX;
-    *neighborY = cellY;
-
-    switch (dir) {
-    case NAV_DIR_NORTH:
-        --(*neighborY);
-        break;
-    case NAV_DIR_EAST:
-        ++(*neighborX);
-        break;
-    case NAV_DIR_SOUTH:
-        ++(*neighborY);
-        break;
-    case NAV_DIR_WEST:
-        --(*neighborX);
+    switch (reason) {
+    case NAV_FRONTIER_EVAL_DECISION_REASON_NO_FLOOD:
+        return MainWindow::FloodFrontierDecisionReason::NoFlood;
+    case NAV_FRONTIER_EVAL_DECISION_REASON_CURRENT_CELL_UNREACHABLE:
+        return MainWindow::FloodFrontierDecisionReason::CurrentCellUnreachable;
+    case NAV_FRONTIER_EVAL_DECISION_REASON_NO_FRONTIER:
+        return MainWindow::FloodFrontierDecisionReason::NoFrontier;
+    case NAV_FRONTIER_EVAL_DECISION_REASON_FRONTIER_BETTER_THAN_SAFE_RETURN:
+        return MainWindow::FloodFrontierDecisionReason::FrontierBetterThanSafeReturn;
+    case NAV_FRONTIER_EVAL_DECISION_REASON_FRONTIER_NOT_BETTER_THAN_SAFE_RETURN:
+        return MainWindow::FloodFrontierDecisionReason::FrontierNotBetterThanSafeReturn;
+    case NAV_FRONTIER_EVAL_DECISION_REASON_NONE:
         break;
     }
+
+    return MainWindow::FloodFrontierDecisionReason::None;
 }
 
-MainWindow::FloodFrontierEntryRelative floodEntryRelative(NavMapDirection arrivalDir,
-                                                          NavMapDirection exitDir)
+MainWindow::FloodFrontierEntryRelative floodFrontierEntryRelativeFromNav(
+    NavFrontierEntryRelative relative)
 {
-    const int delta = (static_cast<int>(exitDir) - static_cast<int>(arrivalDir)) & 3;
-    switch (delta) {
-    case 0:
+    switch (relative) {
+    case NAV_FRONTIER_ENTRY_REL_FRONT:
         return MainWindow::FloodFrontierEntryRelative::Front;
-    case 1:
+    case NAV_FRONTIER_ENTRY_REL_RIGHT:
         return MainWindow::FloodFrontierEntryRelative::Right;
-    case 2:
-        return MainWindow::FloodFrontierEntryRelative::Back;
-    case 3:
+    case NAV_FRONTIER_ENTRY_REL_LEFT:
         return MainWindow::FloodFrontierEntryRelative::Left;
+    case NAV_FRONTIER_ENTRY_REL_BACK:
+        return MainWindow::FloodFrontierEntryRelative::Back;
+    case NAV_FRONTIER_ENTRY_REL_NONE:
+        break;
     }
 
     return MainWindow::FloodFrontierEntryRelative::None;
 }
 
-MainWindow::FloodFrontierEntryAction floodEntryActionForRelative(
-    MainWindow::FloodFrontierEntryRelative relative)
+MainWindow::FloodFrontierEntryAction floodFrontierEntryActionFromNav(
+    NavFrontierEntryAction action)
 {
-    switch (relative) {
-    case MainWindow::FloodFrontierEntryRelative::Front:
+    switch (action) {
+    case NAV_FRONTIER_ENTRY_ACTION_ADVANCE_LINE:
         return MainWindow::FloodFrontierEntryAction::AdvanceLine;
-    case MainWindow::FloodFrontierEntryRelative::Right:
+    case NAV_FRONTIER_ENTRY_ACTION_SMOOTH_RIGHT:
         return MainWindow::FloodFrontierEntryAction::SmoothRight;
-    case MainWindow::FloodFrontierEntryRelative::Left:
+    case NAV_FRONTIER_ENTRY_ACTION_SMOOTH_LEFT:
         return MainWindow::FloodFrontierEntryAction::SmoothLeft;
-    case MainWindow::FloodFrontierEntryRelative::Back:
+    case NAV_FRONTIER_ENTRY_ACTION_UNSUPPORTED_BACK_EXIT:
         return MainWindow::FloodFrontierEntryAction::UnsupportedBackExit;
-    case MainWindow::FloodFrontierEntryRelative::None:
+    case NAV_FRONTIER_ENTRY_ACTION_NONE:
         break;
     }
 
@@ -7486,175 +7483,59 @@ void MainWindow::evaluateFloodFrontierCandidates()
 {
     clearFloodFrontierEvaluation();
 
-    if (!nav_core_flood_is_valid() || !mode1StartCellValid) {
+    if (!mode1StartCellValid) {
         floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
         floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFlood;
         updateShadowMapOverlay();
         return;
     }
 
-    NavMapDebugSnapshot mapDebug = {};
-    nav_core_get_map_debug(&mapDebug);
-    if (!mapDebug.enabled) {
-        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
-        floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFlood;
-        updateShadowMapOverlay();
-        return;
-    }
+    NavFrontierEvalConfig config = {};
+    config.start_cell_x = mode1StartCellX;
+    config.start_cell_y = mode1StartCellY;
+    config.score_margin = floodFrontierScoreMargin;
+    config.allow_back_entry = false;
+    nav_frontier_eval_evaluate(&config);
 
-    floodFrontierEvalValid = true;
-    floodFrontierSafeReturnCost = nav_core_flood_get_cost(mapDebug.cell_x, mapDebug.cell_y);
-    const int cols = std::min<int>(world.cols(), mapDebug.width);
-    const int rows = std::min<int>(world.rows(), mapDebug.height);
-    bool countedNeighborCells[NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT] = {};
+    NavFrontierEvalDebugSnapshot debug = {};
+    nav_frontier_eval_get_debug(&debug);
 
-    for (int y = 0; y < rows; ++y) {
-        for (int x = 0; x < cols; ++x) {
-            NavMapCell cell = {};
-            if (!nav_core_get_map_cell(static_cast<int8_t>(x),
-                                       static_cast<int8_t>(y),
-                                       &cell)
-                || !cell.visited) {
-                continue;
-            }
-
-            const uint16_t floodCost =
-                nav_core_flood_get_cost(static_cast<int8_t>(x), static_cast<int8_t>(y));
-            if (floodCost == NAV_FLOOD_COST_INF) {
-                continue;
-            }
-
-            bool cellHasCandidateEdge = false;
-            for (uint8_t dirValue = 0; dirValue < 4u; ++dirValue) {
-                const NavMapDirection exitDir = static_cast<NavMapDirection>(dirValue);
-                const uint8_t wallBit = mapWallBit(exitDir);
-                if ((cell.walls_known & wallBit) == 0
-                    || (cell.walls_present & wallBit) != 0) {
-                    continue;
-                }
-
-                int8_t neighborX = 0;
-                int8_t neighborY = 0;
-                neighborForDirection(static_cast<int8_t>(x),
-                                     static_cast<int8_t>(y),
-                                     exitDir,
-                                     &neighborX,
-                                     &neighborY);
-                if (neighborX < 0 || neighborY < 0
-                    || neighborX >= cols || neighborY >= rows) {
-                    continue;
-                }
-
-                NavMapCell neighbor = {};
-                if (!nav_core_get_map_cell(neighborX, neighborY, &neighbor)
-                    || neighbor.visited) {
-                    continue;
-                }
-
-                const uint16_t neighborManhattan = static_cast<uint16_t>(
-                    std::abs(static_cast<int>(neighborX) - static_cast<int>(mode1StartCellX))
-                    + std::abs(static_cast<int>(neighborY) - static_cast<int>(mode1StartCellY)));
-                const uint32_t score =
-                    static_cast<uint32_t>(floodCost) + 1u + neighborManhattan;
-                ++floodFrontierCandidateCount;
-                ++floodFrontierCandidateEdgeCount;
-                if (!cellHasCandidateEdge) {
-                    ++floodFrontierCandidateCellCount;
-                    cellHasCandidateEdge = true;
-                }
-                const int neighborIndex = static_cast<int>(neighborY) * NAV_MAP_MAX_WIDTH
-                                          + static_cast<int>(neighborX);
-                if (neighborIndex >= 0
-                    && neighborIndex < static_cast<int>(NAV_MAP_MAX_WIDTH * NAV_MAP_MAX_HEIGHT)
-                    && !countedNeighborCells[neighborIndex]) {
-                    countedNeighborCells[neighborIndex] = true;
-                    ++floodFrontierCandidateNeighborCellCount;
-                }
-
-                if (!floodFrontierBestFound
-                    || score < static_cast<uint32_t>(floodFrontierBestScore)) {
-                    floodFrontierBestFound = true;
-                    floodFrontierBestCellX = static_cast<int8_t>(x);
-                    floodFrontierBestCellY = static_cast<int8_t>(y);
-                    floodFrontierBestNeighborCellX = neighborX;
-                    floodFrontierBestNeighborCellY = neighborY;
-                    floodFrontierBestExitDir = exitDir;
-                    floodFrontierBestCostToStart = floodCost;
-                    floodFrontierBestNeighborManhattan = neighborManhattan;
-                    floodFrontierBestScore =
-                        score > NAV_FLOOD_COST_INF
-                            ? NAV_FLOOD_COST_INF
-                            : static_cast<uint16_t>(score);
-                }
-            }
-        }
-    }
-
-    if (floodFrontierSafeReturnCost == NAV_FLOOD_COST_INF) {
-        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
-        floodFrontierDecisionReason = FloodFrontierDecisionReason::CurrentCellUnreachable;
-        updateShadowMapOverlay();
-        return;
-    }
-
-    if (!floodFrontierBestFound) {
-        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
-        floodFrontierDecisionReason = FloodFrontierDecisionReason::NoFrontier;
-        updateShadowMapOverlay();
-        return;
-    }
-
-    floodFrontierEntryRequiredDir = floodFrontierBestExitDir;
+    floodFrontierEvalValid = debug.valid;
+    floodFrontierCandidateCount = debug.candidate_edge_count;
+    floodFrontierCandidateEdgeCount = debug.candidate_edge_count;
+    floodFrontierCandidateCellCount = debug.candidate_cell_count;
+    floodFrontierCandidateNeighborCellCount = debug.candidate_neighbor_cell_count;
+    floodFrontierBestFound = debug.best_found;
+    floodFrontierBestCellX = debug.best_cell_x;
+    floodFrontierBestCellY = debug.best_cell_y;
+    floodFrontierBestNeighborCellX = debug.best_neighbor_cell_x;
+    floodFrontierBestNeighborCellY = debug.best_neighbor_cell_y;
+    floodFrontierBestExitDir = debug.best_exit_dir;
+    floodFrontierBestCostToStart = debug.best_cost_to_start;
+    floodFrontierBestNeighborManhattan = debug.best_neighbor_manhattan;
+    floodFrontierBestScore = debug.best_score;
+    floodFrontierSafeReturnCost = debug.safe_return_cost;
+    floodFrontierScoreImprovement = debug.score_improvement;
+    floodFrontierScoreMargin = debug.score_margin;
+    floodFrontierDecision = floodFrontierDecisionFromNav(debug.decision);
+    floodFrontierDecisionReason =
+        floodFrontierDecisionReasonFromNav(debug.decision_reason);
+    floodFrontierEntryRequiredDir = debug.entry_required_dir;
     floodFrontierEntryRelativeFromCurrentDir =
-        floodEntryRelative(mapDebug.dir, floodFrontierEntryRequiredDir);
+        floodFrontierEntryRelativeFromNav(debug.entry_relative_from_current_dir);
     floodFrontierEntryActionFromCurrentDir =
-        floodEntryActionForRelative(floodFrontierEntryRelativeFromCurrentDir);
-    floodFrontierEntrySupportedFromCurrentDir =
-        floodFrontierEntryActionFromCurrentDir == FloodFrontierEntryAction::AdvanceLine
-        || floodFrontierEntryActionFromCurrentDir == FloodFrontierEntryAction::SmoothRight
-        || floodFrontierEntryActionFromCurrentDir == FloodFrontierEntryAction::SmoothLeft;
-
+        floodFrontierEntryActionFromNav(debug.entry_action_from_current_dir);
+    floodFrontierEntrySupportedFromCurrentDir = debug.entry_supported_from_current_dir;
     for (uint8_t dirValue = 0; dirValue < 4u; ++dirValue) {
-        const NavMapDirection arrivalDir = static_cast<NavMapDirection>(dirValue);
         floodFrontierEntryRelativeByArrivalDir[dirValue] =
-            floodEntryRelative(arrivalDir, floodFrontierEntryRequiredDir);
+            floodFrontierEntryRelativeFromNav(debug.entry_relative_by_arrival_dir[dirValue]);
         floodFrontierEntryActionByArrivalDir[dirValue] =
-            floodEntryActionForRelative(floodFrontierEntryRelativeByArrivalDir[dirValue]);
+            floodFrontierEntryActionFromNav(debug.entry_action_by_arrival_dir[dirValue]);
     }
-
-    const FloodFrontierEntryAction preferredActions[] = {
-        FloodFrontierEntryAction::AdvanceLine,
-        FloodFrontierEntryAction::SmoothRight,
-        FloodFrontierEntryAction::SmoothLeft
-    };
-    for (FloodFrontierEntryAction preferredAction : preferredActions) {
-        for (uint8_t dirValue = 0; dirValue < 4u; ++dirValue) {
-            if (floodFrontierEntryActionByArrivalDir[dirValue] == preferredAction) {
-                floodFrontierEntryPreferredArrivalDir =
-                    static_cast<NavMapDirection>(dirValue);
-                floodFrontierEntryPreferredAction = preferredAction;
-                floodFrontierEntryPreferredSupported = true;
-                break;
-            }
-        }
-        if (floodFrontierEntryPreferredSupported) {
-            break;
-        }
-    }
-
-    floodFrontierScoreImprovement =
-        static_cast<int32_t>(floodFrontierSafeReturnCost)
-        - static_cast<int32_t>(floodFrontierBestScore);
-    if (static_cast<uint32_t>(floodFrontierBestScore) + floodFrontierScoreMargin
-        < floodFrontierSafeReturnCost) {
-        floodFrontierDecision = FloodFrontierDecision::TryFrontier;
-        floodFrontierDecisionReason =
-            FloodFrontierDecisionReason::FrontierBetterThanSafeReturn;
-    } else {
-        floodFrontierDecision = FloodFrontierDecision::FallbackSafe;
-        floodFrontierDecisionReason =
-            FloodFrontierDecisionReason::FrontierNotBetterThanSafeReturn;
-    }
+    floodFrontierEntryPreferredArrivalDir = debug.preferred_arrival_dir;
+    floodFrontierEntryPreferredAction =
+        floodFrontierEntryActionFromNav(debug.preferred_entry_action);
+    floodFrontierEntryPreferredSupported = debug.preferred_supported;
     updateShadowMapOverlay();
 }
 
