@@ -34,6 +34,6 @@ Thumbs.db
 .idea/
 
 # Proyecto archives
-/data/
-/data-*/
-data
+/data/test_results/
+/data/test_conflictive_maps/
+/data/test_deprecated/
