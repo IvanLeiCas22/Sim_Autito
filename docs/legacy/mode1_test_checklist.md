@@ -230,3 +230,4 @@ Considerar falla si:
 - goal-directed entra en una celda distinta al `frontier_neighbor`;
 - fallback deja `plan_execution_enabled` activo;
 - `X` no cancela seguro.
+</file>

@@ -198,3 +198,4 @@ El simulador es limpio. En robot real hacen falta:
 El codigo portable ya contiene la logica de decision principal. La parte pendiente no es
 redisenar `nav/`, sino crear una HAL/adaptador STM32 que reemplace el trabajo que hoy
 hace `MainWindow`.
+</file>

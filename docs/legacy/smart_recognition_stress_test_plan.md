@@ -64,3 +64,4 @@ Checklist general:
 - Las marcas especiales usan `size_mm = 120`.
 - Con sensores de suelo separados 84 mm, `100x100 mm` deja una ventana de deteccion simultanea demasiado chica; `120x120 mm` aumenta la robustez y sigue dejando separacion razonable respecto de las cintas de frontera.
 - Si un mapa termina en `NO_FRONTIER` sin visitar una region cerrada, eso es correcto si la region no es alcanzable.
+</file>

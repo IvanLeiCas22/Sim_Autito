@@ -170,3 +170,4 @@ Permite editar:
 - `Wall caution`.
 
 Los valores son runtime y no quedan persistidos automaticamente en JSON ni en firmware.
+</file>

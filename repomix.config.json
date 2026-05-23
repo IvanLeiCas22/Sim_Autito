@@ -24,7 +24,11 @@
   "ignore": {
     "useGitignore": true,
     "useDefaultPatterns": true,
-    "customPatterns": []
+    "customPatterns": [
+      "docs/legacy/**",
+      "repomix-output-SimAutito.xml",
+      "repomix-output-SimAutito-*"
+    ]
   },
   "security": {
     "enableSecurityCheck": false

@@ -207,3 +207,4 @@ Mantener la direccion actual:
 - `MainWindow` como adaptador Qt/UI/simulacion;
 - fallback seguro siempre disponible;
 - batch + autocheck como validacion obligatoria despues de cambios.
+</file>

@@ -286,3 +286,4 @@ Goal-directed:
 - `MainWindow` todavia ejecuta cola, secuencias compuestas y yaw del simulador.
 - El planner no es reentrante por workspace estatico.
 - El mapa maximo portable actual es `16 x 16`.
+</file>

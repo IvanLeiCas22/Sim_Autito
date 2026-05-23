@@ -222,3 +222,4 @@ Pendiente principal para robot real:
 - botones/comandos;
 - telemetria serial;
 - build separado sin Qt, `MainWindow`, `SimWorld` ni `SimRobot`.
+</file>

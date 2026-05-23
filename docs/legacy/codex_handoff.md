@@ -136,3 +136,4 @@ Pendiente para firmware:
 - tests unitarios portables;
 - HAL STM32;
 - modo 2.
+</file>

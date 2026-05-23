@@ -2,15 +2,19 @@
 
 Reglas para crear mapas compatibles con el simulador Qt/C++ de micromouse/autito.
 
+## Estado actual del simulador
+
+El simulador actual es un banco físico/sensorial con `FirmwareSimBridge` stub. No tiene navegación propia activa, no tiene batch runner y no ejecuta todavía el core real STM32.
+
+Por lo tanto, estas reglas se enfocan en geometría física, sensores y representación visual. Las reglas de `PASS/FAIL`, `Shift+B`, flood, smart recognition y retorno inteligente pertenecen a la navegación legacy y no aplican al estado actual.
+
 ## Carpetas
 
-- `data/test_maps/`: mapas esperados a `PASS` con `Shift+B`.
-- `data/stress_maps/` o `data/dev_maps/`: sugeridas para mapas extremos,
-  experimentales o `expected_fail`.
-- Mapas sueltos en `data/`: pruebas manuales o compatibilidad.
+- `data/test_maps/`: mapas útiles para pruebas manuales de geometría, sensores IR, sensores de piso, paredes y celdas especiales.
+- `data/stress_maps/` o `data/dev_maps/`: sugeridas para mapas extremos, experimentales o casos conflictivos.
+- Mapas sueltos en `data/`: pruebas manuales rápidas o compatibilidad.
 
-`data/test_maps` debe contener solo mapas que el batch debe pasar. Si un mapa esta
-disenado para fallar, usar otra carpeta o documentarlo explicitamente.
+`data/test_maps` debe contener mapas físicamente válidos y útiles para validar el simulador. No implica que exista un runner automático activo.
 
 ## Formato JSON
 
@@ -50,7 +54,7 @@ Campos:
 
 Alias aceptados por compatibilidad:
 
-- raiz `cols`, `rows`, `cell_size_mm`;
+- raíz `cols`, `rows`, `cell_size_mm`;
 - `col`/`row` como alias de `cell_x`/`cell_y`.
 
 Para mapas nuevos, preferir siempre el formato recomendado.
@@ -59,12 +63,12 @@ Para mapas nuevos, preferir siempre el formato recomendado.
 
 - `cell_x`: columna.
 - `cell_y`: fila.
-- origen logico: esquina superior izquierda `(0, 0)`.
+- origen lógico: esquina superior izquierda `(0, 0)`.
 - X crece hacia Este.
 - Y crece hacia Sur.
 - `cell_size_mm` recomendado: `200`.
 
-Direcciones validas:
+Direcciones válidas:
 
 - `N` / `NORTH`;
 - `E` / `EAST`;
@@ -76,105 +80,76 @@ Preferir `N`, `E`, `S`, `W`.
 ## Paredes
 
 - Todas las paredes deben referenciar celdas dentro del mapa.
-- No declarar paredes fuera de limites.
+- No declarar paredes fuera de límites.
 - Evitar duplicados conflictivos.
 - Si se declara una pared compartida, no hace falta declarar la opuesta.
 - `SimWorld::setWall(...)` propaga la pared al vecino cuando corresponde.
-- `SimWorld::addBoundaryWalls()` genera el perimetro exterior automaticamente.
+- `SimWorld::addBoundaryWalls()` genera el perímetro exterior automáticamente.
 
-## Reglas para `data/test_maps`
+## Cintas y celdas especiales
 
-Con defaults actuales:
+`SimWorld` distingue internamente:
 
-- `return_strategy = GOAL_DIRECTED_RETURN_LIMITED_EXECUTION`;
-- `goal_max_shortcut_attempts = 32`;
-- `test_fast_mode_enabled = true`;
-- `required_special_count` recomendado: `3`.
+- cinta de frontera de celda: `boundary`;
+- celda especial/target: `target`;
+- superposición: `boundary+target`.
 
-Para que un mapa entre en `data/test_maps`:
+Visualmente:
 
-- debe haber al menos `required_special_count` especiales alcanzables;
-- debe existir camino fisico desde start hacia esas especiales;
-- debe existir alguna forma valida de volver al inicio;
-- debe iniciar al robot en una pose fisicamente valida;
-- no debe depender de comportamiento indefinido;
-- debe terminar `PASS` en `Shift+R` y `Shift+B`.
-
-El retorno inteligente puede explorar atajos desconocidos, pero el mapa no debe exigir
-atravesar paredes conocidas presentes ni inconsistencias geometricas.
-
-### Validez fisica del start
-
-Los mapas esperados a `PASS` no deben iniciar el robot en una pose fisicamente
-conflictiva. El robot no tiene sensores traseros, y el simulador no modela colision
-del cuerpo contra paredes durante un pivot; por eso un start mal condicionado puede
-generar un escape irreal del laberinto sin que sea un fallo de navegacion.
-
-Evitar en `data/test_maps`:
-
-- pared inmediatamente detras del robot si puede necesitar pivot inicial;
-- start encajonado entre pared frontal y pared trasera;
-- starts donde un pivot inicial pueda barrer fisicamente contra una pared no observable
-  por sensores;
-- starts sin una direccion segura para adquirir linea y comenzar la navegacion.
-
-Preferir start con frente libre o con espacio suficiente alrededor para maniobrar sin
-colision fisica. Si se quiere probar un caso de start conflictivo, ubicarlo en
-`data/dev_maps` o `data/stress_maps`, no en `data/test_maps`.
+- las cintas de frontera se dibujan en gris translúcido;
+- las celdas especiales se dibujan como cuadrados gris oscuro;
+- las paredes se dibujan como líneas negras gruesas por encima de las cintas.
 
 ## Celdas especiales
 
 - Cada especial debe estar dentro del mapa.
 - `size_mm` usado normalmente: `120`.
 - Si falta `size_mm`, el simulador usa su default.
-- Para mapas `normal_pass`, evitar ambiguedades innecesarias:
+- Para pruebas normales, evitar ambigüedades innecesarias:
   - start sobre especial;
   - especiales contiguas si no se busca probar ese caso;
   - especiales pegadas a paredes que impidan pisarlas.
 
-Casos ambiguos son validos como stress si estan documentados.
+Casos ambiguos son válidos como stress si están documentados.
 
 ## Start
 
 - `start.x_mm` y `start.y_mm` deben caer dentro del mapa.
 - `yaw_deg` recomendado: `0`, `90`, `180` o `270`.
 - Start no debe quedar encerrado.
-- Start no debe tener pared inmediatamente detras si puede requerir pivot inicial.
-- Start debe permitir adquirir linea y maniobrar sin colision fisica esperada.
-- Start sobre especial debe tratarse como stress, salvo que el caso ya este validado.
+- Start debe permitir verificar sensores sin colisión visual inmediata.
+- Start sobre especial debe tratarse como stress, salvo que se busque probar explícitamente la detección inicial de especial.
 
-## Clasificacion sugerida
+## Clasificación sugerida
 
-- `normal_pass`: debe pasar siempre.
-- `stress_pass`: dificil, pero debe pasar.
-- `expected_fail`: disenado para fallar por una razon esperada.
-- `debug`: prueba una funcion puntual.
-
-Solo `normal_pass` y `stress_pass` deberian entrar en `data/test_maps`.
+- `normal_sensor`: mapa simple para validar sensores y representación.
+- `stress_sensor`: mapa difícil o ambiguo para sensores/geometría.
+- `debug`: prueba una función puntual.
+- `legacy_nav`: mapa creado para navegación antigua; conservar solo si todavía sirve como geometría física.
 
 ## Checklist para generar un mapa
 
 - Elegir `width`, `height` y `cell_size_mm`.
 - Definir start dentro del mapa.
 - Usar yaw cardinal.
-- Verificar que el start no sea fisicamente conflictivo para un pivot inicial.
-- Generar paredes interiores validas.
+- Generar paredes interiores válidas.
 - No declarar paredes exteriores.
-- Colocar al menos 3 especiales alcanzables.
-- Garantizar regreso al inicio.
+- Colocar celdas especiales solo si son necesarias para la prueba.
 - Usar JSON puro, sin comentarios.
 - Usar nombre descriptivo.
-- Guardar en `data/test_maps` solo si se espera `PASS`.
+- Cargar el mapa y verificar visualmente paredes/cintas/especiales.
+- Usar movimiento manual para verificar IR y sensores de piso.
 
-## Validacion
+## Validación manual actual
 
 1. Cargar el mapa.
-2. Activar overlay con `Y` si ayuda.
-3. Ejecutar `Shift+R`.
-4. Si pasa, ejecutar `Shift+B`.
-5. Revisar:
-   - `batch_runner_state = BATCH_DONE`;
-   - `batch_runner_fail_count = 0`;
-   - `batch_runner_timeout_count = 0`;
-   - `autocheck_failure_count = 0`.
-6. Revisar CSV/JSON exportado en `data/test_results`.
+2. Usar `Fit map` si hace falta.
+3. Mover el robot con `W/S/A/D` o flechas.
+4. Verificar telemetría de sensores IR.
+5. Verificar sensores de piso:
+   - `kind=none` fuera de cinta;
+   - `kind=boundary` sobre cinta de frontera;
+   - `kind=target` sobre celda especial;
+   - `kind=boundary+target` si hay superposición.
+6. Verificar que las paredes negras coincidan con el JSON.
+7. Verificar que el raycast IR corte contra paredes físicas, no contra cintas.
