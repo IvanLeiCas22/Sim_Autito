@@ -48,7 +48,10 @@ public:
     Debug debug() const;
 
 private:
+    void ensureFirmwareCoreInitialized();
+
     bool enabled_ = false;
+    bool firmware_initialized_ = false;
     Debug debug_;
 };
 

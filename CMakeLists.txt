@@ -5,8 +5,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
 
 qt_standard_project_setup()
 
-qt_add_executable(Sim_Autito
-    WIN32 MACOSX_BUNDLE
+set(SIM_AUTITO_SOURCES
     app/main.cpp
     app/sim_mainwindow.cpp
     app/sim_mainwindow.h
@@ -18,15 +17,40 @@ qt_add_executable(Sim_Autito
     sim/sim_robot.h
 )
 
+set(SIM_AUTITO_FIRMWARE_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/firmware_core")
+set(SIM_AUTITO_FIRMWARE_CORE_APP_NAV "${SIM_AUTITO_FIRMWARE_CORE_DIR}/app_nav.c")
+
+if(EXISTS "${SIM_AUTITO_FIRMWARE_CORE_APP_NAV}")
+    set(SIM_AUTITO_HAS_FIRMWARE_CORE 1)
+    list(APPEND SIM_AUTITO_SOURCES
+        firmware_core/app_nav.c
+    )
+else()
+    set(SIM_AUTITO_HAS_FIRMWARE_CORE 0)
+endif()
+
+qt_add_executable(Sim_Autito
+    WIN32 MACOSX_BUNDLE
+    ${SIM_AUTITO_SOURCES}
+)
+
 target_include_directories(Sim_Autito
     PRIVATE
         app
         sim
 )
 
+if(SIM_AUTITO_HAS_FIRMWARE_CORE)
+    target_include_directories(Sim_Autito
+        PRIVATE
+            firmware_core
+    )
+endif()
+
 target_compile_definitions(Sim_Autito
     PRIVATE
         SIM_AUTITO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        SIM_AUTITO_HAS_FIRMWARE_CORE=${SIM_AUTITO_HAS_FIRMWARE_CORE}
 )
 
 target_link_libraries(Sim_Autito

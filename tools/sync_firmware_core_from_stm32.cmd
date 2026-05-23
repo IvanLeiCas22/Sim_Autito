@@ -3,11 +3,11 @@ setlocal
 
 rem Copies the portable firmware navigation core from the STM32 repository into this simulator repository.
 rem Usage:
-rem   tools\sync_firmware_core_from_stm32.cmd C:\path\to\STM32_repo
+rem   tools\sync_firmware_core_from_stm32.cmd C:\Users\GAMING\Desktop\MICROCONTROLADORES\MICROCONTROLADORES-STM32
 
 if "%~1"=="" (
     echo Usage: %~nx0 ^<STM32_REPO_ROOT^>
-    echo Example: %~nx0 C:\Users\GAMING\Desktop\MICROCONTROLADORES\STM32\Test2024-master
+    echo Example: %~nx0 C:\Users\GAMING\Desktop\MICROCONTROLADORES\MICROCONTROLADORES-STM32
     exit /b 1
 )
 
