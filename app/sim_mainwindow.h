@@ -11,6 +11,8 @@
 #include <QGraphicsView>
 #include <QLabel>
 #include <QMainWindow>
+#include <QShowEvent>
+#include <QResizeEvent>
 #include <QPlainTextEdit>
 #include <QTimer>
 
@@ -20,6 +22,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
+    void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
 private:
@@ -43,6 +46,7 @@ private:
         double local_x_mm = 0.0;
         double local_y_mm = 0.0;
         bool black = false;
+        TapeDebugKind debug_kind = TapeDebugKind::None;
         double world_x_mm = 0.0;
         double world_y_mm = 0.0;
     };
