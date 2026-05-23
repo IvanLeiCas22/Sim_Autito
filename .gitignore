@@ -37,3 +37,6 @@ Thumbs.db
 /data/test_results/
 /data/test_conflictive_maps/
 /data/test_deprecated/
+
+# Repomix
+repomix-output-SimAutito.xml
