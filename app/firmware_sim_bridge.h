@@ -36,6 +36,23 @@ public:
         bool enabled = false;
         int left_pwm = 0;
         int right_pwm = 0;
+
+        bool floor_front_black = false;
+        bool floor_rear_black = false;
+        bool wall_front = false;
+        bool wall_left = false;
+        bool wall_right = false;
+        bool wall_diag_left = false;
+        bool wall_diag_right = false;
+
+        uint16_t dist_front_left_mm = 0;
+        uint16_t dist_front_right_mm = 0;
+        uint16_t dist_left_lat_mm = 0;
+        uint16_t dist_right_lat_mm = 0;
+        uint16_t dist_diagonal_left_mm = 0;
+        uint16_t dist_diagonal_right_mm = 0;
+        uint16_t adc_floor_front = 0;
+        uint16_t adc_floor_rear = 0;
     };
 
     FirmwareSimBridge();

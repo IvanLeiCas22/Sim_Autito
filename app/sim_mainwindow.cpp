@@ -274,6 +274,7 @@ void MainWindow::resetSimulation()
     lastManualJogDescription_ = QStringLiteral("none");
 
     updateSensors();
+    lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
     refreshScene();
     refreshTelemetry();
 }
@@ -356,6 +357,7 @@ void MainWindow::manualJog(double distance_mm, double delta_yaw_deg)
     }
 
     updateSensors();
+    lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
     refreshScene();
     refreshTelemetry();
 }
@@ -539,6 +541,23 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  enabled: %1\n").arg(boolText(debug.enabled));
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);
     text += QStringLiteral("  right_pwm: %1\n\n").arg(lastCommand_.right_pwm);
+
+    text += QStringLiteral("FW perception\n");
+    text += QStringLiteral("  floor_front_black: %1\n").arg(boolText(debug.floor_front_black));
+    text += QStringLiteral("  floor_rear_black: %1\n").arg(boolText(debug.floor_rear_black));
+    text += QStringLiteral("  wall_front: %1\n").arg(boolText(debug.wall_front));
+    text += QStringLiteral("  wall_left: %1\n").arg(boolText(debug.wall_left));
+    text += QStringLiteral("  wall_right: %1\n").arg(boolText(debug.wall_right));
+    text += QStringLiteral("  wall_diag_left: %1\n").arg(boolText(debug.wall_diag_left));
+    text += QStringLiteral("  wall_diag_right: %1\n").arg(boolText(debug.wall_diag_right));
+    text += QStringLiteral("  dist_front_left_mm: %1\n").arg(debug.dist_front_left_mm);
+    text += QStringLiteral("  dist_front_right_mm: %1\n").arg(debug.dist_front_right_mm);
+    text += QStringLiteral("  dist_left_lat_mm: %1\n").arg(debug.dist_left_lat_mm);
+    text += QStringLiteral("  dist_right_lat_mm: %1\n").arg(debug.dist_right_lat_mm);
+    text += QStringLiteral("  dist_diagonal_left_mm: %1\n").arg(debug.dist_diagonal_left_mm);
+    text += QStringLiteral("  dist_diagonal_right_mm: %1\n").arg(debug.dist_diagonal_right_mm);
+    text += QStringLiteral("  adc_floor_front: %1\n").arg(debug.adc_floor_front);
+    text += QStringLiteral("  adc_floor_rear: %1\n\n").arg(debug.adc_floor_rear);
 
     text += QStringLiteral("IR sensors\n");
     for (const IrSensorReading &reading : irReadings_) {

@@ -180,28 +180,40 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     ensureFirmwareCoreInitialized();
 
+    const AppNavInput input = buildAppNavInput(snapshot);
+    AppNavOutput output = {};
+
+    App_Nav_Tick(&input, &output);
+
     if (enabled_) {
-        const AppNavInput input = buildAppNavInput(snapshot);
-        AppNavOutput output = {};
-
-        App_Nav_Tick(&input, &output);
-
         command.left_pwm = output.left_motor_pwm;
         command.right_pwm = output.right_motor_pwm;
-
-        AppNavDebug firmware_debug = {};
-        App_Nav_GetDebug(&firmware_debug);
-
-        debug_.state = QStringLiteral("FW: mode=%1 state=%2")
-            .arg(static_cast<int>(firmware_debug.mode))
-            .arg(static_cast<int>(firmware_debug.state));
-        debug_.reason = QStringLiteral("last_transition_reason=%1 transition_sequence=%2")
-            .arg(static_cast<int>(firmware_debug.last_transition_reason))
-            .arg(static_cast<int>(firmware_debug.transition_sequence));
-    } else {
-        debug_.state = QStringLiteral("FW: idle");
-        debug_.reason = QStringLiteral("FirmwareSimBridge disabled");
     }
+
+    AppNavDebug firmware_debug = {};
+    App_Nav_GetDebug(&firmware_debug);
+
+    debug_.state = QStringLiteral("FW: mode=%1 state=%2")
+        .arg(static_cast<int>(firmware_debug.mode))
+        .arg(static_cast<int>(firmware_debug.state));
+    debug_.reason = QStringLiteral("last_transition_reason=%1 transition_sequence=%2")
+        .arg(static_cast<int>(firmware_debug.last_transition_reason))
+        .arg(static_cast<int>(firmware_debug.transition_sequence));
+    debug_.floor_front_black = firmware_debug.floor_front_black != 0U;
+    debug_.floor_rear_black = firmware_debug.floor_rear_black != 0U;
+    debug_.wall_front = firmware_debug.wall_front != 0U;
+    debug_.wall_left = firmware_debug.wall_left != 0U;
+    debug_.wall_right = firmware_debug.wall_right != 0U;
+    debug_.wall_diag_left = firmware_debug.wall_diag_left != 0U;
+    debug_.wall_diag_right = firmware_debug.wall_diag_right != 0U;
+    debug_.dist_front_left_mm = firmware_debug.dist_front_left_mm;
+    debug_.dist_front_right_mm = firmware_debug.dist_front_right_mm;
+    debug_.dist_left_lat_mm = firmware_debug.dist_left_lat_mm;
+    debug_.dist_right_lat_mm = firmware_debug.dist_right_lat_mm;
+    debug_.dist_diagonal_left_mm = firmware_debug.dist_diagonal_left_mm;
+    debug_.dist_diagonal_right_mm = firmware_debug.dist_diagonal_right_mm;
+    debug_.adc_floor_front = firmware_debug.floor_front_adc;
+    debug_.adc_floor_rear = firmware_debug.floor_rear_adc;
 #else
     Q_UNUSED(snapshot);
 
