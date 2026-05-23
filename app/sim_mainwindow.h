@@ -60,6 +60,7 @@ private:
     void stopSimulation();
     void toggleSimulation();
     void simulationStep();
+    void manualJog(double distance_mm, double delta_yaw_deg);
 
     void updateSensors();
     FirmwareSimBridge::SensorSnapshot buildBridgeSnapshot() const;
@@ -83,6 +84,7 @@ private:
 
     bool simulationRunning_ = false;
     FirmwareSimBridge::Command lastCommand_;
+    QString lastManualJogDescription_ = QStringLiteral("none");
 
     std::array<IrSensorReading, kIrSensorCount> irReadings_;
     FloorSensorReading floorFront_;

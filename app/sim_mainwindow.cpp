@@ -11,6 +11,7 @@
 #include <QGraphicsPolygonItem>
 #include <QGraphicsRectItem>
 #include <QKeySequence>
+#include <QList>
 #include <QHBoxLayout>
 #include <QFont>
 #include <QMenuBar>
@@ -25,6 +26,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 
 namespace {
 constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
@@ -33,6 +35,12 @@ constexpr double kRobotWidthMm = 80.0;
 constexpr double kIrMaxDistanceMm = 150.0;
 constexpr double kFloorSensorRadiusMm = 7.0;
 constexpr int kSimulationIntervalMs = 10;
+constexpr double kManualJogLinearStepMm = 20.0;
+constexpr double kManualJogLinearFastStepMm = 100.0;
+constexpr double kManualJogLinearFineStepMm = 5.0;
+constexpr double kManualJogTurnStepDeg = 5.0;
+constexpr double kManualJogTurnFastStepDeg = 20.0;
+constexpr double kManualJogTurnFineStepDeg = 1.0;
 
 QString boolText(bool value)
 {
@@ -151,24 +159,29 @@ void MainWindow::setupActions()
     auto *startAction = new QAction(QStringLiteral("Start"), this);
     auto *stopAction = new QAction(QStringLiteral("Stop"), this);
     auto *toggleAction = new QAction(QStringLiteral("Start/Stop"), this);
+    auto *fitAction = new QAction(QStringLiteral("Fit map"), this);
 
     loadAction->setShortcut(QKeySequence::Open);
     resetAction->setShortcut(QKeySequence(QStringLiteral("R")));
     startAction->setShortcut(QKeySequence(QStringLiteral("Space")));
-    stopAction->setShortcut(QKeySequence(QStringLiteral("S")));
+    stopAction->setShortcut(QKeySequence(QStringLiteral("Esc")));
     toggleAction->setShortcut(QKeySequence(QStringLiteral("M")));
+    fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
 
     connect(loadAction, &QAction::triggered, this, [this]() { loadMap(); });
     connect(resetAction, &QAction::triggered, this, [this]() { resetSimulation(); });
     connect(startAction, &QAction::triggered, this, [this]() { startSimulation(); });
     connect(stopAction, &QAction::triggered, this, [this]() { stopSimulation(); });
     connect(toggleAction, &QAction::triggered, this, [this]() { toggleSimulation(); });
+    connect(fitAction, &QAction::triggered, this, [this]() { fitViewToWorld(); });
 
     toolbar->addAction(loadAction);
     toolbar->addAction(resetAction);
     toolbar->addSeparator();
     toolbar->addAction(startAction);
     toolbar->addAction(stopAction);
+    toolbar->addSeparator();
+    toolbar->addAction(fitAction);
 
     auto *fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(loadAction);
@@ -179,11 +192,52 @@ void MainWindow::setupActions()
     simulationMenu->addAction(stopAction);
     simulationMenu->addAction(toggleAction);
 
+    auto *viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
+    viewMenu->addAction(fitAction);
+
+    auto *manualMenu = menuBar()->addMenu(QStringLiteral("&Manual"));
+    auto makeManualAction = [this, manualMenu](const QString &text,
+                                               std::initializer_list<const char *> shortcuts,
+                                               double distance_mm,
+                                               double delta_yaw_deg) {
+        auto *action = new QAction(text, this);
+        QList<QKeySequence> sequences;
+        for (const char *shortcut : shortcuts) {
+            sequences.append(QKeySequence(QString::fromLatin1(shortcut)));
+        }
+        action->setShortcuts(sequences);
+        action->setShortcutContext(Qt::ApplicationShortcut);
+        connect(action, &QAction::triggered, this, [this, distance_mm, delta_yaw_deg]() {
+            manualJog(distance_mm, delta_yaw_deg);
+        });
+        manualMenu->addAction(action);
+        addAction(action);
+        return action;
+    };
+
+    makeManualAction(QStringLiteral("Jog forward"), {"W", "Up"}, kManualJogLinearStepMm, 0.0);
+    makeManualAction(QStringLiteral("Jog backward"), {"S", "Down"}, -kManualJogLinearStepMm, 0.0);
+    makeManualAction(QStringLiteral("Turn left"), {"A", "Left"}, 0.0, -kManualJogTurnStepDeg);
+    makeManualAction(QStringLiteral("Turn right"), {"D", "Right"}, 0.0, kManualJogTurnStepDeg);
+
+    manualMenu->addSeparator();
+    makeManualAction(QStringLiteral("Jog forward fast"), {"Shift+W", "Shift+Up"}, kManualJogLinearFastStepMm, 0.0);
+    makeManualAction(QStringLiteral("Jog backward fast"), {"Shift+S", "Shift+Down"}, -kManualJogLinearFastStepMm, 0.0);
+    makeManualAction(QStringLiteral("Turn left fast"), {"Shift+A", "Shift+Left"}, 0.0, -kManualJogTurnFastStepDeg);
+    makeManualAction(QStringLiteral("Turn right fast"), {"Shift+D", "Shift+Right"}, 0.0, kManualJogTurnFastStepDeg);
+
+    manualMenu->addSeparator();
+    makeManualAction(QStringLiteral("Jog forward fine"), {"Ctrl+Up"}, kManualJogLinearFineStepMm, 0.0);
+    makeManualAction(QStringLiteral("Jog backward fine"), {"Ctrl+Down"}, -kManualJogLinearFineStepMm, 0.0);
+    makeManualAction(QStringLiteral("Turn left fine"), {"Ctrl+Left"}, 0.0, -kManualJogTurnFineStepDeg);
+    makeManualAction(QStringLiteral("Turn right fine"), {"Ctrl+Right"}, 0.0, kManualJogTurnFineStepDeg);
+
     addAction(loadAction);
     addAction(resetAction);
     addAction(startAction);
     addAction(stopAction);
     addAction(toggleAction);
+    addAction(fitAction);
 }
 
 void MainWindow::loadMap()
@@ -217,6 +271,7 @@ void MainWindow::resetSimulation()
     robot_.setPose(world_.startXMm(), world_.startYMm(), world_.startYawDeg());
     firmwareBridge_.reset();
     lastCommand_ = FirmwareSimBridge::Command{};
+    lastManualJogDescription_ = QStringLiteral("none");
 
     updateSensors();
     refreshScene();
@@ -269,6 +324,35 @@ void MainWindow::simulationStep()
             static_cast<int16_t>(lastCommand_.left_pwm),
             static_cast<int16_t>(lastCommand_.right_pwm),
             kSimulationIntervalMs / 1000.0);
+    }
+
+    updateSensors();
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::manualJog(double distance_mm, double delta_yaw_deg)
+{
+    if (simulationRunning_) {
+        stopSimulation();
+    }
+
+    if (std::abs(distance_mm) > 0.001) {
+        robot_.moveForward(distance_mm);
+    }
+
+    if (std::abs(delta_yaw_deg) > 0.001) {
+        robot_.rotate(delta_yaw_deg);
+    }
+
+    lastCommand_ = FirmwareSimBridge::Command{};
+
+    if (std::abs(distance_mm) > 0.001) {
+        lastManualJogDescription_ = QStringLiteral("linear %1 mm").arg(distance_mm, 0, 'f', 1);
+    } else if (std::abs(delta_yaw_deg) > 0.001) {
+        lastManualJogDescription_ = QStringLiteral("turn %1 deg").arg(delta_yaw_deg, 0, 'f', 1);
+    } else {
+        lastManualJogDescription_ = QStringLiteral("none");
     }
 
     updateSensors();
@@ -441,6 +525,13 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  y_mm: %1\n").arg(robot_.yMm(), 0, 'f', 2);
     text += QStringLiteral("  yaw_deg: %1\n").arg(robot_.yawDeg(), 0, 'f', 2);
     text += QStringLiteral("  yaw_rate_deg_s: %1\n\n").arg(robot_.yawRateDegS(), 0, 'f', 2);
+
+    text += QStringLiteral("Manual jog\n");
+    text += QStringLiteral("  keys: W/S/A/D or arrows\n");
+    text += QStringLiteral("  fast: Shift + movement key\n");
+    text += QStringLiteral("  fine: Ctrl + arrows\n");
+    text += QStringLiteral("  note: manual jog stops the timer before moving\n");
+    text += QStringLiteral("  last: %1\n\n").arg(lastManualJogDescription_);
 
     text += QStringLiteral("FirmwareSimBridge\n");
     text += QStringLiteral("  state: %1\n").arg(debug.state);
