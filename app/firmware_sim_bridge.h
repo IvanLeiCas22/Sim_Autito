@@ -83,6 +83,7 @@ public:
 
     Command tick(const SensorSnapshot &snapshot);
     Debug debug() const;
+    bool isFirmwareControlActive() const;
 
 private:
     void ensureFirmwareCoreInitialized();

@@ -376,7 +376,9 @@ void MainWindow::simulationStep()
 
 void MainWindow::manualJog(double distance_mm, double delta_yaw_deg)
 {
-    if (simulationRunning_) {
+    const bool perturbationMode = simulationRunning_ && firmwareBridge_.isFirmwareControlActive();
+
+    if (simulationRunning_ && !perturbationMode) {
         stopSimulation();
     }
 
@@ -549,6 +551,7 @@ void MainWindow::refreshScene()
 void MainWindow::refreshTelemetry()
 {
     const FirmwareSimBridge::Debug debug = firmwareBridge_.debug();
+    const bool manualJogPerturbationMode = simulationRunning_ && firmwareBridge_.isFirmwareControlActive();
 
     QString text;
     text += QStringLiteral("Simulation\n");
@@ -576,7 +579,9 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  keys: W/S/A/D or arrows\n");
     text += QStringLiteral("  fast: Shift + movement key\n");
     text += QStringLiteral("  fine: Ctrl + arrows\n");
-    text += QStringLiteral("  note: manual jog stops the timer before moving\n");
+    text += manualJogPerturbationMode
+        ? QStringLiteral("  note: manual jog perturbs pose without stopping firmware control\n")
+        : QStringLiteral("  note: manual jog stops the timer before moving\n");
     text += QStringLiteral("  last: %1\n\n").arg(lastManualJogDescription_);
 
     text += QStringLiteral("FirmwareSimBridge\n");

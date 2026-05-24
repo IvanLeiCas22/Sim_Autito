@@ -396,3 +396,8 @@ FirmwareSimBridge::Debug FirmwareSimBridge::debug() const
 {
     return debug_;
 }
+
+bool FirmwareSimBridge::isFirmwareControlActive() const
+{
+    return enabled_ && control_mode_ != ControlMode::TelemetryOnly;
+}
