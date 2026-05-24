@@ -542,6 +542,17 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);
     text += QStringLiteral("  right_pwm: %1\n\n").arg(lastCommand_.right_pwm);
 
+    text += QStringLiteral("FW decision\n");
+    text += QStringLiteral("  random_value: %1\n")
+        .arg(static_cast<unsigned int>(debug.decision_random_value));
+    text += QStringLiteral("  available_options_mask: 0x%1\n")
+        .arg(static_cast<unsigned int>(debug.available_options_mask), 2, 16, QLatin1Char('0'));
+    text += QStringLiteral("  valid_option_count: %1\n")
+        .arg(static_cast<unsigned int>(debug.valid_option_count));
+    text += QStringLiteral("  recommended_action: %1 (%2)\n\n")
+        .arg(debug.recommended_action)
+        .arg(debug.recommended_action_text);
+
     text += QStringLiteral("FW perception\n");
     text += QStringLiteral("  floor_front_black: %1\n").arg(boolText(debug.floor_front_black));
     text += QStringLiteral("  floor_rear_black: %1\n").arg(boolText(debug.floor_rear_black));

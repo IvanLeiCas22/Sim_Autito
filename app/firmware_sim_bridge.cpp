@@ -32,6 +32,7 @@ constexpr int kAdcFloorRearCh = 7;
 
 constexpr uint16_t kFloorWhiteAdc = 4095;
 constexpr uint16_t kFloorBlackAdc = 0;
+constexpr uint32_t kDecisionRandomValue = 0U;
 
 uint16_t toFirmwareDistanceMm(double distance_mm)
 {
@@ -61,6 +62,26 @@ int32_t toQ16Deg(double deg)
 
     const double q = std::round(deg * 65536.0);
     return static_cast<int32_t>(std::clamp(q, -2147483648.0, 2147483647.0));
+}
+
+QString recommendedActionText(AppNavRecommendedAction action)
+{
+    switch (action) {
+    case APP_NAV_ACTION_NONE:
+        return QStringLiteral("NONE");
+    case APP_NAV_ACTION_GO_BACK:
+        return QStringLiteral("GO_BACK");
+    case APP_NAV_ACTION_GO_FRONT_NAVIGATING:
+        return QStringLiteral("GO_FRONT_NAVIGATING");
+    case APP_NAV_ACTION_GO_FRONT_STRAIGHT:
+        return QStringLiteral("GO_FRONT_STRAIGHT");
+    case APP_NAV_ACTION_SMOOTH_LEFT:
+        return QStringLiteral("SMOOTH_LEFT");
+    case APP_NAV_ACTION_SMOOTH_RIGHT:
+        return QStringLiteral("SMOOTH_RIGHT");
+    }
+
+    return QStringLiteral("UNKNOWN");
 }
 
 AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
@@ -185,6 +206,9 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
     App_Nav_Tick(&input, &output);
 
+    AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
+    App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
+
     if (enabled_) {
         command.left_pwm = output.left_motor_pwm;
         command.right_pwm = output.right_motor_pwm;
@@ -199,6 +223,15 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.reason = QStringLiteral("last_transition_reason=%1 transition_sequence=%2")
         .arg(static_cast<int>(firmware_debug.last_transition_reason))
         .arg(static_cast<int>(firmware_debug.transition_sequence));
+    debug_.recommended_action = static_cast<int>(recommended_action);
+    debug_.recommended_action_text = recommendedActionText(recommended_action);
+    debug_.available_options_mask = firmware_debug.available_options_mask;
+    debug_.valid_option_count = firmware_debug.valid_option_count;
+    debug_.decision_random_value = kDecisionRandomValue;
+    if (static_cast<int>(firmware_debug.last_recommended_action) != debug_.recommended_action) {
+        debug_.reason += QStringLiteral(" last_recommended_action=%1")
+            .arg(static_cast<int>(firmware_debug.last_recommended_action));
+    }
     debug_.floor_front_black = firmware_debug.floor_front_black != 0U;
     debug_.floor_rear_black = firmware_debug.floor_rear_black != 0U;
     debug_.wall_front = firmware_debug.wall_front != 0U;

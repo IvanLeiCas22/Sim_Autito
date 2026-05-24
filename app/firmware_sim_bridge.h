@@ -53,6 +53,12 @@ public:
         uint16_t dist_diagonal_right_mm = 0;
         uint16_t adc_floor_front = 0;
         uint16_t adc_floor_rear = 0;
+
+        int recommended_action = 0;
+        QString recommended_action_text = QStringLiteral("NONE/STUB");
+        uint8_t available_options_mask = 0;
+        uint8_t valid_option_count = 0;
+        uint32_t decision_random_value = 0;
     };
 
     FirmwareSimBridge();
