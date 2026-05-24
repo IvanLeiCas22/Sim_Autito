@@ -14,7 +14,8 @@ public:
     enum class ControlMode
     {
         TelemetryOnly,
-        StraightYawHold
+        StraightYawHold,
+        WallFollowAdvance
     };
 
     struct SensorSnapshot
@@ -110,6 +111,7 @@ public:
     void start();
     void stop();
     void startStraightYawHold(double current_yaw_deg);
+    void startWallFollowAdvance();
     void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);

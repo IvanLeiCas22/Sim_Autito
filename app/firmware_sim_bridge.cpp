@@ -27,6 +27,8 @@ QString controlModeText(FirmwareSimBridge::ControlMode mode)
         return QStringLiteral("TelemetryOnly");
     case FirmwareSimBridge::ControlMode::StraightYawHold:
         return QStringLiteral("StraightYawHold");
+    case FirmwareSimBridge::ControlMode::WallFollowAdvance:
+        return QStringLiteral("WallFollowAdvance");
     }
 
     return QStringLiteral("Unknown");
@@ -373,6 +375,30 @@ void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
 #endif
 }
 
+void FirmwareSimBridge::startWallFollowAdvance()
+{
+    ensureFirmwareCoreInitialized();
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const bool started = App_Nav_StartWallFollowAdvance();
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::WallFollowAdvance : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.state = started ? QStringLiteral("FW: wall-follow advance") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Wall-follow advance primitive started")
+        : QStringLiteral("Wall-follow advance primitive could not start");
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Wall-follow advance unsupported without firmware core");
+#endif
+}
+
 void FirmwareSimBridge::stopControl()
 {
     stop();
@@ -403,10 +429,21 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
 
     bool straight_yaw_hold_ok = true;
+    bool wall_follow_ok = true;
     if (control_mode_ == ControlMode::StraightYawHold) {
         AppNavOutput primitive_output = {};
         straight_yaw_hold_ok = App_Nav_ComputeStraightDrivePwm(&input, &primitive_output);
         if (straight_yaw_hold_ok) {
+            command.left_pwm = primitive_output.left_motor_pwm;
+            command.right_pwm = primitive_output.right_motor_pwm;
+        }
+    } else if (control_mode_ == ControlMode::WallFollowAdvance) {
+        AppNavOutput primitive_output = {};
+        wall_follow_ok = App_Nav_ComputeWallFollowPwm(&input,
+                                                      sim_config_right_base_,
+                                                      sim_config_left_base_,
+                                                      &primitive_output);
+        if (wall_follow_ok) {
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
         }
@@ -423,6 +460,9 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
         .arg(static_cast<int>(firmware_debug.transition_sequence));
     if (control_mode_ == ControlMode::StraightYawHold && !straight_yaw_hold_ok) {
         debug_.reason += QStringLiteral(" straight_yaw_hold_pwm=false");
+    }
+    if (control_mode_ == ControlMode::WallFollowAdvance && !wall_follow_ok) {
+        debug_.reason += QStringLiteral(" wall_follow_pwm=false/no_reference");
     }
     debug_.control_mode = controlModeText(control_mode_);
     debug_.sim_config_left_base = sim_config_left_base_;

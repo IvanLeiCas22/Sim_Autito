@@ -60,6 +60,7 @@ private:
     void stopSimulation();
     void toggleSimulation();
     void startStraightYawHoldControl();
+    void startWallFollowAdvanceControl();
     void stopFirmwareControl();
     void tuneFirmwareConfig();
     void simulationStep();

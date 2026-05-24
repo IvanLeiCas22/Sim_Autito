@@ -180,6 +180,7 @@ void MainWindow::setupActions()
     auto *toggleAction = new QAction(QStringLiteral("Start/Stop"), this);
     auto *fitAction = new QAction(QStringLiteral("Fit map"), this);
     auto *startStraightYawHoldAction = new QAction(QStringLiteral("Start straight yaw-hold"), this);
+    auto *startWallFollowAdvanceAction = new QAction(QStringLiteral("Start wall-follow advance"), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
 
@@ -197,6 +198,7 @@ void MainWindow::setupActions()
     connect(toggleAction, &QAction::triggered, this, [this]() { toggleSimulation(); });
     connect(fitAction, &QAction::triggered, this, [this]() { fitViewToWorld(); });
     connect(startStraightYawHoldAction, &QAction::triggered, this, [this]() { startStraightYawHoldControl(); });
+    connect(startWallFollowAdvanceAction, &QAction::triggered, this, [this]() { startWallFollowAdvanceControl(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
 
@@ -222,6 +224,7 @@ void MainWindow::setupActions()
 
     auto *firmwareMenu = menuBar()->addMenu(QStringLiteral("&Firmware"));
     firmwareMenu->addAction(startStraightYawHoldAction);
+    firmwareMenu->addAction(startWallFollowAdvanceAction);
     firmwareMenu->addAction(stopFirmwareControlAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
@@ -270,6 +273,7 @@ void MainWindow::setupActions()
     addAction(toggleAction);
     addAction(fitAction);
     addAction(startStraightYawHoldAction);
+    addAction(startWallFollowAdvanceAction);
     addAction(stopFirmwareControlAction);
     addAction(tuneFirmwareConfigAction);
 }
@@ -351,6 +355,25 @@ void MainWindow::startStraightYawHoldControl()
 {
     updateSensors();
     firmwareBridge_.startStraightYawHold(robot_.yawDeg());
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startWallFollowAdvanceControl()
+{
+    updateSensors();
+    firmwareBridge_.startWallFollowAdvance();
 
     if (firmwareBridge_.debug().enabled) {
         simulationRunning_ = true;
