@@ -73,6 +73,37 @@ public:
         uint32_t decision_random_value = 0;
     };
 
+    struct FirmwareConfig
+    {
+        uint16_t right_motor_base_speed = 0;
+        uint16_t left_motor_base_speed = 0;
+        uint16_t faster_motor_smooth_turn_speed = 0;
+        uint16_t slower_motor_smooth_turn_speed = 0;
+        uint16_t turn_target_dps = 0;
+        uint16_t pivot_turn_target_dps = 0;
+
+        int32_t advance_pid_kp_q16 = 0;
+        int32_t advance_pid_ki_q16 = 0;
+        int32_t advance_pid_kd_q16 = 0;
+        int32_t advance_pid_output_limit_pwm = 0;
+
+        int32_t smooth_turn_pid_kp_q16 = 0;
+        int32_t smooth_turn_pid_ki_q16 = 0;
+        int32_t smooth_turn_pid_kd_q16 = 0;
+        int32_t smooth_turn_pid_output_limit_pwm = 0;
+
+        int32_t pivot_turn_pid_kp_q16 = 0;
+        int32_t pivot_turn_pid_ki_q16 = 0;
+        int32_t pivot_turn_pid_kd_q16 = 0;
+        int32_t pivot_turn_pid_output_limit_pwm = 0;
+
+        int32_t braking_pid_kp_q16 = 0;
+        int32_t braking_pid_ki_q16 = 0;
+        int32_t braking_pid_kd_q16 = 0;
+        int32_t braking_pid_output_limit_pwm = 0;
+        int16_t braking_min_speed_pwm = 0;
+    };
+
     FirmwareSimBridge();
 
     void reset();
@@ -84,6 +115,9 @@ public:
     Command tick(const SensorSnapshot &snapshot);
     Debug debug() const;
     bool isFirmwareControlActive() const;
+    bool getFirmwareConfig(FirmwareConfig *out) const;
+    bool setFirmwareConfig(const FirmwareConfig &config);
+    bool resetFirmwareConfigToSimulationDefaults();
 
 private:
     void ensureFirmwareCoreInitialized();

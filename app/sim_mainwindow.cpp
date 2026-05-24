@@ -3,22 +3,30 @@
 #include <QAction>
 #include <QBrush>
 #include <QColor>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsLineItem>
 #include <QGraphicsPolygonItem>
 #include <QGraphicsRectItem>
+#include <QGroupBox>
 #include <QKeySequence>
 #include <QList>
 #include <QHBoxLayout>
 #include <QFont>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPen>
+#include <QPushButton>
 #include <QResizeEvent>
+#include <QScrollArea>
 #include <QShowEvent>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QVBoxLayout>
@@ -61,6 +69,17 @@ QString tapeKindText(TapeDebugKind kind)
     }
 
     return QStringLiteral("unknown");
+}
+
+int q16ToHundredths(int32_t q16)
+{
+    return static_cast<int>(std::llround(static_cast<double>(q16) * 100.0 / 65536.0));
+}
+
+int32_t hundredthsToQ16(int value_x100)
+{
+    const double q16 = std::llround(static_cast<double>(value_x100) * 65536.0 / 100.0);
+    return static_cast<int32_t>(std::clamp(q16, -2147483648.0, 2147483647.0));
 }
 }
 
@@ -162,6 +181,7 @@ void MainWindow::setupActions()
     auto *fitAction = new QAction(QStringLiteral("Fit map"), this);
     auto *startStraightYawHoldAction = new QAction(QStringLiteral("Start straight yaw-hold"), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
+    auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
 
     loadAction->setShortcut(QKeySequence::Open);
     resetAction->setShortcut(QKeySequence(QStringLiteral("R")));
@@ -178,6 +198,7 @@ void MainWindow::setupActions()
     connect(fitAction, &QAction::triggered, this, [this]() { fitViewToWorld(); });
     connect(startStraightYawHoldAction, &QAction::triggered, this, [this]() { startStraightYawHoldControl(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
+    connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
 
     toolbar->addAction(loadAction);
     toolbar->addAction(resetAction);
@@ -202,6 +223,8 @@ void MainWindow::setupActions()
     auto *firmwareMenu = menuBar()->addMenu(QStringLiteral("&Firmware"));
     firmwareMenu->addAction(startStraightYawHoldAction);
     firmwareMenu->addAction(stopFirmwareControlAction);
+    firmwareMenu->addSeparator();
+    firmwareMenu->addAction(tuneFirmwareConfigAction);
 
     auto *manualMenu = menuBar()->addMenu(QStringLiteral("&Manual"));
     auto makeManualAction = [this, manualMenu](const QString &text,
@@ -248,6 +271,7 @@ void MainWindow::setupActions()
     addAction(fitAction);
     addAction(startStraightYawHoldAction);
     addAction(stopFirmwareControlAction);
+    addAction(tuneFirmwareConfigAction);
 }
 
 void MainWindow::loadMap()
@@ -353,6 +377,251 @@ void MainWindow::stopFirmwareControl()
     lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
     refreshScene();
     refreshTelemetry();
+}
+
+void MainWindow::tuneFirmwareConfig()
+{
+    FirmwareSimBridge::FirmwareConfig currentConfig;
+    if (!firmwareBridge_.getFirmwareConfig(&currentConfig)) {
+        QMessageBox::information(this,
+                                 QStringLiteral("Firmware config"),
+                                 QStringLiteral("Firmware core not available"));
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Tune firmware PID/config"));
+    dialog.resize(520, 720);
+
+    auto *rootLayout = new QVBoxLayout(&dialog);
+    auto *scrollArea = new QScrollArea(&dialog);
+    scrollArea->setWidgetResizable(true);
+
+    auto *content = new QWidget(scrollArea);
+    auto *contentLayout = new QVBoxLayout(content);
+
+    auto makeGroup = [contentLayout](const QString &title) {
+        auto *group = new QGroupBox(title);
+        auto *layout = new QFormLayout(group);
+        contentLayout->addWidget(group);
+        return layout;
+    };
+
+    auto makeSpin = [](int minimum, int maximum, int value) {
+        auto *spin = new QSpinBox;
+        spin->setRange(minimum, maximum);
+        spin->setValue(value);
+        return spin;
+    };
+
+    auto addSpin = [makeSpin](QFormLayout *layout,
+                              const QString &label,
+                              int minimum,
+                              int maximum,
+                              int value) {
+        QSpinBox *spin = makeSpin(minimum, maximum, value);
+        layout->addRow(label, spin);
+        return spin;
+    };
+
+    struct PidEditors
+    {
+        QSpinBox *kp = nullptr;
+        QSpinBox *ki = nullptr;
+        QSpinBox *kd = nullptr;
+        QSpinBox *limit = nullptr;
+    };
+
+    auto addPidGroup = [addSpin](QFormLayout *layout,
+                                 int32_t kp_q16,
+                                 int32_t ki_q16,
+                                 int32_t kd_q16,
+                                 int32_t limit_pwm) {
+        PidEditors editors;
+        editors.kp = addSpin(layout, QStringLiteral("Kp x100"), -100000, 100000, q16ToHundredths(kp_q16));
+        editors.ki = addSpin(layout, QStringLiteral("Ki x100"), -100000, 100000, q16ToHundredths(ki_q16));
+        editors.kd = addSpin(layout, QStringLiteral("Kd x100"), -100000, 100000, q16ToHundredths(kd_q16));
+        editors.limit = addSpin(layout, QStringLiteral("output limit pwm"), 0, 20000, limit_pwm);
+        return editors;
+    };
+
+    QFormLayout *advanceLayout = makeGroup(QStringLiteral("Advance / yaw-hold"));
+    PidEditors advancePid = addPidGroup(advanceLayout,
+                                        currentConfig.advance_pid_kp_q16,
+                                        currentConfig.advance_pid_ki_q16,
+                                        currentConfig.advance_pid_kd_q16,
+                                        currentConfig.advance_pid_output_limit_pwm);
+
+    QFormLayout *smoothLayout = makeGroup(QStringLiteral("Smooth turn"));
+    PidEditors smoothPid = addPidGroup(smoothLayout,
+                                       currentConfig.smooth_turn_pid_kp_q16,
+                                       currentConfig.smooth_turn_pid_ki_q16,
+                                       currentConfig.smooth_turn_pid_kd_q16,
+                                       currentConfig.smooth_turn_pid_output_limit_pwm);
+
+    QFormLayout *pivotLayout = makeGroup(QStringLiteral("Pivot turn"));
+    PidEditors pivotPid = addPidGroup(pivotLayout,
+                                      currentConfig.pivot_turn_pid_kp_q16,
+                                      currentConfig.pivot_turn_pid_ki_q16,
+                                      currentConfig.pivot_turn_pid_kd_q16,
+                                      currentConfig.pivot_turn_pid_output_limit_pwm);
+
+    QFormLayout *brakingLayout = makeGroup(QStringLiteral("Braking"));
+    PidEditors brakingPid = addPidGroup(brakingLayout,
+                                        currentConfig.braking_pid_kp_q16,
+                                        currentConfig.braking_pid_ki_q16,
+                                        currentConfig.braking_pid_kd_q16,
+                                        currentConfig.braking_pid_output_limit_pwm);
+    QSpinBox *brakingMinSpeed = addSpin(brakingLayout,
+                                        QStringLiteral("braking min speed pwm"),
+                                        -32768,
+                                        32767,
+                                        currentConfig.braking_min_speed_pwm);
+
+    QFormLayout *baseLayout = makeGroup(QStringLiteral("Bases PWM"));
+    QSpinBox *leftBase = addSpin(baseLayout,
+                                 QStringLiteral("left motor base speed"),
+                                 0,
+                                 65535,
+                                 currentConfig.left_motor_base_speed);
+    QSpinBox *rightBase = addSpin(baseLayout,
+                                  QStringLiteral("right motor base speed"),
+                                  0,
+                                  65535,
+                                  currentConfig.right_motor_base_speed);
+    QSpinBox *fasterSmooth = addSpin(baseLayout,
+                                     QStringLiteral("faster smooth turn speed"),
+                                     0,
+                                     65535,
+                                     currentConfig.faster_motor_smooth_turn_speed);
+    QSpinBox *slowerSmooth = addSpin(baseLayout,
+                                     QStringLiteral("slower smooth turn speed"),
+                                     0,
+                                     65535,
+                                     currentConfig.slower_motor_smooth_turn_speed);
+    QSpinBox *turnTarget = addSpin(baseLayout,
+                                   QStringLiteral("turn target dps"),
+                                   0,
+                                   65535,
+                                   currentConfig.turn_target_dps);
+    QSpinBox *pivotTurnTarget = addSpin(baseLayout,
+                                        QStringLiteral("pivot turn target dps"),
+                                        0,
+                                        65535,
+                                        currentConfig.pivot_turn_target_dps);
+
+    contentLayout->addStretch();
+    scrollArea->setWidget(content);
+    rootLayout->addWidget(scrollArea);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok
+                                         | QDialogButtonBox::Cancel
+                                         | QDialogButtonBox::Apply,
+                                         &dialog);
+    QPushButton *resetButton = buttons->addButton(QStringLiteral("Reset simulation defaults"),
+                                                  QDialogButtonBox::ResetRole);
+    rootLayout->addWidget(buttons);
+
+    auto collectConfig = [&]() {
+        FirmwareSimBridge::FirmwareConfig config = currentConfig;
+        config.advance_pid_kp_q16 = hundredthsToQ16(advancePid.kp->value());
+        config.advance_pid_ki_q16 = hundredthsToQ16(advancePid.ki->value());
+        config.advance_pid_kd_q16 = hundredthsToQ16(advancePid.kd->value());
+        config.advance_pid_output_limit_pwm = advancePid.limit->value();
+
+        config.smooth_turn_pid_kp_q16 = hundredthsToQ16(smoothPid.kp->value());
+        config.smooth_turn_pid_ki_q16 = hundredthsToQ16(smoothPid.ki->value());
+        config.smooth_turn_pid_kd_q16 = hundredthsToQ16(smoothPid.kd->value());
+        config.smooth_turn_pid_output_limit_pwm = smoothPid.limit->value();
+
+        config.pivot_turn_pid_kp_q16 = hundredthsToQ16(pivotPid.kp->value());
+        config.pivot_turn_pid_ki_q16 = hundredthsToQ16(pivotPid.ki->value());
+        config.pivot_turn_pid_kd_q16 = hundredthsToQ16(pivotPid.kd->value());
+        config.pivot_turn_pid_output_limit_pwm = pivotPid.limit->value();
+
+        config.braking_pid_kp_q16 = hundredthsToQ16(brakingPid.kp->value());
+        config.braking_pid_ki_q16 = hundredthsToQ16(brakingPid.ki->value());
+        config.braking_pid_kd_q16 = hundredthsToQ16(brakingPid.kd->value());
+        config.braking_pid_output_limit_pwm = brakingPid.limit->value();
+        config.braking_min_speed_pwm = static_cast<int16_t>(brakingMinSpeed->value());
+
+        config.left_motor_base_speed = static_cast<uint16_t>(leftBase->value());
+        config.right_motor_base_speed = static_cast<uint16_t>(rightBase->value());
+        config.faster_motor_smooth_turn_speed = static_cast<uint16_t>(fasterSmooth->value());
+        config.slower_motor_smooth_turn_speed = static_cast<uint16_t>(slowerSmooth->value());
+        config.turn_target_dps = static_cast<uint16_t>(turnTarget->value());
+        config.pivot_turn_target_dps = static_cast<uint16_t>(pivotTurnTarget->value());
+        return config;
+    };
+
+    auto loadConfigIntoWidgets = [&](const FirmwareSimBridge::FirmwareConfig &config) {
+        currentConfig = config;
+        advancePid.kp->setValue(q16ToHundredths(config.advance_pid_kp_q16));
+        advancePid.ki->setValue(q16ToHundredths(config.advance_pid_ki_q16));
+        advancePid.kd->setValue(q16ToHundredths(config.advance_pid_kd_q16));
+        advancePid.limit->setValue(config.advance_pid_output_limit_pwm);
+
+        smoothPid.kp->setValue(q16ToHundredths(config.smooth_turn_pid_kp_q16));
+        smoothPid.ki->setValue(q16ToHundredths(config.smooth_turn_pid_ki_q16));
+        smoothPid.kd->setValue(q16ToHundredths(config.smooth_turn_pid_kd_q16));
+        smoothPid.limit->setValue(config.smooth_turn_pid_output_limit_pwm);
+
+        pivotPid.kp->setValue(q16ToHundredths(config.pivot_turn_pid_kp_q16));
+        pivotPid.ki->setValue(q16ToHundredths(config.pivot_turn_pid_ki_q16));
+        pivotPid.kd->setValue(q16ToHundredths(config.pivot_turn_pid_kd_q16));
+        pivotPid.limit->setValue(config.pivot_turn_pid_output_limit_pwm);
+
+        brakingPid.kp->setValue(q16ToHundredths(config.braking_pid_kp_q16));
+        brakingPid.ki->setValue(q16ToHundredths(config.braking_pid_ki_q16));
+        brakingPid.kd->setValue(q16ToHundredths(config.braking_pid_kd_q16));
+        brakingPid.limit->setValue(config.braking_pid_output_limit_pwm);
+        brakingMinSpeed->setValue(config.braking_min_speed_pwm);
+
+        leftBase->setValue(config.left_motor_base_speed);
+        rightBase->setValue(config.right_motor_base_speed);
+        fasterSmooth->setValue(config.faster_motor_smooth_turn_speed);
+        slowerSmooth->setValue(config.slower_motor_smooth_turn_speed);
+        turnTarget->setValue(config.turn_target_dps);
+        pivotTurnTarget->setValue(config.pivot_turn_target_dps);
+    };
+
+    auto applyConfig = [&]() {
+        const FirmwareSimBridge::FirmwareConfig config = collectConfig();
+        if (!firmwareBridge_.setFirmwareConfig(config)) {
+            QMessageBox::warning(&dialog,
+                                 QStringLiteral("Firmware config"),
+                                 QStringLiteral("Firmware core not available"));
+            return false;
+        }
+
+        currentConfig = config;
+        refreshTelemetry();
+        return true;
+    };
+
+    connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, &dialog, [&]() {
+        applyConfig();
+    });
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        if (applyConfig()) {
+            dialog.accept();
+        }
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(resetButton, &QPushButton::clicked, &dialog, [&]() {
+        if (!firmwareBridge_.resetFirmwareConfigToSimulationDefaults()
+            || !firmwareBridge_.getFirmwareConfig(&currentConfig)) {
+            QMessageBox::warning(&dialog,
+                                 QStringLiteral("Firmware config"),
+                                 QStringLiteral("Firmware core not available"));
+            return;
+        }
+
+        loadConfigIntoWidgets(currentConfig);
+        refreshTelemetry();
+    });
+
+    dialog.exec();
 }
 
 void MainWindow::simulationStep()

@@ -63,6 +63,20 @@ constexpr uint16_t kFloorBlackAdc = 0;
 constexpr uint16_t kSimLeftBasePwm = 3000;
 constexpr uint32_t kDecisionRandomValue = 0U;
 
+double effectiveMotorGain(double gain)
+{
+    return std::isfinite(gain) && gain > 0.0 ? gain : 1.0;
+}
+
+uint16_t simulationRightBasePwm(double left_gain, double right_gain)
+{
+    const double rightBase = std::round(
+        static_cast<double>(kSimLeftBasePwm)
+        * effectiveMotorGain(left_gain)
+        / effectiveMotorGain(right_gain));
+    return static_cast<uint16_t>(std::clamp(rightBase, 0.0, 65535.0));
+}
+
 uint16_t toFirmwareDistanceMm(double distance_mm)
 {
     if (!std::isfinite(distance_mm) || distance_mm <= 0.0) {
@@ -111,6 +125,75 @@ QString recommendedActionText(AppNavRecommendedAction action)
     }
 
     return QStringLiteral("UNKNOWN");
+}
+
+FirmwareSimBridge::FirmwareConfig toBridgeConfig(const AppNavConfig &config)
+{
+    FirmwareSimBridge::FirmwareConfig out;
+    out.right_motor_base_speed = config.right_motor_base_speed;
+    out.left_motor_base_speed = config.left_motor_base_speed;
+    out.faster_motor_smooth_turn_speed = config.faster_motor_smooth_turn_speed;
+    out.slower_motor_smooth_turn_speed = config.slower_motor_smooth_turn_speed;
+    out.turn_target_dps = config.turn_target_dps;
+    out.pivot_turn_target_dps = config.pivot_turn_target_dps;
+
+    out.advance_pid_kp_q16 = config.advance_pid_kp_q16;
+    out.advance_pid_ki_q16 = config.advance_pid_ki_q16;
+    out.advance_pid_kd_q16 = config.advance_pid_kd_q16;
+    out.advance_pid_output_limit_pwm = config.advance_pid_output_limit_pwm;
+
+    out.smooth_turn_pid_kp_q16 = config.smooth_turn_pid_kp_q16;
+    out.smooth_turn_pid_ki_q16 = config.smooth_turn_pid_ki_q16;
+    out.smooth_turn_pid_kd_q16 = config.smooth_turn_pid_kd_q16;
+    out.smooth_turn_pid_output_limit_pwm = config.smooth_turn_pid_output_limit_pwm;
+
+    out.pivot_turn_pid_kp_q16 = config.pivot_turn_pid_kp_q16;
+    out.pivot_turn_pid_ki_q16 = config.pivot_turn_pid_ki_q16;
+    out.pivot_turn_pid_kd_q16 = config.pivot_turn_pid_kd_q16;
+    out.pivot_turn_pid_output_limit_pwm = config.pivot_turn_pid_output_limit_pwm;
+
+    out.braking_pid_kp_q16 = config.braking_pid_kp_q16;
+    out.braking_pid_ki_q16 = config.braking_pid_ki_q16;
+    out.braking_pid_kd_q16 = config.braking_pid_kd_q16;
+    out.braking_pid_output_limit_pwm = config.braking_pid_output_limit_pwm;
+    out.braking_min_speed_pwm = config.braking_min_speed_pwm;
+    return out;
+}
+
+void copyEditableConfigToFirmware(const FirmwareSimBridge::FirmwareConfig &input,
+                                  AppNavConfig *config)
+{
+    if (config == nullptr) {
+        return;
+    }
+
+    config->right_motor_base_speed = input.right_motor_base_speed;
+    config->left_motor_base_speed = input.left_motor_base_speed;
+    config->faster_motor_smooth_turn_speed = input.faster_motor_smooth_turn_speed;
+    config->slower_motor_smooth_turn_speed = input.slower_motor_smooth_turn_speed;
+    config->turn_target_dps = input.turn_target_dps;
+    config->pivot_turn_target_dps = input.pivot_turn_target_dps;
+
+    config->advance_pid_kp_q16 = input.advance_pid_kp_q16;
+    config->advance_pid_ki_q16 = input.advance_pid_ki_q16;
+    config->advance_pid_kd_q16 = input.advance_pid_kd_q16;
+    config->advance_pid_output_limit_pwm = input.advance_pid_output_limit_pwm;
+
+    config->smooth_turn_pid_kp_q16 = input.smooth_turn_pid_kp_q16;
+    config->smooth_turn_pid_ki_q16 = input.smooth_turn_pid_ki_q16;
+    config->smooth_turn_pid_kd_q16 = input.smooth_turn_pid_kd_q16;
+    config->smooth_turn_pid_output_limit_pwm = input.smooth_turn_pid_output_limit_pwm;
+
+    config->pivot_turn_pid_kp_q16 = input.pivot_turn_pid_kp_q16;
+    config->pivot_turn_pid_ki_q16 = input.pivot_turn_pid_ki_q16;
+    config->pivot_turn_pid_kd_q16 = input.pivot_turn_pid_kd_q16;
+    config->pivot_turn_pid_output_limit_pwm = input.pivot_turn_pid_output_limit_pwm;
+
+    config->braking_pid_kp_q16 = input.braking_pid_kp_q16;
+    config->braking_pid_ki_q16 = input.braking_pid_ki_q16;
+    config->braking_pid_kd_q16 = input.braking_pid_kd_q16;
+    config->braking_pid_output_limit_pwm = input.braking_pid_output_limit_pwm;
+    config->braking_min_speed_pwm = input.braking_min_speed_pwm;
 }
 
 AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
@@ -173,12 +256,8 @@ void FirmwareSimBridge::ensureFirmwareCoreInitialized()
 void FirmwareSimBridge::applySimulationFirmwareConfig(const SensorSnapshot &snapshot)
 {
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
-    const double leftGain = std::isfinite(snapshot.left_motor_gain) && snapshot.left_motor_gain > 0.0
-        ? snapshot.left_motor_gain
-        : 1.0;
-    const double rightGain = std::isfinite(snapshot.right_motor_gain) && snapshot.right_motor_gain > 0.0
-        ? snapshot.right_motor_gain
-        : 1.0;
+    const double leftGain = effectiveMotorGain(snapshot.left_motor_gain);
+    const double rightGain = effectiveMotorGain(snapshot.right_motor_gain);
 
     if (simulation_config_applied_
         && std::abs(leftGain - last_left_gain_) < 0.000001
@@ -189,9 +268,8 @@ void FirmwareSimBridge::applySimulationFirmwareConfig(const SensorSnapshot &snap
     AppNavConfig config = {};
     App_Nav_GetConfig(&config);
 
-    const double rightBase = std::round(static_cast<double>(kSimLeftBasePwm) * leftGain / rightGain);
     config.left_motor_base_speed = kSimLeftBasePwm;
-    config.right_motor_base_speed = static_cast<uint16_t>(std::clamp(rightBase, 0.0, 65535.0));
+    config.right_motor_base_speed = simulationRightBasePwm(leftGain, rightGain);
 
     App_Nav_SetConfig(&config);
 
@@ -400,4 +478,59 @@ FirmwareSimBridge::Debug FirmwareSimBridge::debug() const
 bool FirmwareSimBridge::isFirmwareControlActive() const
 {
     return enabled_ && control_mode_ != ControlMode::TelemetryOnly;
+}
+
+bool FirmwareSimBridge::getFirmwareConfig(FirmwareConfig *out) const
+{
+    if (out == nullptr) {
+        return false;
+    }
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    AppNavConfig config = {};
+    App_Nav_GetConfig(&config);
+    *out = toBridgeConfig(config);
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool FirmwareSimBridge::setFirmwareConfig(const FirmwareConfig &config)
+{
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    AppNavConfig firmwareConfig = {};
+    App_Nav_GetConfig(&firmwareConfig);
+    copyEditableConfigToFirmware(config, &firmwareConfig);
+    App_Nav_SetConfig(&firmwareConfig);
+
+    sim_config_left_base_ = firmwareConfig.left_motor_base_speed;
+    sim_config_right_base_ = firmwareConfig.right_motor_base_speed;
+    debug_.sim_config_left_base = sim_config_left_base_;
+    debug_.sim_config_right_base = sim_config_right_base_;
+    simulation_config_applied_ = true;
+    return true;
+#else
+    Q_UNUSED(config);
+    return false;
+#endif
+}
+
+bool FirmwareSimBridge::resetFirmwareConfigToSimulationDefaults()
+{
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    AppNavConfig config = App_Nav_DefaultConfig();
+    config.left_motor_base_speed = kSimLeftBasePwm;
+    config.right_motor_base_speed = simulationRightBasePwm(last_left_gain_, last_right_gain_);
+    App_Nav_SetConfig(&config);
+
+    simulation_config_applied_ = true;
+    sim_config_left_base_ = config.left_motor_base_speed;
+    sim_config_right_base_ = config.right_motor_base_speed;
+    debug_.sim_config_left_base = sim_config_left_base_;
+    debug_.sim_config_right_base = sim_config_right_base_;
+    return true;
+#else
+    return false;
+#endif
 }
