@@ -230,6 +230,16 @@ void MainWindow::setupActions()
     firmwareMenu->addAction(tuneFirmwareConfigAction);
 
     auto *manualMenu = menuBar()->addMenu(QStringLiteral("&Manual"));
+    auto *rotateJogAroundRearAxleAction = new QAction(QStringLiteral("Rotate jog around rear axle"), this);
+    rotateJogAroundRearAxleAction->setCheckable(true);
+    rotateJogAroundRearAxleAction->setChecked(rotateJogAroundRearAxle_);
+    connect(rotateJogAroundRearAxleAction, &QAction::toggled, this, [this](bool checked) {
+        rotateJogAroundRearAxle_ = checked;
+        refreshTelemetry();
+    });
+    manualMenu->addAction(rotateJogAroundRearAxleAction);
+    manualMenu->addSeparator();
+
     auto makeManualAction = [this, manualMenu](const QString &text,
                                                std::initializer_list<const char *> shortcuts,
                                                double distance_mm,
@@ -716,7 +726,7 @@ void MainWindow::manualJog(double distance_mm, double delta_yaw_deg)
     }
 
     if (std::abs(delta_yaw_deg) > 0.001) {
-        robot_.rotate(delta_yaw_deg);
+        rotateManualJog(delta_yaw_deg);
     }
 
     lastCommand_ = FirmwareSimBridge::Command{};
@@ -724,7 +734,9 @@ void MainWindow::manualJog(double distance_mm, double delta_yaw_deg)
     if (std::abs(distance_mm) > 0.001) {
         lastManualJogDescription_ = QStringLiteral("linear %1 mm").arg(distance_mm, 0, 'f', 1);
     } else if (std::abs(delta_yaw_deg) > 0.001) {
-        lastManualJogDescription_ = QStringLiteral("turn %1 deg").arg(delta_yaw_deg, 0, 'f', 1);
+        lastManualJogDescription_ = QStringLiteral("turn %1 deg around %2")
+            .arg(delta_yaw_deg, 0, 'f', 1)
+            .arg(rotateJogAroundRearAxle_ ? QStringLiteral("rear axle") : QStringLiteral("center"));
     } else {
         lastManualJogDescription_ = QStringLiteral("none");
     }
@@ -733,6 +745,37 @@ void MainWindow::manualJog(double distance_mm, double delta_yaw_deg)
     lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
     refreshScene();
     refreshTelemetry();
+}
+
+void MainWindow::rotateManualJog(double delta_yaw_deg)
+{
+    if (!rotateJogAroundRearAxle_) {
+        robot_.rotate(delta_yaw_deg);
+        return;
+    }
+
+    const double yawOldDeg = robot_.yawDeg();
+    const double yawOldRad = yawOldDeg * kDegToRad;
+    const double yawNewDeg = yawOldDeg + delta_yaw_deg;
+    const double yawNewRad = yawNewDeg * kDegToRad;
+    const double pivotLocalX = robot_.pivotCenterLocalXmm();
+    const double pivotLocalY = robot_.pivotCenterLocalYmm();
+
+    const double pivotGlobalX = robot_.xMm()
+        + std::cos(yawOldRad) * pivotLocalX
+        - std::sin(yawOldRad) * pivotLocalY;
+    const double pivotGlobalY = robot_.yMm()
+        + std::sin(yawOldRad) * pivotLocalX
+        + std::cos(yawOldRad) * pivotLocalY;
+
+    const double centerNewX = pivotGlobalX
+        - std::cos(yawNewRad) * pivotLocalX
+        + std::sin(yawNewRad) * pivotLocalY;
+    const double centerNewY = pivotGlobalY
+        - std::sin(yawNewRad) * pivotLocalX
+        - std::cos(yawNewRad) * pivotLocalY;
+
+    robot_.setPose(centerNewX, centerNewY, yawNewDeg);
 }
 
 void MainWindow::updateSensors()
@@ -908,6 +951,8 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  keys: W/S/A/D or arrows\n");
     text += QStringLiteral("  fast: Shift + movement key\n");
     text += QStringLiteral("  fine: Ctrl + arrows\n");
+    text += QStringLiteral("  rotate_reference: %1\n")
+        .arg(rotateJogAroundRearAxle_ ? QStringLiteral("rear axle") : QStringLiteral("center"));
     text += manualJogPerturbationMode
         ? QStringLiteral("  note: manual jog perturbs pose without stopping firmware control\n")
         : QStringLiteral("  note: manual jog stops the timer before moving\n");

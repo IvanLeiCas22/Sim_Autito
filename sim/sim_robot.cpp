@@ -15,6 +15,7 @@ constexpr double kPivotLikeMaxSumRatio = 0.35;
 constexpr double kReferencePwm = 3000.0;
 constexpr double kReferenceVelocityMmS = 200.0;
 constexpr double kWheelBaseMm = 73.0;
+constexpr double kAngularVelocityEpsilon = 1.0e-9;
 }
 
 SimRobot::SimRobot() = default;
@@ -83,33 +84,43 @@ void SimRobot::applyDifferentialDrive(int16_t left_motor_pwm,
     const double vLeft = effectiveLeftPwm / kReferencePwm * kReferenceVelocityMmS;
     const double vRight = effectiveRightPwm / kReferencePwm * kReferenceVelocityMmS;
     const double linearVelocityMmS = (vLeft + vRight) / 2.0;
+    // Positive yaw in the simulator points toward +Y on screen, so the existing
+    // control convention is left wheel faster => positive yaw.
     const double angularVelocityRadS = (vLeft - vRight) / kWheelBaseMm;
     const double yawRad = yawDeg_ * kDegToRad;
     const bool pivotLike = isPivotLikeCommand(leftPwm, rightPwm);
     lastMotionWasPivotLike_ = pivotLike;
     yawRateDegS_ = angularVelocityRadS * kRadToDeg;
 
-    if (usePivotCenterCorrection_ && pivotLike) {
-        const double pivotGlobalX = xMm_
-            + std::cos(yawRad) * pivotCenterLocalXmm_
-            - std::sin(yawRad) * pivotCenterLocalYmm_;
-        const double pivotGlobalY = yMm_
-            + std::sin(yawRad) * pivotCenterLocalXmm_
-            + std::cos(yawRad) * pivotCenterLocalYmm_;
-        yawDeg_ = normalizeYawDeg(yawDeg_ + yawRateDegS_ * dt_s);
+    const double pivotLocalX = usePivotCenterCorrection_ ? pivotCenterLocalXmm_ : 0.0;
+    const double pivotLocalY = usePivotCenterCorrection_ ? pivotCenterLocalYmm_ : 0.0;
+    const double pivotGlobalX = xMm_
+        + std::cos(yawRad) * pivotLocalX
+        - std::sin(yawRad) * pivotLocalY;
+    const double pivotGlobalY = yMm_
+        + std::sin(yawRad) * pivotLocalX
+        + std::cos(yawRad) * pivotLocalY;
 
-        const double newYawRad = yawDeg_ * kDegToRad;
-        xMm_ = pivotGlobalX
-            - std::cos(newYawRad) * pivotCenterLocalXmm_
-            + std::sin(newYawRad) * pivotCenterLocalYmm_;
-        yMm_ = pivotGlobalY
-            - std::sin(newYawRad) * pivotCenterLocalXmm_
-            - std::cos(newYawRad) * pivotCenterLocalYmm_;
+    const double yawNewRad = yawRad + angularVelocityRadS * dt_s;
+    double pivotNewX = pivotGlobalX;
+    double pivotNewY = pivotGlobalY;
+
+    if (std::abs(angularVelocityRadS) < kAngularVelocityEpsilon) {
+        pivotNewX += std::cos(yawRad) * linearVelocityMmS * dt_s;
+        pivotNewY += std::sin(yawRad) * linearVelocityMmS * dt_s;
     } else {
-        xMm_ += std::cos(yawRad) * linearVelocityMmS * dt_s;
-        yMm_ += std::sin(yawRad) * linearVelocityMmS * dt_s;
-        yawDeg_ = normalizeYawDeg(yawDeg_ + yawRateDegS_ * dt_s);
+        const double arcRadiusMm = linearVelocityMmS / angularVelocityRadS;
+        pivotNewX += arcRadiusMm * (std::sin(yawNewRad) - std::sin(yawRad));
+        pivotNewY -= arcRadiusMm * (std::cos(yawNewRad) - std::cos(yawRad));
     }
+
+    xMm_ = pivotNewX
+        - std::cos(yawNewRad) * pivotLocalX
+        + std::sin(yawNewRad) * pivotLocalY;
+    yMm_ = pivotNewY
+        - std::sin(yawNewRad) * pivotLocalX
+        - std::cos(yawNewRad) * pivotLocalY;
+    yawDeg_ = normalizeYawDeg(yawNewRad * kRadToDeg);
 }
 
 double SimRobot::xMm() const

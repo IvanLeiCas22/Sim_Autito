@@ -65,6 +65,7 @@ private:
     void tuneFirmwareConfig();
     void simulationStep();
     void manualJog(double distance_mm, double delta_yaw_deg);
+    void rotateManualJog(double delta_yaw_deg);
 
     void updateSensors();
     FirmwareSimBridge::SensorSnapshot buildBridgeSnapshot() const;
@@ -87,6 +88,7 @@ private:
     QLabel *statusLabel_ = nullptr;
 
     bool simulationRunning_ = false;
+    bool rotateJogAroundRearAxle_ = true;
     FirmwareSimBridge::Command lastCommand_;
     QString lastManualJogDescription_ = QStringLiteral("none");
 

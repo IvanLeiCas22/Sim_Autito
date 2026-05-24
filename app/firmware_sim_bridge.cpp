@@ -63,6 +63,13 @@ constexpr int kAdcFloorRearCh = 7;
 constexpr uint16_t kFloorWhiteAdc = 4095;
 constexpr uint16_t kFloorBlackAdc = 0;
 constexpr uint16_t kSimLeftBasePwm = 3000;
+constexpr int kSimAdvancePidKpX100 = 700;
+constexpr int kSimAdvancePidKdX100 = 380;
+constexpr int32_t kSimAdvancePidOutputLimitPwm = 2000;
+constexpr uint16_t kSimWallTargetMm = 62;
+constexpr uint16_t kSimWallThresholdSideMm = 135;
+constexpr uint16_t kSimWallThresholdDiagonalMm = 145;
+constexpr uint16_t kSimWallThresholdFrontMm = 135;
 constexpr uint32_t kDecisionRandomValue = 0U;
 
 double effectiveMotorGain(double gain)
@@ -77,6 +84,43 @@ uint16_t simulationRightBasePwm(double left_gain, double right_gain)
         * effectiveMotorGain(left_gain)
         / effectiveMotorGain(right_gain));
     return static_cast<uint16_t>(std::clamp(rightBase, 0.0, 65535.0));
+}
+
+int32_t hundredthsToQ16(int value_x100)
+{
+    const double q16 = std::round(static_cast<double>(value_x100) * 65536.0 / 100.0);
+    return static_cast<int32_t>(std::clamp(q16, -2147483648.0, 2147483647.0));
+}
+
+void applySimulationBasePwmConfig(AppNavConfig *config, double left_gain, double right_gain)
+{
+    if (config == nullptr) {
+        return;
+    }
+
+    config->left_motor_base_speed = kSimLeftBasePwm;
+    config->right_motor_base_speed = simulationRightBasePwm(left_gain, right_gain);
+}
+
+void applySimulationFirmwareDefaults(AppNavConfig *config, double left_gain, double right_gain)
+{
+    if (config == nullptr) {
+        return;
+    }
+
+    applySimulationBasePwmConfig(config, left_gain, right_gain);
+
+    config->advance_pid_kp_q16 = hundredthsToQ16(kSimAdvancePidKpX100);
+    if (config->advance_pid_ki_q16 == 0) {
+        config->advance_pid_ki_q16 = hundredthsToQ16(0);
+    }
+    config->advance_pid_kd_q16 = hundredthsToQ16(kSimAdvancePidKdX100);
+    config->advance_pid_output_limit_pwm = kSimAdvancePidOutputLimitPwm;
+
+    config->wall_target_mm = kSimWallTargetMm;
+    config->wall_threshold_mm_side = kSimWallThresholdSideMm;
+    config->wall_threshold_mm_diagonal = kSimWallThresholdDiagonalMm;
+    config->wall_threshold_mm_front = kSimWallThresholdFrontMm;
 }
 
 uint16_t toFirmwareDistanceMm(double distance_mm)
@@ -277,11 +321,15 @@ void FirmwareSimBridge::applySimulationFirmwareConfig(const SensorSnapshot &snap
         return;
     }
 
+    const bool firstApplication = !simulation_config_applied_;
+
     AppNavConfig config = {};
     App_Nav_GetConfig(&config);
-
-    config.left_motor_base_speed = kSimLeftBasePwm;
-    config.right_motor_base_speed = simulationRightBasePwm(leftGain, rightGain);
+    if (firstApplication) {
+        applySimulationFirmwareDefaults(&config, leftGain, rightGain);
+    } else {
+        applySimulationBasePwmConfig(&config, leftGain, rightGain);
+    }
 
     App_Nav_SetConfig(&config);
 
@@ -570,8 +618,7 @@ bool FirmwareSimBridge::resetFirmwareConfigToSimulationDefaults()
 {
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     AppNavConfig config = App_Nav_DefaultConfig();
-    config.left_motor_base_speed = kSimLeftBasePwm;
-    config.right_motor_base_speed = simulationRightBasePwm(last_left_gain_, last_right_gain_);
+    applySimulationFirmwareDefaults(&config, last_left_gain_, last_right_gain_);
     App_Nav_SetConfig(&config);
 
     simulation_config_applied_ = true;
