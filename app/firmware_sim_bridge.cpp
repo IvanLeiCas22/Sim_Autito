@@ -70,6 +70,13 @@ constexpr uint16_t kSimLeftBasePwm = 3000;
 constexpr int kSimAdvancePidKpX100 = 700;
 constexpr int kSimAdvancePidKdX100 = 380;
 constexpr int32_t kSimAdvancePidOutputLimitPwm = 2000;
+constexpr int kSimSmoothTurnPidKpX100 = 900;
+constexpr int kSimSmoothTurnPidKiX100 = 11000;
+constexpr int kSimSmoothTurnPidKdX100 = 0;
+constexpr int32_t kSimSmoothTurnPidOutputLimitPwm = 20000;
+constexpr uint16_t kSimFasterMotorSmoothTurnSpeed = 3000;
+constexpr uint16_t kSimSlowerMotorSmoothTurnSpeed = 3000;
+constexpr uint16_t kSimTurnTargetDps = 120;
 constexpr uint16_t kSimWallTargetMm = 62;
 constexpr uint16_t kSimWallThresholdSideMm = 135;
 constexpr uint16_t kSimWallThresholdDiagonalMm = 145;
@@ -120,6 +127,14 @@ void applySimulationFirmwareDefaults(AppNavConfig *config, double left_gain, dou
     }
     config->advance_pid_kd_q16 = hundredthsToQ16(kSimAdvancePidKdX100);
     config->advance_pid_output_limit_pwm = kSimAdvancePidOutputLimitPwm;
+
+    config->smooth_turn_pid_kp_q16 = hundredthsToQ16(kSimSmoothTurnPidKpX100);
+    config->smooth_turn_pid_ki_q16 = hundredthsToQ16(kSimSmoothTurnPidKiX100);
+    config->smooth_turn_pid_kd_q16 = hundredthsToQ16(kSimSmoothTurnPidKdX100);
+    config->smooth_turn_pid_output_limit_pwm = kSimSmoothTurnPidOutputLimitPwm;
+    config->faster_motor_smooth_turn_speed = kSimFasterMotorSmoothTurnSpeed;
+    config->slower_motor_smooth_turn_speed = kSimSlowerMotorSmoothTurnSpeed;
+    config->turn_target_dps = kSimTurnTargetDps;
 
     config->wall_target_mm = kSimWallTargetMm;
     config->wall_threshold_mm_side = kSimWallThresholdSideMm;
