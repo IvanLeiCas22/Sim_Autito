@@ -138,6 +138,11 @@ FirmwareSimBridge::FirmwareConfig toBridgeConfig(const AppNavConfig &config)
     out.slower_motor_smooth_turn_speed = config.slower_motor_smooth_turn_speed;
     out.turn_target_dps = config.turn_target_dps;
     out.pivot_turn_target_dps = config.pivot_turn_target_dps;
+    out.wall_target_mm = config.wall_target_mm;
+    out.wall_threshold_mm_front = config.wall_threshold_mm_front;
+    out.wall_threshold_mm_side = config.wall_threshold_mm_side;
+    out.wall_threshold_mm_diagonal = config.wall_threshold_mm_diagonal;
+    out.wall_hysteresis_mm = config.wall_hysteresis_mm;
 
     out.advance_pid_kp_q16 = config.advance_pid_kp_q16;
     out.advance_pid_ki_q16 = config.advance_pid_ki_q16;
@@ -175,6 +180,11 @@ void copyEditableConfigToFirmware(const FirmwareSimBridge::FirmwareConfig &input
     config->slower_motor_smooth_turn_speed = input.slower_motor_smooth_turn_speed;
     config->turn_target_dps = input.turn_target_dps;
     config->pivot_turn_target_dps = input.pivot_turn_target_dps;
+    config->wall_target_mm = input.wall_target_mm;
+    config->wall_threshold_mm_front = input.wall_threshold_mm_front;
+    config->wall_threshold_mm_side = input.wall_threshold_mm_side;
+    config->wall_threshold_mm_diagonal = input.wall_threshold_mm_diagonal;
+    config->wall_hysteresis_mm = input.wall_hysteresis_mm;
 
     config->advance_pid_kp_q16 = input.advance_pid_kp_q16;
     config->advance_pid_ki_q16 = input.advance_pid_ki_q16;

@@ -82,6 +82,11 @@ public:
         uint16_t slower_motor_smooth_turn_speed = 0;
         uint16_t turn_target_dps = 0;
         uint16_t pivot_turn_target_dps = 0;
+        uint16_t wall_target_mm = 0;
+        uint16_t wall_threshold_mm_front = 0;
+        uint16_t wall_threshold_mm_side = 0;
+        uint16_t wall_threshold_mm_diagonal = 0;
+        uint16_t wall_hysteresis_mm = 0;
 
         int32_t advance_pid_kp_q16 = 0;
         int32_t advance_pid_ki_q16 = 0;

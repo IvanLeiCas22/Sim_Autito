@@ -533,6 +533,33 @@ void MainWindow::tuneFirmwareConfig()
                                         65535,
                                         currentConfig.pivot_turn_target_dps);
 
+    QFormLayout *wallFollowLayout = makeGroup(QStringLiteral("Wall-follow"));
+    QSpinBox *wallTarget = addSpin(wallFollowLayout,
+                                   QStringLiteral("wall target mm"),
+                                   0,
+                                   65535,
+                                   currentConfig.wall_target_mm);
+    QSpinBox *wallThresholdSide = addSpin(wallFollowLayout,
+                                          QStringLiteral("wall threshold side mm"),
+                                          0,
+                                          65535,
+                                          currentConfig.wall_threshold_mm_side);
+    QSpinBox *wallThresholdDiagonal = addSpin(wallFollowLayout,
+                                              QStringLiteral("wall threshold diagonal mm"),
+                                              0,
+                                              65535,
+                                              currentConfig.wall_threshold_mm_diagonal);
+    QSpinBox *wallThresholdFront = addSpin(wallFollowLayout,
+                                           QStringLiteral("wall threshold front mm"),
+                                           0,
+                                           65535,
+                                           currentConfig.wall_threshold_mm_front);
+    QSpinBox *wallHysteresis = addSpin(wallFollowLayout,
+                                       QStringLiteral("wall hysteresis mm"),
+                                       0,
+                                       65535,
+                                       currentConfig.wall_hysteresis_mm);
+
     contentLayout->addStretch();
     scrollArea->setWidget(content);
     rootLayout->addWidget(scrollArea);
@@ -574,6 +601,11 @@ void MainWindow::tuneFirmwareConfig()
         config.slower_motor_smooth_turn_speed = static_cast<uint16_t>(slowerSmooth->value());
         config.turn_target_dps = static_cast<uint16_t>(turnTarget->value());
         config.pivot_turn_target_dps = static_cast<uint16_t>(pivotTurnTarget->value());
+        config.wall_target_mm = static_cast<uint16_t>(wallTarget->value());
+        config.wall_threshold_mm_side = static_cast<uint16_t>(wallThresholdSide->value());
+        config.wall_threshold_mm_diagonal = static_cast<uint16_t>(wallThresholdDiagonal->value());
+        config.wall_threshold_mm_front = static_cast<uint16_t>(wallThresholdFront->value());
+        config.wall_hysteresis_mm = static_cast<uint16_t>(wallHysteresis->value());
         return config;
     };
 
@@ -606,6 +638,11 @@ void MainWindow::tuneFirmwareConfig()
         slowerSmooth->setValue(config.slower_motor_smooth_turn_speed);
         turnTarget->setValue(config.turn_target_dps);
         pivotTurnTarget->setValue(config.pivot_turn_target_dps);
+        wallTarget->setValue(config.wall_target_mm);
+        wallThresholdSide->setValue(config.wall_threshold_mm_side);
+        wallThresholdDiagonal->setValue(config.wall_threshold_mm_diagonal);
+        wallThresholdFront->setValue(config.wall_threshold_mm_front);
+        wallHysteresis->setValue(config.wall_hysteresis_mm);
     };
 
     auto applyConfig = [&]() {
