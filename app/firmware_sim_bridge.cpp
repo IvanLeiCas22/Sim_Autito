@@ -109,9 +109,10 @@ AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
     input.adc_filtered[kAdcFloorFrontCh] = snapshot.floor_front_black ? kFloorBlackAdc : kFloorWhiteAdc;
     input.adc_filtered[kAdcFloorRearCh] = snapshot.floor_rear_black ? kFloorBlackAdc : kFloorWhiteAdc;
 
-    // Temporary: simulated yaw rate in deg/s is stored in gz until the portable
-    // API defines an explicit yaw-rate field.
-    input.gz = toFirmwareInt16(snapshot.yaw_rate_deg_s);
+    // gx/gy/gz are optional legacy raw IMU channels. The portable yaw-rate
+    // measurement consumed by the firmware core is yaw_rate_dps.
+    input.gz = 0;
+    input.yaw_rate_dps = toFirmwareInt16(snapshot.yaw_rate_deg_s);
     input.yaw_q16_deg = toQ16Deg(snapshot.yaw_deg);
 
     return input;
