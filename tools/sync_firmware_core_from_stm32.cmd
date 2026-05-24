@@ -37,6 +37,7 @@ call :copy_if_exists "Core\Inc\app_nav_config.h"       "app_nav_config.h"
 call :copy_if_exists "Core\Inc\app_nav_debug.h"        "app_nav_debug.h"
 call :copy_if_exists "Core\Src\app_maze.c"             "app_maze.c"
 call :copy_if_exists "Core\Inc\app_maze.h"             "app_maze.h"
+call :copy_if_exists "Core\Inc\app_maze_types.h"       "app_maze_types.h"
 call :copy_if_exists "Core\Src\pid_controller.c"       "pid_controller.c"
 call :copy_if_exists "Core\Inc\pid_controller.h"       "pid_controller.h"
 

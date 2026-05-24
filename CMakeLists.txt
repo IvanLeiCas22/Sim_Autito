@@ -28,8 +28,8 @@ if(EXISTS "${SIM_AUTITO_FIRMWARE_CORE_APP_NAV}")
 
     set(SIM_AUTITO_FIRMWARE_CORE_OPTIONAL_SOURCES
         firmware_core/pid_controller.c
+        firmware_core/app_maze.c
     )
-    # app_maze.c is not compiled yet because it still depends on UNERBUS/protocol code.
 
     foreach(optional_firmware_source IN LISTS SIM_AUTITO_FIRMWARE_CORE_OPTIONAL_SOURCES)
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${optional_firmware_source}")
