@@ -11,6 +11,12 @@ class FirmwareSimBridge
 public:
     static constexpr int kIrSensorCount = 6;
 
+    enum class ControlMode
+    {
+        TelemetryOnly,
+        StraightYawHold
+    };
+
     struct SensorSnapshot
     {
         uint32_t dt_ms = 0;
@@ -21,6 +27,9 @@ public:
 
         double yaw_deg = 0.0;
         double yaw_rate_deg_s = 0.0;
+
+        double left_motor_gain = 1.0;
+        double right_motor_gain = 1.0;
     };
 
     struct Command
@@ -36,6 +45,9 @@ public:
         bool enabled = false;
         int left_pwm = 0;
         int right_pwm = 0;
+        QString control_mode = QStringLiteral("TelemetryOnly");
+        uint16_t sim_config_left_base = 0;
+        uint16_t sim_config_right_base = 0;
 
         bool floor_front_black = false;
         bool floor_rear_black = false;
@@ -66,15 +78,25 @@ public:
     void reset();
     void start();
     void stop();
+    void startStraightYawHold(double current_yaw_deg);
+    void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);
     Debug debug() const;
 
 private:
     void ensureFirmwareCoreInitialized();
+    void applySimulationFirmwareConfig(const SensorSnapshot &snapshot);
 
     bool enabled_ = false;
     bool firmware_initialized_ = false;
+    ControlMode control_mode_ = ControlMode::TelemetryOnly;
+    bool simulation_config_applied_ = false;
+    double last_left_gain_ = 0.0;
+    double last_right_gain_ = 0.0;
+    uint16_t sim_config_left_base_ = 0;
+    uint16_t sim_config_right_base_ = 0;
+    double straight_yaw_target_deg_ = 0.0;
     Debug debug_;
 };
 

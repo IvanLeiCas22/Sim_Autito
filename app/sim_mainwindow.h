@@ -59,6 +59,8 @@ private:
     void startSimulation();
     void stopSimulation();
     void toggleSimulation();
+    void startStraightYawHoldControl();
+    void stopFirmwareControl();
     void simulationStep();
     void manualJog(double distance_mm, double delta_yaw_deg);
 

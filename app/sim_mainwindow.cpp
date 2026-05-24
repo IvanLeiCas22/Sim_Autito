@@ -160,6 +160,8 @@ void MainWindow::setupActions()
     auto *stopAction = new QAction(QStringLiteral("Stop"), this);
     auto *toggleAction = new QAction(QStringLiteral("Start/Stop"), this);
     auto *fitAction = new QAction(QStringLiteral("Fit map"), this);
+    auto *startStraightYawHoldAction = new QAction(QStringLiteral("Start straight yaw-hold"), this);
+    auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
 
     loadAction->setShortcut(QKeySequence::Open);
     resetAction->setShortcut(QKeySequence(QStringLiteral("R")));
@@ -174,6 +176,8 @@ void MainWindow::setupActions()
     connect(stopAction, &QAction::triggered, this, [this]() { stopSimulation(); });
     connect(toggleAction, &QAction::triggered, this, [this]() { toggleSimulation(); });
     connect(fitAction, &QAction::triggered, this, [this]() { fitViewToWorld(); });
+    connect(startStraightYawHoldAction, &QAction::triggered, this, [this]() { startStraightYawHoldControl(); });
+    connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
 
     toolbar->addAction(loadAction);
     toolbar->addAction(resetAction);
@@ -194,6 +198,10 @@ void MainWindow::setupActions()
 
     auto *viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
     viewMenu->addAction(fitAction);
+
+    auto *firmwareMenu = menuBar()->addMenu(QStringLiteral("&Firmware"));
+    firmwareMenu->addAction(startStraightYawHoldAction);
+    firmwareMenu->addAction(stopFirmwareControlAction);
 
     auto *manualMenu = menuBar()->addMenu(QStringLiteral("&Manual"));
     auto makeManualAction = [this, manualMenu](const QString &text,
@@ -238,6 +246,8 @@ void MainWindow::setupActions()
     addAction(stopAction);
     addAction(toggleAction);
     addAction(fitAction);
+    addAction(startStraightYawHoldAction);
+    addAction(stopFirmwareControlAction);
 }
 
 void MainWindow::loadMap()
@@ -311,6 +321,38 @@ void MainWindow::toggleSimulation()
     } else {
         startSimulation();
     }
+}
+
+void MainWindow::startStraightYawHoldControl()
+{
+    updateSensors();
+    firmwareBridge_.startStraightYawHold(robot_.yawDeg());
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::stopFirmwareControl()
+{
+    simulationRunning_ = false;
+    simulationTimer_->stop();
+    firmwareBridge_.stopControl();
+    lastCommand_ = FirmwareSimBridge::Command{};
+
+    updateSensors();
+    lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    refreshScene();
+    refreshTelemetry();
 }
 
 void MainWindow::simulationStep()
@@ -396,6 +438,8 @@ FirmwareSimBridge::SensorSnapshot MainWindow::buildBridgeSnapshot() const
     snapshot.floor_rear_black = floorRear_.black;
     snapshot.yaw_deg = robot_.yawDeg();
     snapshot.yaw_rate_deg_s = robot_.yawRateDegS();
+    snapshot.left_motor_gain = robot_.leftMotorGain();
+    snapshot.right_motor_gain = robot_.rightMotorGain();
 
     for (int i = 0; i < kIrSensorCount; ++i) {
         snapshot.ir_distance_mm[static_cast<std::size_t>(i)] = irReadings_[static_cast<std::size_t>(i)].distance_mm;
@@ -539,6 +583,9 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  state: %1\n").arg(debug.state);
     text += QStringLiteral("  reason: %1\n").arg(debug.reason);
     text += QStringLiteral("  enabled: %1\n").arg(boolText(debug.enabled));
+    text += QStringLiteral("  firmware_control_mode: %1\n").arg(debug.control_mode);
+    text += QStringLiteral("  sim_config_left_base: %1\n").arg(debug.sim_config_left_base);
+    text += QStringLiteral("  sim_config_right_base: %1\n").arg(debug.sim_config_right_base);
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);
     text += QStringLiteral("  right_pwm: %1\n\n").arg(lastCommand_.right_pwm);
 

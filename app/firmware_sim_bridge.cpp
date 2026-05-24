@@ -20,6 +20,34 @@ extern "C" {
 #endif
 
 namespace {
+QString controlModeText(FirmwareSimBridge::ControlMode mode)
+{
+    switch (mode) {
+    case FirmwareSimBridge::ControlMode::TelemetryOnly:
+        return QStringLiteral("TelemetryOnly");
+    case FirmwareSimBridge::ControlMode::StraightYawHold:
+        return QStringLiteral("StraightYawHold");
+    }
+
+    return QStringLiteral("Unknown");
+}
+
+double shortestDeltaDeg(double current_deg, double target_deg)
+{
+    if (!std::isfinite(current_deg) || !std::isfinite(target_deg)) {
+        return 0.0;
+    }
+
+    double delta = std::fmod(current_deg - target_deg, 360.0);
+    if (delta > 180.0) {
+        delta -= 360.0;
+    } else if (delta < -180.0) {
+        delta += 360.0;
+    }
+
+    return delta;
+}
+
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
 constexpr int kAdcRightLatCh = 0;
 constexpr int kAdcDiagonalRightCh = 1;
@@ -32,6 +60,7 @@ constexpr int kAdcFloorRearCh = 7;
 
 constexpr uint16_t kFloorWhiteAdc = 4095;
 constexpr uint16_t kFloorBlackAdc = 0;
+constexpr uint16_t kSimLeftBasePwm = 3000;
 constexpr uint32_t kDecisionRandomValue = 0U;
 
 uint16_t toFirmwareDistanceMm(double distance_mm)
@@ -141,17 +170,60 @@ void FirmwareSimBridge::ensureFirmwareCoreInitialized()
 #endif
 }
 
+void FirmwareSimBridge::applySimulationFirmwareConfig(const SensorSnapshot &snapshot)
+{
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const double leftGain = std::isfinite(snapshot.left_motor_gain) && snapshot.left_motor_gain > 0.0
+        ? snapshot.left_motor_gain
+        : 1.0;
+    const double rightGain = std::isfinite(snapshot.right_motor_gain) && snapshot.right_motor_gain > 0.0
+        ? snapshot.right_motor_gain
+        : 1.0;
+
+    if (simulation_config_applied_
+        && std::abs(leftGain - last_left_gain_) < 0.000001
+        && std::abs(rightGain - last_right_gain_) < 0.000001) {
+        return;
+    }
+
+    AppNavConfig config = {};
+    App_Nav_GetConfig(&config);
+
+    const double rightBase = std::round(static_cast<double>(kSimLeftBasePwm) * leftGain / rightGain);
+    config.left_motor_base_speed = kSimLeftBasePwm;
+    config.right_motor_base_speed = static_cast<uint16_t>(std::clamp(rightBase, 0.0, 65535.0));
+
+    App_Nav_SetConfig(&config);
+
+    simulation_config_applied_ = true;
+    last_left_gain_ = leftGain;
+    last_right_gain_ = rightGain;
+    sim_config_left_base_ = config.left_motor_base_speed;
+    sim_config_right_base_ = config.right_motor_base_speed;
+    debug_.sim_config_left_base = sim_config_left_base_;
+    debug_.sim_config_right_base = sim_config_right_base_;
+#else
+    Q_UNUSED(snapshot);
+#endif
+}
+
 void FirmwareSimBridge::reset()
 {
     ensureFirmwareCoreInitialized();
 
     enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    simulation_config_applied_ = false;
+    straight_yaw_target_deg_ = 0.0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     App_Nav_Reset();
 
     debug_ = Debug{};
     debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.sim_config_left_base = sim_config_left_base_;
+    debug_.sim_config_right_base = sim_config_right_base_;
     debug_.state = QStringLiteral("FW: reset");
     debug_.reason = QStringLiteral("Firmware core initialized and reset");
 #else
@@ -164,7 +236,9 @@ void FirmwareSimBridge::start()
     ensureFirmwareCoreInitialized();
 
     enabled_ = true;
+    control_mode_ = ControlMode::TelemetryOnly;
     debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     App_Nav_StartFindCells();
@@ -181,7 +255,9 @@ void FirmwareSimBridge::stop()
     ensureFirmwareCoreInitialized();
 
     enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
     debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     App_Nav_Stop();
@@ -193,6 +269,37 @@ void FirmwareSimBridge::stop()
 #endif
 }
 
+void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
+{
+    ensureFirmwareCoreInitialized();
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    straight_yaw_target_deg_ = current_yaw_deg;
+    const bool started = App_Nav_StartStraightDriveYawHold(toQ16Deg(straight_yaw_target_deg_));
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::StraightYawHold : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.state = started ? QStringLiteral("FW: straight yaw-hold") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Straight yaw-hold primitive started")
+        : QStringLiteral("Straight yaw-hold primitive could not start");
+#else
+    Q_UNUSED(current_yaw_deg);
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Straight yaw-hold unsupported without firmware core");
+#endif
+}
+
+void FirmwareSimBridge::stopControl()
+{
+    stop();
+}
+
 FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapshot)
 {
     Command command;
@@ -201,8 +308,15 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     ensureFirmwareCoreInitialized();
+    applySimulationFirmwareConfig(snapshot);
 
-    const AppNavInput input = buildAppNavInput(snapshot);
+    SensorSnapshot firmware_snapshot = snapshot;
+    if (control_mode_ == ControlMode::StraightYawHold) {
+        firmware_snapshot.yaw_deg = straight_yaw_target_deg_
+            + shortestDeltaDeg(snapshot.yaw_deg, straight_yaw_target_deg_);
+    }
+
+    const AppNavInput input = buildAppNavInput(firmware_snapshot);
     AppNavOutput output = {};
 
     App_Nav_Tick(&input, &output);
@@ -210,9 +324,14 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
     App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
 
-    if (enabled_) {
-        command.left_pwm = output.left_motor_pwm;
-        command.right_pwm = output.right_motor_pwm;
+    bool straight_yaw_hold_ok = true;
+    if (control_mode_ == ControlMode::StraightYawHold) {
+        AppNavOutput primitive_output = {};
+        straight_yaw_hold_ok = App_Nav_ComputeStraightDrivePwm(&input, &primitive_output);
+        if (straight_yaw_hold_ok) {
+            command.left_pwm = primitive_output.left_motor_pwm;
+            command.right_pwm = primitive_output.right_motor_pwm;
+        }
     }
 
     AppNavDebug firmware_debug = {};
@@ -224,6 +343,12 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.reason = QStringLiteral("last_transition_reason=%1 transition_sequence=%2")
         .arg(static_cast<int>(firmware_debug.last_transition_reason))
         .arg(static_cast<int>(firmware_debug.transition_sequence));
+    if (control_mode_ == ControlMode::StraightYawHold && !straight_yaw_hold_ok) {
+        debug_.reason += QStringLiteral(" straight_yaw_hold_pwm=false");
+    }
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.sim_config_left_base = sim_config_left_base_;
+    debug_.sim_config_right_base = sim_config_right_base_;
     debug_.recommended_action = static_cast<int>(recommended_action);
     debug_.recommended_action_text = recommendedActionText(recommended_action);
     debug_.available_options_mask = firmware_debug.available_options_mask;
@@ -256,9 +381,11 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.reason = enabled_
         ? QStringLiteral("FirmwareSimBridge tick executed without firmware core")
         : QStringLiteral("FirmwareSimBridge disabled");
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
 #endif
 
     debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
     debug_.left_pwm = command.left_pwm;
     debug_.right_pwm = command.right_pwm;
 
