@@ -16,6 +16,7 @@ extern "C" {
 #include "app_nav_config.h"
 #include "app_nav_debug.h"
 #include "app_nav.h"
+#include "app_maze.h"
 }
 #endif
 
@@ -366,6 +367,23 @@ void FirmwareSimBridge::applySimulationFirmwareConfig(const SensorSnapshot &snap
 #endif
 }
 
+void FirmwareSimBridge::updateMazeDebug()
+{
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    uint8_t buffer[APP_MAZE_CELL_UPDATE_PAYLOAD_SIZE] = {};
+    const uint8_t payloadSize = App_Maze_WriteCurrentCellUpdatePayload(buffer);
+    if (payloadSize == APP_MAZE_CELL_UPDATE_PAYLOAD_SIZE) {
+        debug_.maze_x = buffer[0];
+        debug_.maze_y = buffer[1];
+        debug_.maze_cell = buffer[2];
+        debug_.maze_heading = buffer[3];
+        debug_.maze_valid = true;
+    } else {
+        debug_.maze_valid = false;
+    }
+#endif
+}
+
 void FirmwareSimBridge::reset()
 {
     ensureFirmwareCoreInitialized();
@@ -377,6 +395,7 @@ void FirmwareSimBridge::reset()
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     App_Nav_Reset();
+    App_Maze_ResetState();
 
     debug_ = Debug{};
     debug_.enabled = enabled_;
@@ -385,6 +404,7 @@ void FirmwareSimBridge::reset()
     debug_.sim_config_right_base = sim_config_right_base_;
     debug_.state = QStringLiteral("FW: reset");
     debug_.reason = QStringLiteral("Firmware core initialized and reset");
+    updateMazeDebug();
 #else
     debug_ = Debug{};
 #endif
@@ -632,6 +652,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.dist_diagonal_right_mm = firmware_debug.dist_diagonal_right_mm;
     debug_.adc_floor_front = firmware_debug.floor_front_adc;
     debug_.adc_floor_rear = firmware_debug.floor_rear_adc;
+    updateMazeDebug();
 #else
     Q_UNUSED(snapshot);
 

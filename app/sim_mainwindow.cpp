@@ -1012,7 +1012,16 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  sim_config_left_base: %1\n").arg(debug.sim_config_left_base);
     text += QStringLiteral("  sim_config_right_base: %1\n").arg(debug.sim_config_right_base);
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);
-    text += QStringLiteral("  right_pwm: %1\n\n").arg(lastCommand_.right_pwm);
+    text += QStringLiteral("  right_pwm: %1\n").arg(lastCommand_.right_pwm);
+    if (debug.maze_valid) {
+        text += QStringLiteral("  FW maze: x=%1 y=%2 h=%3 cell=0x%4\n\n")
+            .arg(static_cast<unsigned int>(debug.maze_x))
+            .arg(static_cast<unsigned int>(debug.maze_y))
+            .arg(static_cast<unsigned int>(debug.maze_heading))
+            .arg(static_cast<unsigned int>(debug.maze_cell), 2, 16, QLatin1Char('0'));
+    } else {
+        text += QStringLiteral("  FW maze: n/a\n\n");
+    }
 
     text += QStringLiteral("FW decision\n");
     text += QStringLiteral("  random_value: %1\n")

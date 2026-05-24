@@ -51,6 +51,11 @@ public:
         QString control_mode = QStringLiteral("TelemetryOnly");
         uint16_t sim_config_left_base = 0;
         uint16_t sim_config_right_base = 0;
+        uint8_t maze_x = 0;
+        uint8_t maze_y = 0;
+        uint8_t maze_heading = 0;
+        uint8_t maze_cell = 0;
+        bool maze_valid = false;
 
         bool floor_front_black = false;
         bool floor_rear_black = false;
@@ -133,6 +138,7 @@ public:
 private:
     void ensureFirmwareCoreInitialized();
     void applySimulationFirmwareConfig(const SensorSnapshot &snapshot);
+    void updateMazeDebug();
 
     bool enabled_ = false;
     bool firmware_initialized_ = false;
