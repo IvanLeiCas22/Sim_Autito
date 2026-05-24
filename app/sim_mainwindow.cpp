@@ -181,6 +181,8 @@ void MainWindow::setupActions()
     auto *fitAction = new QAction(QStringLiteral("Fit map"), this);
     auto *startStraightYawHoldAction = new QAction(QStringLiteral("Start straight yaw-hold"), this);
     auto *startWallFollowAdvanceAction = new QAction(QStringLiteral("Start wall-follow advance"), this);
+    auto *startSmoothTurnLeftAction = new QAction(QStringLiteral("Start smooth turn left"), this);
+    auto *startSmoothTurnRightAction = new QAction(QStringLiteral("Start smooth turn right"), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
 
@@ -199,6 +201,8 @@ void MainWindow::setupActions()
     connect(fitAction, &QAction::triggered, this, [this]() { fitViewToWorld(); });
     connect(startStraightYawHoldAction, &QAction::triggered, this, [this]() { startStraightYawHoldControl(); });
     connect(startWallFollowAdvanceAction, &QAction::triggered, this, [this]() { startWallFollowAdvanceControl(); });
+    connect(startSmoothTurnLeftAction, &QAction::triggered, this, [this]() { startSmoothTurnLeftControl(); });
+    connect(startSmoothTurnRightAction, &QAction::triggered, this, [this]() { startSmoothTurnRightControl(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
 
@@ -225,6 +229,8 @@ void MainWindow::setupActions()
     auto *firmwareMenu = menuBar()->addMenu(QStringLiteral("&Firmware"));
     firmwareMenu->addAction(startStraightYawHoldAction);
     firmwareMenu->addAction(startWallFollowAdvanceAction);
+    firmwareMenu->addAction(startSmoothTurnLeftAction);
+    firmwareMenu->addAction(startSmoothTurnRightAction);
     firmwareMenu->addAction(stopFirmwareControlAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
@@ -284,6 +290,8 @@ void MainWindow::setupActions()
     addAction(fitAction);
     addAction(startStraightYawHoldAction);
     addAction(startWallFollowAdvanceAction);
+    addAction(startSmoothTurnLeftAction);
+    addAction(startSmoothTurnRightAction);
     addAction(stopFirmwareControlAction);
     addAction(tuneFirmwareConfigAction);
 }
@@ -384,6 +392,44 @@ void MainWindow::startWallFollowAdvanceControl()
 {
     updateSensors();
     firmwareBridge_.startWallFollowAdvance();
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startSmoothTurnLeftControl()
+{
+    updateSensors();
+    firmwareBridge_.startSmoothTurnLeft();
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startSmoothTurnRightControl()
+{
+    updateSensors();
+    firmwareBridge_.startSmoothTurnRight();
 
     if (firmwareBridge_.debug().enabled) {
         simulationRunning_ = true;

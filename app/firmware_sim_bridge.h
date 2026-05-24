@@ -15,7 +15,9 @@ public:
     {
         TelemetryOnly,
         StraightYawHold,
-        WallFollowAdvance
+        WallFollowAdvance,
+        SmoothTurnLeft,
+        SmoothTurnRight
     };
 
     struct SensorSnapshot
@@ -117,6 +119,8 @@ public:
     void stop();
     void startStraightYawHold(double current_yaw_deg);
     void startWallFollowAdvance();
+    void startSmoothTurnLeft();
+    void startSmoothTurnRight();
     void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);

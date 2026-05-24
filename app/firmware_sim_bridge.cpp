@@ -29,6 +29,10 @@ QString controlModeText(FirmwareSimBridge::ControlMode mode)
         return QStringLiteral("StraightYawHold");
     case FirmwareSimBridge::ControlMode::WallFollowAdvance:
         return QStringLiteral("WallFollowAdvance");
+    case FirmwareSimBridge::ControlMode::SmoothTurnLeft:
+        return QStringLiteral("SmoothTurnLeft");
+    case FirmwareSimBridge::ControlMode::SmoothTurnRight:
+        return QStringLiteral("SmoothTurnRight");
     }
 
     return QStringLiteral("Unknown");
@@ -280,7 +284,9 @@ AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
     // gx/gy/gz are optional legacy raw IMU channels. The portable yaw-rate
     // measurement consumed by the firmware core is yaw_rate_dps.
     input.gz = 0;
-    input.yaw_rate_dps = toFirmwareInt16(snapshot.yaw_rate_deg_s);
+    // The simulator yaw-rate sign is opposite to the firmware convention;
+    // firmware expects smooth-left/pivot-left as positive yaw rate.
+    input.yaw_rate_dps = -toFirmwareInt16(snapshot.yaw_rate_deg_s);
     input.yaw_q16_deg = toQ16Deg(snapshot.yaw_deg);
 
     return input;
@@ -457,6 +463,54 @@ void FirmwareSimBridge::startWallFollowAdvance()
 #endif
 }
 
+void FirmwareSimBridge::startSmoothTurnLeft()
+{
+    ensureFirmwareCoreInitialized();
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const bool started = App_Nav_StartSmoothTurn(APP_NAV_SMOOTH_TURN_LEFT);
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::SmoothTurnLeft : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.state = started ? QStringLiteral("FW: smooth turn left") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Smooth turn left primitive started")
+        : QStringLiteral("Smooth turn left primitive could not start");
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Smooth turn left unsupported without firmware core");
+#endif
+}
+
+void FirmwareSimBridge::startSmoothTurnRight()
+{
+    ensureFirmwareCoreInitialized();
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const bool started = App_Nav_StartSmoothTurn(APP_NAV_SMOOTH_TURN_RIGHT);
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::SmoothTurnRight : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.state = started ? QStringLiteral("FW: smooth turn right") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Smooth turn right primitive started")
+        : QStringLiteral("Smooth turn right primitive could not start");
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Smooth turn right unsupported without firmware core");
+#endif
+}
+
 void FirmwareSimBridge::stopControl()
 {
     stop();
@@ -488,6 +542,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
     bool straight_yaw_hold_ok = true;
     bool wall_follow_ok = true;
+    bool smooth_turn_ok = true;
     if (control_mode_ == ControlMode::StraightYawHold) {
         AppNavOutput primitive_output = {};
         straight_yaw_hold_ok = App_Nav_ComputeStraightDrivePwm(&input, &primitive_output);
@@ -502,6 +557,14 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
                                                       sim_config_left_base_,
                                                       &primitive_output);
         if (wall_follow_ok) {
+            command.left_pwm = primitive_output.left_motor_pwm;
+            command.right_pwm = primitive_output.right_motor_pwm;
+        }
+    } else if (control_mode_ == ControlMode::SmoothTurnLeft
+               || control_mode_ == ControlMode::SmoothTurnRight) {
+        AppNavOutput primitive_output = {};
+        smooth_turn_ok = App_Nav_ComputeSmoothTurnPwm(&input, &primitive_output);
+        if (smooth_turn_ok) {
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
         }
@@ -521,6 +584,11 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     }
     if (control_mode_ == ControlMode::WallFollowAdvance && !wall_follow_ok) {
         debug_.reason += QStringLiteral(" wall_follow_pwm=false/no_reference");
+    }
+    if ((control_mode_ == ControlMode::SmoothTurnLeft
+         || control_mode_ == ControlMode::SmoothTurnRight)
+        && !smooth_turn_ok) {
+        debug_.reason += QStringLiteral(" smooth_turn_pwm=false");
     }
     debug_.control_mode = controlModeText(control_mode_);
     debug_.sim_config_left_base = sim_config_left_base_;

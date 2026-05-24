@@ -61,6 +61,8 @@ private:
     void toggleSimulation();
     void startStraightYawHoldControl();
     void startWallFollowAdvanceControl();
+    void startSmoothTurnLeftControl();
+    void startSmoothTurnRightControl();
     void stopFirmwareControl();
     void tuneFirmwareConfig();
     void simulationStep();
