@@ -117,6 +117,7 @@ public:
         uint16_t turn_target_dps = 0;
         uint16_t pivot_turn_target_dps = 0;
         uint16_t wall_target_mm = 0;
+        uint16_t approach_front_wall_target_mm = 0;
         uint16_t wall_threshold_mm_front = 0;
         uint16_t wall_threshold_mm_side = 0;
         uint16_t wall_threshold_mm_diagonal = 0;

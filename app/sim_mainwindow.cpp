@@ -717,6 +717,11 @@ void MainWindow::tuneFirmwareConfig()
                                    0,
                                    65535,
                                    currentConfig.wall_target_mm);
+    QSpinBox *approachFrontWallTarget = addSpin(wallFollowLayout,
+                                                QStringLiteral("Approach front wall target mm"),
+                                                10,
+                                                150,
+                                                currentConfig.approach_front_wall_target_mm);
     QSpinBox *wallThresholdSide = addSpin(wallFollowLayout,
                                           QStringLiteral("wall threshold side mm"),
                                           0,
@@ -780,6 +785,7 @@ void MainWindow::tuneFirmwareConfig()
         config.turn_target_dps = static_cast<uint16_t>(turnTarget->value());
         config.pivot_turn_target_dps = static_cast<uint16_t>(pivotTurnTarget->value());
         config.wall_target_mm = static_cast<uint16_t>(wallTarget->value());
+        config.approach_front_wall_target_mm = static_cast<uint16_t>(approachFrontWallTarget->value());
         config.wall_threshold_mm_side = static_cast<uint16_t>(wallThresholdSide->value());
         config.wall_threshold_mm_diagonal = static_cast<uint16_t>(wallThresholdDiagonal->value());
         config.wall_threshold_mm_front = static_cast<uint16_t>(wallThresholdFront->value());
@@ -817,6 +823,7 @@ void MainWindow::tuneFirmwareConfig()
         turnTarget->setValue(config.turn_target_dps);
         pivotTurnTarget->setValue(config.pivot_turn_target_dps);
         wallTarget->setValue(config.wall_target_mm);
+        approachFrontWallTarget->setValue(config.approach_front_wall_target_mm);
         wallThresholdSide->setValue(config.wall_threshold_mm_side);
         wallThresholdDiagonal->setValue(config.wall_threshold_mm_diagonal);
         wallThresholdFront->setValue(config.wall_threshold_mm_front);

@@ -113,6 +113,10 @@ constexpr int kSimSmoothTurnPidKpX100 = 900;
 constexpr int kSimSmoothTurnPidKiX100 = 11000;
 constexpr int kSimSmoothTurnPidKdX100 = 0;
 constexpr int32_t kSimSmoothTurnPidOutputLimitPwm = 20000;
+constexpr int kSimPivotTurnPidKpX100 = 900;
+constexpr int kSimPivotTurnPidKiX100 = 11000;
+constexpr int kSimPivotTurnPidKdX100 = 0;
+constexpr int32_t kSimPivotTurnPidOutputLimitPwm = 20000;
 constexpr uint16_t kSimFasterMotorSmoothTurnSpeed = 3000;
 constexpr uint16_t kSimSlowerMotorSmoothTurnSpeed = 3000;
 constexpr uint16_t kSimTurnTargetDps = 120;
@@ -174,6 +178,11 @@ void applySimulationFirmwareDefaults(AppNavConfig *config, double left_gain, dou
     config->faster_motor_smooth_turn_speed = kSimFasterMotorSmoothTurnSpeed;
     config->slower_motor_smooth_turn_speed = kSimSlowerMotorSmoothTurnSpeed;
     config->turn_target_dps = kSimTurnTargetDps;
+
+    config->pivot_turn_pid_kp_q16 = hundredthsToQ16(kSimPivotTurnPidKpX100);
+    config->pivot_turn_pid_ki_q16 = hundredthsToQ16(kSimPivotTurnPidKiX100);
+    config->pivot_turn_pid_kd_q16 = hundredthsToQ16(kSimPivotTurnPidKdX100);
+    config->pivot_turn_pid_output_limit_pwm = kSimPivotTurnPidOutputLimitPwm;
 
     config->wall_target_mm = kSimWallTargetMm;
     config->wall_threshold_mm_side = kSimWallThresholdSideMm;
@@ -353,6 +362,7 @@ FirmwareSimBridge::FirmwareConfig toBridgeConfig(const AppNavConfig &config)
     out.turn_target_dps = config.turn_target_dps;
     out.pivot_turn_target_dps = config.pivot_turn_target_dps;
     out.wall_target_mm = config.wall_target_mm;
+    out.approach_front_wall_target_mm = config.approach_front_wall_target_mm;
     out.wall_threshold_mm_front = config.wall_threshold_mm_front;
     out.wall_threshold_mm_side = config.wall_threshold_mm_side;
     out.wall_threshold_mm_diagonal = config.wall_threshold_mm_diagonal;
@@ -395,6 +405,7 @@ void copyEditableConfigToFirmware(const FirmwareSimBridge::FirmwareConfig &input
     config->turn_target_dps = input.turn_target_dps;
     config->pivot_turn_target_dps = input.pivot_turn_target_dps;
     config->wall_target_mm = input.wall_target_mm;
+    config->approach_front_wall_target_mm = input.approach_front_wall_target_mm;
     config->wall_threshold_mm_front = input.wall_threshold_mm_front;
     config->wall_threshold_mm_side = input.wall_threshold_mm_side;
     config->wall_threshold_mm_diagonal = input.wall_threshold_mm_diagonal;
