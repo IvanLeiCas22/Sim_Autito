@@ -53,6 +53,7 @@ public:
         int right_pwm = 0;
         QString control_mode = QStringLiteral("TelemetryOnly");
         QString pivot_state = QStringLiteral("n/a");
+        QString smooth_state = QStringLiteral("n/a");
         uint16_t sim_config_left_base = 0;
         uint16_t sim_config_right_base = 0;
         uint8_t maze_x = 0;
@@ -156,6 +157,8 @@ private:
     uint16_t sim_config_left_base_ = 0;
     uint16_t sim_config_right_base_ = 0;
     double straight_yaw_target_deg_ = 0.0;
+    bool smooth_yaw_reference_valid_ = false;
+    double smooth_yaw_start_deg_ = 0.0;
     bool pivot_yaw_reference_valid_ = false;
     double pivot_yaw_start_deg_ = 0.0;
     Debug debug_;

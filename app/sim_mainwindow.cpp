@@ -1079,6 +1079,7 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  enabled: %1\n").arg(boolText(debug.enabled));
     text += QStringLiteral("  firmware_control_mode: %1\n").arg(debug.control_mode);
     text += QStringLiteral("  pivot_state: %1\n").arg(debug.pivot_state);
+    text += QStringLiteral("  smooth_state: %1\n").arg(debug.smooth_state);
     text += QStringLiteral("  sim_config_left_base: %1\n").arg(debug.sim_config_left_base);
     text += QStringLiteral("  sim_config_right_base: %1\n").arg(debug.sim_config_right_base);
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);
