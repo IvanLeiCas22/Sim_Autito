@@ -123,7 +123,7 @@ constexpr uint16_t kSimTurnTargetDps = 120;
 constexpr uint16_t kSimWallTargetMm = 62;
 constexpr uint16_t kSimWallThresholdSideMm = 135;
 constexpr uint16_t kSimWallThresholdDiagonalMm = 145;
-constexpr uint16_t kSimWallThresholdFrontMm = 135;
+constexpr uint16_t kSimWallThresholdFrontMm = 140;
 constexpr uint32_t kDecisionRandomValue = 0U;
 
 double effectiveMotorGain(double gain)
