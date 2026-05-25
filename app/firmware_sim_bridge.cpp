@@ -34,9 +34,22 @@ QString controlModeText(FirmwareSimBridge::ControlMode mode)
         return QStringLiteral("SmoothTurnLeft");
     case FirmwareSimBridge::ControlMode::SmoothTurnRight:
         return QStringLiteral("SmoothTurnRight");
+    case FirmwareSimBridge::ControlMode::PivotLeft90:
+        return QStringLiteral("PivotLeft90");
+    case FirmwareSimBridge::ControlMode::PivotRight90:
+        return QStringLiteral("PivotRight90");
+    case FirmwareSimBridge::ControlMode::Pivot180:
+        return QStringLiteral("Pivot180");
     }
 
     return QStringLiteral("Unknown");
+}
+
+bool isPivotControlMode(FirmwareSimBridge::ControlMode mode)
+{
+    return mode == FirmwareSimBridge::ControlMode::PivotLeft90
+        || mode == FirmwareSimBridge::ControlMode::PivotRight90
+        || mode == FirmwareSimBridge::ControlMode::Pivot180;
 }
 
 double shortestDeltaDeg(double current_deg, double target_deg)
@@ -191,6 +204,24 @@ QString recommendedActionText(AppNavRecommendedAction action)
     }
 
     return QStringLiteral("UNKNOWN");
+}
+
+QString pivotActionStateText(AppNavPivotActionState state)
+{
+    switch (state) {
+    case APP_NAV_PIVOT_ACTION_IDLE:
+        return QStringLiteral("idle");
+    case APP_NAV_PIVOT_ACTION_RUNNING:
+        return QStringLiteral("running");
+    case APP_NAV_PIVOT_ACTION_DONE:
+        return QStringLiteral("done");
+    case APP_NAV_PIVOT_ACTION_TIMEOUT:
+        return QStringLiteral("timeout");
+    case APP_NAV_PIVOT_ACTION_ERROR:
+        return QStringLiteral("error");
+    }
+
+    return QStringLiteral("unknown");
 }
 
 FirmwareSimBridge::FirmwareConfig toBridgeConfig(const AppNavConfig &config)
@@ -388,12 +419,18 @@ void FirmwareSimBridge::reset()
 {
     ensureFirmwareCoreInitialized();
 
+    const bool wasPivotControl = isPivotControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
     simulation_config_applied_ = false;
     straight_yaw_target_deg_ = 0.0;
+    pivot_yaw_reference_valid_ = false;
+    pivot_yaw_start_deg_ = 0.0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (wasPivotControl) {
+        App_Nav_StopPivotAction();
+    }
     App_Nav_Reset();
     App_Maze_ResetState();
 
@@ -414,12 +451,18 @@ void FirmwareSimBridge::start()
 {
     ensureFirmwareCoreInitialized();
 
+    const bool wasPivotControl = isPivotControlMode(control_mode_);
     enabled_ = true;
     control_mode_ = ControlMode::TelemetryOnly;
+    pivot_yaw_reference_valid_ = false;
     debug_.enabled = enabled_;
     debug_.control_mode = controlModeText(control_mode_);
+    debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (wasPivotControl) {
+        App_Nav_StopPivotAction();
+    }
     App_Nav_StartFindCells();
     debug_.state = QStringLiteral("FW: running");
     debug_.reason = QStringLiteral("Firmware core find-cells mode started");
@@ -433,12 +476,18 @@ void FirmwareSimBridge::stop()
 {
     ensureFirmwareCoreInitialized();
 
+    const bool wasPivotControl = isPivotControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
+    pivot_yaw_reference_valid_ = false;
     debug_.enabled = enabled_;
     debug_.control_mode = controlModeText(control_mode_);
+    debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (wasPivotControl) {
+        App_Nav_StopPivotAction();
+    }
     App_Nav_Stop();
     debug_.state = QStringLiteral("FW: stopped");
     debug_.reason = QStringLiteral("Firmware core stopped");
@@ -451,6 +500,8 @@ void FirmwareSimBridge::stop()
 void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
 {
     ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     straight_yaw_target_deg_ = current_yaw_deg;
@@ -477,6 +528,8 @@ void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
 void FirmwareSimBridge::startWallFollowAdvance()
 {
     ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     const bool started = App_Nav_StartWallFollowAdvance();
@@ -501,6 +554,8 @@ void FirmwareSimBridge::startWallFollowAdvance()
 void FirmwareSimBridge::startSmoothTurnLeft()
 {
     ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     const bool started = App_Nav_StartSmoothTurn(APP_NAV_SMOOTH_TURN_LEFT);
@@ -525,6 +580,8 @@ void FirmwareSimBridge::startSmoothTurnLeft()
 void FirmwareSimBridge::startSmoothTurnRight()
 {
     ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     const bool started = App_Nav_StartSmoothTurn(APP_NAV_SMOOTH_TURN_RIGHT);
@@ -543,6 +600,90 @@ void FirmwareSimBridge::startSmoothTurnRight()
     debug_.control_mode = QStringLiteral("TelemetryOnly");
     debug_.state = QStringLiteral("STUB");
     debug_.reason = QStringLiteral("Smooth turn right unsupported without firmware core");
+#endif
+}
+
+void FirmwareSimBridge::startPivotLeft90()
+{
+    ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    pivot_yaw_start_deg_ = 0.0;
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const bool started = App_Nav_StartPivotAction(APP_NAV_PIVOT_LEFT_90);
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::PivotLeft90 : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.pivot_state = started ? QStringLiteral("running") : QStringLiteral("error");
+    debug_.state = started ? QStringLiteral("FW: pivot left 90") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Pivot left 90 action started")
+        : QStringLiteral("Pivot left 90 action could not start");
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.pivot_state = QStringLiteral("n/a");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Pivot left 90 unsupported without firmware core");
+#endif
+}
+
+void FirmwareSimBridge::startPivotRight90()
+{
+    ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    pivot_yaw_start_deg_ = 0.0;
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const bool started = App_Nav_StartPivotAction(APP_NAV_PIVOT_RIGHT_90);
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::PivotRight90 : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.pivot_state = started ? QStringLiteral("running") : QStringLiteral("error");
+    debug_.state = started ? QStringLiteral("FW: pivot right 90") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Pivot right 90 action started")
+        : QStringLiteral("Pivot right 90 action could not start");
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.pivot_state = QStringLiteral("n/a");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Pivot right 90 unsupported without firmware core");
+#endif
+}
+
+void FirmwareSimBridge::startPivot180()
+{
+    ensureFirmwareCoreInitialized();
+    pivot_yaw_reference_valid_ = false;
+    pivot_yaw_start_deg_ = 0.0;
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    const bool started = App_Nav_StartPivotAction(APP_NAV_PIVOT_180_RIGHT);
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::Pivot180 : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    debug_.pivot_state = started ? QStringLiteral("running") : QStringLiteral("error");
+    debug_.state = started ? QStringLiteral("FW: pivot 180") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Pivot 180 action started")
+        : QStringLiteral("Pivot 180 action could not start");
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.pivot_state = QStringLiteral("n/a");
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Pivot 180 unsupported without firmware core");
 #endif
 }
 
@@ -565,6 +706,12 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     if (control_mode_ == ControlMode::StraightYawHold) {
         firmware_snapshot.yaw_deg = straight_yaw_target_deg_
             + shortestDeltaDeg(snapshot.yaw_deg, straight_yaw_target_deg_);
+    } else if (isPivotControlMode(control_mode_)) {
+        if (!pivot_yaw_reference_valid_) {
+            pivot_yaw_start_deg_ = snapshot.yaw_deg;
+            pivot_yaw_reference_valid_ = true;
+        }
+        firmware_snapshot.yaw_deg = shortestDeltaDeg(snapshot.yaw_deg, pivot_yaw_start_deg_);
     }
 
     const AppNavInput input = buildAppNavInput(firmware_snapshot);
@@ -578,6 +725,8 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     bool straight_yaw_hold_ok = true;
     bool wall_follow_ok = true;
     bool smooth_turn_ok = true;
+    bool pivot_action_ticked = false;
+    AppNavPivotActionState pivot_action_state = APP_NAV_PIVOT_ACTION_IDLE;
     if (control_mode_ == ControlMode::StraightYawHold) {
         AppNavOutput primitive_output = {};
         straight_yaw_hold_ok = App_Nav_ComputeStraightDrivePwm(&input, &primitive_output);
@@ -603,6 +752,28 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
         }
+    } else if (isPivotControlMode(control_mode_)) {
+        AppNavOutput primitive_output = {};
+        pivot_action_ticked = true;
+        pivot_action_state = App_Nav_TickPivotAction(&input, &primitive_output);
+        if (pivot_action_state == APP_NAV_PIVOT_ACTION_RUNNING) {
+            command.left_pwm = primitive_output.left_motor_pwm;
+            command.right_pwm = primitive_output.right_motor_pwm;
+        } else {
+            command.left_pwm = 0;
+            command.right_pwm = 0;
+            if (pivot_action_state == APP_NAV_PIVOT_ACTION_TIMEOUT
+                || pivot_action_state == APP_NAV_PIVOT_ACTION_ERROR) {
+                App_Nav_StopPivotAction();
+            }
+            if (pivot_action_state == APP_NAV_PIVOT_ACTION_DONE
+                || pivot_action_state == APP_NAV_PIVOT_ACTION_TIMEOUT
+                || pivot_action_state == APP_NAV_PIVOT_ACTION_ERROR) {
+                enabled_ = false;
+                control_mode_ = ControlMode::TelemetryOnly;
+                pivot_yaw_reference_valid_ = false;
+            }
+        }
     }
 
     AppNavDebug firmware_debug = {};
@@ -624,6 +795,16 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
          || control_mode_ == ControlMode::SmoothTurnRight)
         && !smooth_turn_ok) {
         debug_.reason += QStringLiteral(" smooth_turn_pwm=false");
+    }
+    if (pivot_action_ticked) {
+        debug_.pivot_state = pivotActionStateText(pivot_action_state);
+        if (pivot_action_state == APP_NAV_PIVOT_ACTION_TIMEOUT) {
+            debug_.reason += QStringLiteral(" pivot_action=timeout");
+        } else if (pivot_action_state == APP_NAV_PIVOT_ACTION_ERROR) {
+            debug_.reason += QStringLiteral(" pivot_action=error");
+        }
+    } else if (!isPivotControlMode(control_mode_)) {
+        debug_.pivot_state = QStringLiteral("n/a");
     }
     debug_.control_mode = controlModeText(control_mode_);
     debug_.sim_config_left_base = sim_config_left_base_;

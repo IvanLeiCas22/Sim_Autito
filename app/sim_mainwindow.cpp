@@ -183,6 +183,9 @@ void MainWindow::setupActions()
     auto *startWallFollowAdvanceAction = new QAction(QStringLiteral("Start wall-follow advance"), this);
     auto *startSmoothTurnLeftAction = new QAction(QStringLiteral("Start smooth turn left"), this);
     auto *startSmoothTurnRightAction = new QAction(QStringLiteral("Start smooth turn right"), this);
+    auto *startPivotLeft90Action = new QAction(QStringLiteral("Start pivot left 90"), this);
+    auto *startPivotRight90Action = new QAction(QStringLiteral("Start pivot right 90"), this);
+    auto *startPivot180Action = new QAction(QStringLiteral("Start pivot 180"), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
 
@@ -203,6 +206,9 @@ void MainWindow::setupActions()
     connect(startWallFollowAdvanceAction, &QAction::triggered, this, [this]() { startWallFollowAdvanceControl(); });
     connect(startSmoothTurnLeftAction, &QAction::triggered, this, [this]() { startSmoothTurnLeftControl(); });
     connect(startSmoothTurnRightAction, &QAction::triggered, this, [this]() { startSmoothTurnRightControl(); });
+    connect(startPivotLeft90Action, &QAction::triggered, this, [this]() { startPivotLeft90Control(); });
+    connect(startPivotRight90Action, &QAction::triggered, this, [this]() { startPivotRight90Control(); });
+    connect(startPivot180Action, &QAction::triggered, this, [this]() { startPivot180Control(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
 
@@ -231,6 +237,9 @@ void MainWindow::setupActions()
     firmwareMenu->addAction(startWallFollowAdvanceAction);
     firmwareMenu->addAction(startSmoothTurnLeftAction);
     firmwareMenu->addAction(startSmoothTurnRightAction);
+    firmwareMenu->addAction(startPivotLeft90Action);
+    firmwareMenu->addAction(startPivotRight90Action);
+    firmwareMenu->addAction(startPivot180Action);
     firmwareMenu->addAction(stopFirmwareControlAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
@@ -292,6 +301,9 @@ void MainWindow::setupActions()
     addAction(startWallFollowAdvanceAction);
     addAction(startSmoothTurnLeftAction);
     addAction(startSmoothTurnRightAction);
+    addAction(startPivotLeft90Action);
+    addAction(startPivotRight90Action);
+    addAction(startPivot180Action);
     addAction(stopFirmwareControlAction);
     addAction(tuneFirmwareConfigAction);
 }
@@ -430,6 +442,63 @@ void MainWindow::startSmoothTurnRightControl()
 {
     updateSensors();
     firmwareBridge_.startSmoothTurnRight();
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startPivotLeft90Control()
+{
+    updateSensors();
+    firmwareBridge_.startPivotLeft90();
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startPivotRight90Control()
+{
+    updateSensors();
+    firmwareBridge_.startPivotRight90();
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startPivot180Control()
+{
+    updateSensors();
+    firmwareBridge_.startPivot180();
 
     if (firmwareBridge_.debug().enabled) {
         simulationRunning_ = true;
@@ -1009,6 +1078,7 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  reason: %1\n").arg(debug.reason);
     text += QStringLiteral("  enabled: %1\n").arg(boolText(debug.enabled));
     text += QStringLiteral("  firmware_control_mode: %1\n").arg(debug.control_mode);
+    text += QStringLiteral("  pivot_state: %1\n").arg(debug.pivot_state);
     text += QStringLiteral("  sim_config_left_base: %1\n").arg(debug.sim_config_left_base);
     text += QStringLiteral("  sim_config_right_base: %1\n").arg(debug.sim_config_right_base);
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);
