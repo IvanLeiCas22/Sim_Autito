@@ -58,6 +58,11 @@ bool isSmoothControlMode(FirmwareSimBridge::ControlMode mode)
         || mode == FirmwareSimBridge::ControlMode::SmoothTurnRight;
 }
 
+bool isAdvanceControlMode(FirmwareSimBridge::ControlMode mode)
+{
+    return mode == FirmwareSimBridge::ControlMode::WallFollowAdvance;
+}
+
 double shortestDeltaDeg(double current_deg, double target_deg)
 {
     if (!std::isfinite(current_deg) || !std::isfinite(target_deg)) {
@@ -212,6 +217,30 @@ QString recommendedActionText(AppNavRecommendedAction action)
     return QStringLiteral("UNKNOWN");
 }
 
+QString advanceActionStateText(AppNavAdvanceActionState state)
+{
+    switch (state) {
+    case APP_NAV_ADVANCE_ACTION_IDLE:
+        return QStringLiteral("idle");
+    case APP_NAV_ADVANCE_ACTION_WAIT_LEAVE_REAR_TAPE:
+        return QStringLiteral("wait_leave_rear_tape");
+    case APP_NAV_ADVANCE_ACTION_RUNNING_WALL_FOLLOW:
+        return QStringLiteral("wall_follow");
+    case APP_NAV_ADVANCE_ACTION_RUNNING_YAW_HOLD:
+        return QStringLiteral("yaw_hold");
+    case APP_NAV_ADVANCE_ACTION_DONE_REAR_TAPE:
+        return QStringLiteral("done_rear_tape");
+    case APP_NAV_ADVANCE_ACTION_FRONT_OBSTACLE_SAFETY:
+        return QStringLiteral("front_obstacle_safety");
+    case APP_NAV_ADVANCE_ACTION_TIMEOUT:
+        return QStringLiteral("timeout");
+    case APP_NAV_ADVANCE_ACTION_ERROR:
+        return QStringLiteral("error");
+    }
+
+    return QStringLiteral("unknown");
+}
+
 QString smoothActionStateText(AppNavSmoothActionState state)
 {
     switch (state) {
@@ -339,6 +368,8 @@ AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
 {
     AppNavInput input = {};
     input.dt_ms = snapshot.dt_ms;
+    input.floor_front_black = snapshot.floor_front_black ? 1U : 0U;
+    input.floor_rear_black = snapshot.floor_rear_black ? 1U : 0U;
 
     input.dist_front_left_mm = toFirmwareDistanceMm(snapshot.ir_distance_mm[0]);
     input.dist_front_right_mm = toFirmwareDistanceMm(snapshot.ir_distance_mm[1]);
@@ -451,18 +482,24 @@ void FirmwareSimBridge::reset()
 {
     ensureFirmwareCoreInitialized();
 
+    const bool wasAdvanceControl = isAdvanceControlMode(control_mode_);
     const bool wasSmoothControl = isSmoothControlMode(control_mode_);
     const bool wasPivotControl = isPivotControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
     simulation_config_applied_ = false;
     straight_yaw_target_deg_ = 0.0;
+    advance_yaw_reference_valid_ = false;
+    advance_yaw_start_deg_ = 0.0;
     smooth_yaw_reference_valid_ = false;
     smooth_yaw_start_deg_ = 0.0;
     pivot_yaw_reference_valid_ = false;
     pivot_yaw_start_deg_ = 0.0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (wasAdvanceControl) {
+        App_Nav_StopAdvanceAction();
+    }
     if (wasSmoothControl) {
         App_Nav_StopSmoothAction();
     }
@@ -489,18 +526,24 @@ void FirmwareSimBridge::start()
 {
     ensureFirmwareCoreInitialized();
 
+    const bool wasAdvanceControl = isAdvanceControlMode(control_mode_);
     const bool wasSmoothControl = isSmoothControlMode(control_mode_);
     const bool wasPivotControl = isPivotControlMode(control_mode_);
     enabled_ = true;
     control_mode_ = ControlMode::TelemetryOnly;
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
     debug_.enabled = enabled_;
     debug_.control_mode = controlModeText(control_mode_);
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (wasAdvanceControl) {
+        App_Nav_StopAdvanceAction();
+    }
     if (wasSmoothControl) {
         App_Nav_StopSmoothAction();
     }
@@ -520,18 +563,24 @@ void FirmwareSimBridge::stop()
 {
     ensureFirmwareCoreInitialized();
 
+    const bool wasAdvanceControl = isAdvanceControlMode(control_mode_);
     const bool wasSmoothControl = isSmoothControlMode(control_mode_);
     const bool wasPivotControl = isPivotControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
     debug_.enabled = enabled_;
     debug_.control_mode = controlModeText(control_mode_);
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (wasAdvanceControl) {
+        App_Nav_StopAdvanceAction();
+    }
     if (wasSmoothControl) {
         App_Nav_StopSmoothAction();
     }
@@ -550,8 +599,10 @@ void FirmwareSimBridge::stop()
 void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
 
@@ -580,26 +631,31 @@ void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
 void FirmwareSimBridge::startWallFollowAdvance()
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
+    advance_yaw_start_deg_ = 0.0;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
-    const bool started = App_Nav_StartWallFollowAdvance();
+    const bool started = App_Nav_StartAdvanceAction(APP_NAV_ADVANCE_ACTION_WALL_FOLLOW_AUTO_YAW_HOLD);
     enabled_ = started;
     control_mode_ = started ? ControlMode::WallFollowAdvance : ControlMode::TelemetryOnly;
     debug_.enabled = enabled_;
     debug_.control_mode = controlModeText(control_mode_);
+    debug_.advance_state = started ? QStringLiteral("wait_leave_rear_tape") : QStringLiteral("error");
     debug_.state = started ? QStringLiteral("FW: wall-follow advance") : QStringLiteral("FW: idle");
     debug_.reason = started
-        ? QStringLiteral("Wall-follow advance primitive started")
-        : QStringLiteral("Wall-follow advance primitive could not start");
+        ? QStringLiteral("Advance action started")
+        : QStringLiteral("Advance action could not start");
 #else
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
     debug_.enabled = enabled_;
     debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.state = QStringLiteral("STUB");
     debug_.reason = QStringLiteral("Wall-follow advance unsupported without firmware core");
 #endif
@@ -608,9 +664,11 @@ void FirmwareSimBridge::startWallFollowAdvance()
 void FirmwareSimBridge::startSmoothTurnLeft()
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     smooth_yaw_start_deg_ = 0.0;
     pivot_yaw_reference_valid_ = false;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
 
@@ -639,9 +697,11 @@ void FirmwareSimBridge::startSmoothTurnLeft()
 void FirmwareSimBridge::startSmoothTurnRight()
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     smooth_yaw_start_deg_ = 0.0;
     pivot_yaw_reference_valid_ = false;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
 
@@ -670,9 +730,11 @@ void FirmwareSimBridge::startSmoothTurnRight()
 void FirmwareSimBridge::startPivotLeft90()
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
     pivot_yaw_start_deg_ = 0.0;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
@@ -700,9 +762,11 @@ void FirmwareSimBridge::startPivotLeft90()
 void FirmwareSimBridge::startPivotRight90()
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
     pivot_yaw_start_deg_ = 0.0;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
@@ -730,9 +794,11 @@ void FirmwareSimBridge::startPivotRight90()
 void FirmwareSimBridge::startPivot180()
 {
     ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
     pivot_yaw_start_deg_ = 0.0;
+    debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
@@ -776,6 +842,12 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     if (control_mode_ == ControlMode::StraightYawHold) {
         firmware_snapshot.yaw_deg = straight_yaw_target_deg_
             + shortestDeltaDeg(snapshot.yaw_deg, straight_yaw_target_deg_);
+    } else if (isAdvanceControlMode(control_mode_)) {
+        if (!advance_yaw_reference_valid_) {
+            advance_yaw_start_deg_ = snapshot.yaw_deg;
+            advance_yaw_reference_valid_ = true;
+        }
+        firmware_snapshot.yaw_deg = shortestDeltaDeg(snapshot.yaw_deg, advance_yaw_start_deg_);
     } else if (isSmoothControlMode(control_mode_)) {
         if (!smooth_yaw_reference_valid_) {
             smooth_yaw_start_deg_ = snapshot.yaw_deg;
@@ -799,7 +871,8 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
 
     bool straight_yaw_hold_ok = true;
-    bool wall_follow_ok = true;
+    bool advance_action_ticked = false;
+    AppNavAdvanceActionState advance_action_state = APP_NAV_ADVANCE_ACTION_IDLE;
     bool smooth_action_ticked = false;
     AppNavSmoothActionState smooth_action_state = APP_NAV_SMOOTH_ACTION_IDLE;
     bool pivot_action_ticked = false;
@@ -813,13 +886,28 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
         }
     } else if (control_mode_ == ControlMode::WallFollowAdvance) {
         AppNavOutput primitive_output = {};
-        wall_follow_ok = App_Nav_ComputeWallFollowPwm(&input,
-                                                      sim_config_right_base_,
-                                                      sim_config_left_base_,
-                                                      &primitive_output);
-        if (wall_follow_ok) {
+        advance_action_ticked = true;
+        advance_action_state = App_Nav_TickAdvanceAction(&input, &primitive_output);
+        if (advance_action_state == APP_NAV_ADVANCE_ACTION_WAIT_LEAVE_REAR_TAPE
+            || advance_action_state == APP_NAV_ADVANCE_ACTION_RUNNING_WALL_FOLLOW
+            || advance_action_state == APP_NAV_ADVANCE_ACTION_RUNNING_YAW_HOLD) {
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
+        } else {
+            command.left_pwm = 0;
+            command.right_pwm = 0;
+
+            const bool advanceTerminalState =
+                advance_action_state == APP_NAV_ADVANCE_ACTION_DONE_REAR_TAPE
+                || advance_action_state == APP_NAV_ADVANCE_ACTION_FRONT_OBSTACLE_SAFETY
+                || advance_action_state == APP_NAV_ADVANCE_ACTION_TIMEOUT
+                || advance_action_state == APP_NAV_ADVANCE_ACTION_ERROR;
+            if (advanceTerminalState) {
+                App_Nav_StopAdvanceAction();
+                enabled_ = false;
+                control_mode_ = ControlMode::TelemetryOnly;
+                advance_yaw_reference_valid_ = false;
+            }
         }
     } else if (control_mode_ == ControlMode::SmoothTurnLeft
                || control_mode_ == ControlMode::SmoothTurnRight) {
@@ -884,8 +972,17 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     if (control_mode_ == ControlMode::StraightYawHold && !straight_yaw_hold_ok) {
         debug_.reason += QStringLiteral(" straight_yaw_hold_pwm=false");
     }
-    if (control_mode_ == ControlMode::WallFollowAdvance && !wall_follow_ok) {
-        debug_.reason += QStringLiteral(" wall_follow_pwm=false/no_reference");
+    if (advance_action_ticked) {
+        debug_.advance_state = advanceActionStateText(advance_action_state);
+        if (advance_action_state == APP_NAV_ADVANCE_ACTION_FRONT_OBSTACLE_SAFETY) {
+            debug_.reason += QStringLiteral(" advance_action=front_obstacle_safety");
+        } else if (advance_action_state == APP_NAV_ADVANCE_ACTION_TIMEOUT) {
+            debug_.reason += QStringLiteral(" advance_action=timeout");
+        } else if (advance_action_state == APP_NAV_ADVANCE_ACTION_ERROR) {
+            debug_.reason += QStringLiteral(" advance_action=error");
+        }
+    } else if (!isAdvanceControlMode(control_mode_)) {
+        debug_.advance_state = QStringLiteral("n/a");
     }
     if (smooth_action_ticked) {
         debug_.smooth_state = smoothActionStateText(smooth_action_state);
