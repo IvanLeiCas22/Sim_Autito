@@ -7,9 +7,12 @@
 
 #include <array>
 
+#include <QByteArray>
+#include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QLabel>
+#include <QList>
 #include <QMainWindow>
 #include <QShowEvent>
 #include <QResizeEvent>
@@ -75,8 +78,16 @@ private:
 
     void updateSensors();
     FirmwareSimBridge::SensorSnapshot buildBridgeSnapshot() const;
+    bool computeFirmwareInitialMazePose(uint8_t *x, uint8_t *y, uint8_t *heading) const;
 
     void refreshScene();
+    void clearNonFirmwareMazeOverlayItems();
+    void clearFirmwareMazeOverlay();
+    void resetFirmwareMazeOverlayCache();
+    void updateFirmwareMazeOverlay();
+    QByteArray buildFirmwareMazeOverlaySignature(const FirmwareSimBridge::Debug &debug) const;
+    bool firmwareMazeLogicalToWorldCell(uint8_t logical_x, uint8_t logical_y, int *world_col, int *world_row) const;
+    void addFirmwareMazeOverlayItem(QGraphicsItem *item);
     void refreshTelemetry();
 
     QPointF robotLocalToWorld(double local_x_mm, double local_y_mm) const;
@@ -95,6 +106,9 @@ private:
 
     bool simulationRunning_ = false;
     bool rotateJogAroundRearAxle_ = true;
+    bool showFirmwareMazeOverlay_ = true;
+    QByteArray firmwareMazeOverlaySignature_;
+    QList<QGraphicsItem *> firmwareMazeOverlayItems_;
     FirmwareSimBridge::Command lastCommand_;
     QString lastManualJogDescription_ = QStringLiteral("none");
 

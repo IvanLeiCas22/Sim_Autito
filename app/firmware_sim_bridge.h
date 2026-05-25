@@ -10,6 +10,18 @@ class FirmwareSimBridge
 {
 public:
     static constexpr int kIrSensorCount = 6;
+    static constexpr int kFirmwareMazeWidth = 15;
+    static constexpr int kFirmwareMazeHeight = 15;
+    static constexpr uint8_t kFirmwareMazeWallNorth = 0x01;
+    static constexpr uint8_t kFirmwareMazeWallSouth = 0x02;
+    static constexpr uint8_t kFirmwareMazeWallEast = 0x04;
+    static constexpr uint8_t kFirmwareMazeWallWest = 0x08;
+    static constexpr uint8_t kFirmwareMazeCellVisited = 0x10;
+    static constexpr uint8_t kFirmwareMazeHeadingNorth = 0;
+    static constexpr uint8_t kFirmwareMazeHeadingEast = 1;
+    static constexpr uint8_t kFirmwareMazeHeadingSouth = 2;
+    static constexpr uint8_t kFirmwareMazeHeadingWest = 3;
+    using FirmwareMazeCells = std::array<std::array<uint8_t, kFirmwareMazeHeight>, kFirmwareMazeWidth>;
 
     enum class ControlMode
     {
@@ -66,6 +78,11 @@ public:
         uint8_t maze_heading = 0;
         uint8_t maze_cell = 0;
         bool maze_valid = false;
+        bool fw_maze_map_valid = false;
+        FirmwareMazeCells fw_maze_cells = {};
+        uint8_t fw_maze_current_x = 0;
+        uint8_t fw_maze_current_y = 0;
+        uint8_t fw_maze_heading = 0;
 
         bool floor_front_black = false;
         bool floor_rear_black = false;
@@ -139,7 +156,9 @@ public:
     void startPivotLeft90();
     void startPivotRight90();
     void startPivot180();
+    bool resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uint8_t heading);
     bool startSupervisorV1();
+    bool startSupervisorV1(uint8_t x, uint8_t y, uint8_t heading);
     void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);
@@ -153,7 +172,9 @@ private:
     void ensureFirmwareCoreInitialized();
     void applySimulationFirmwareConfig(const SensorSnapshot &snapshot);
     void updateMazeDebug();
+    void updateFirmwareMazeMapDebug();
     void updateSupervisorDebug();
+    bool startSupervisorV1Internal(bool has_initial_pose, uint8_t x, uint8_t y, uint8_t heading);
 
     bool enabled_ = false;
     bool firmware_initialized_ = false;

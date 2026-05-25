@@ -16,12 +16,14 @@
 #include <QGroupBox>
 #include <QKeySequence>
 #include <QList>
+#include <QLineF>
 #include <QHBoxLayout>
 #include <QFont>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPen>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
@@ -232,7 +234,19 @@ void MainWindow::setupActions()
     simulationMenu->addAction(toggleAction);
 
     auto *viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
+    auto *showFirmwareMazeOverlayAction = new QAction(QStringLiteral("Show firmware maze overlay"), this);
+    showFirmwareMazeOverlayAction->setCheckable(true);
+    showFirmwareMazeOverlayAction->setChecked(showFirmwareMazeOverlay_);
+    connect(showFirmwareMazeOverlayAction, &QAction::toggled, this, [this](bool checked) {
+        showFirmwareMazeOverlay_ = checked;
+        firmwareMazeOverlaySignature_.clear();
+        if (!showFirmwareMazeOverlay_) {
+            clearFirmwareMazeOverlay();
+        }
+        refreshScene();
+    });
     viewMenu->addAction(fitAction);
+    viewMenu->addAction(showFirmwareMazeOverlayAction);
 
     auto *firmwareMenu = menuBar()->addMenu(QStringLiteral("&Firmware"));
     firmwareMenu->addAction(startStraightYawHoldAction);
@@ -342,6 +356,15 @@ void MainWindow::resetSimulation()
 
     robot_.setPose(world_.startXMm(), world_.startYMm(), world_.startYawDeg());
     firmwareBridge_.reset();
+    uint8_t initialX = 0;
+    uint8_t initialY = 0;
+    uint8_t initialHeading = 0;
+    if (computeFirmwareInitialMazePose(&initialX, &initialY, &initialHeading)) {
+        firmwareBridge_.resetSupervisorWithInitialPose(initialX, initialY, initialHeading);
+    } else {
+        firmwareBridge_.resetSupervisorWithInitialPose(0xffU, 0xffU, 0xffU);
+    }
+    resetFirmwareMazeOverlayCache();
     lastCommand_ = FirmwareSimBridge::Command{};
     lastManualJogDescription_ = QStringLiteral("none");
 
@@ -521,7 +544,14 @@ void MainWindow::startPivot180Control()
 void MainWindow::startSupervisorV1Control()
 {
     updateSensors();
-    firmwareBridge_.startSupervisorV1();
+    uint8_t initialX = 0;
+    uint8_t initialY = 0;
+    uint8_t initialHeading = 0;
+    if (computeFirmwareInitialMazePose(&initialX, &initialY, &initialHeading)) {
+        firmwareBridge_.startSupervisorV1(initialX, initialY, initialHeading);
+    } else {
+        firmwareBridge_.startSupervisorV1(0xffU, 0xffU, 0xffU);
+    }
 
     if (firmwareBridge_.debug().enabled) {
         simulationRunning_ = true;
@@ -960,9 +990,290 @@ FirmwareSimBridge::SensorSnapshot MainWindow::buildBridgeSnapshot() const
     return snapshot;
 }
 
+bool MainWindow::computeFirmwareInitialMazePose(uint8_t *x, uint8_t *y, uint8_t *heading) const
+{
+    if (x == nullptr || y == nullptr || heading == nullptr || world_.cellSizeMm() <= 0.0) {
+        return false;
+    }
+
+    const int worldCol = static_cast<int>(std::floor(world_.startXMm() / world_.cellSizeMm()));
+    const int worldRow = static_cast<int>(std::floor(world_.startYMm() / world_.cellSizeMm()));
+    if (worldCol < 0 || worldCol >= world_.cols() || worldRow < 0 || worldRow >= world_.rows()) {
+        return false;
+    }
+
+    const int logicalX = worldCol;
+    const int logicalY = world_.rows() - 1 - worldRow;
+    if (logicalX < 0
+        || logicalX >= FirmwareSimBridge::kFirmwareMazeWidth
+        || logicalY < 0
+        || logicalY >= FirmwareSimBridge::kFirmwareMazeHeight) {
+        return false;
+    }
+
+    double yawDeg = std::fmod(world_.startYawDeg(), 360.0);
+    if (yawDeg < 0.0) {
+        yawDeg += 360.0;
+    }
+
+    uint8_t logicalHeading = FirmwareSimBridge::kFirmwareMazeHeadingNorth;
+    if (yawDeg >= 315.0 || yawDeg < 45.0) {
+        logicalHeading = FirmwareSimBridge::kFirmwareMazeHeadingEast;
+    } else if (yawDeg < 135.0) {
+        logicalHeading = FirmwareSimBridge::kFirmwareMazeHeadingSouth;
+    } else if (yawDeg < 225.0) {
+        logicalHeading = FirmwareSimBridge::kFirmwareMazeHeadingWest;
+    }
+
+    *x = static_cast<uint8_t>(logicalX);
+    *y = static_cast<uint8_t>(logicalY);
+    *heading = logicalHeading;
+    return true;
+}
+
+void MainWindow::clearNonFirmwareMazeOverlayItems()
+{
+    const QList<QGraphicsItem *> items = scene_->items();
+    for (QGraphicsItem *item : items) {
+        if (firmwareMazeOverlayItems_.contains(item)) {
+            continue;
+        }
+        scene_->removeItem(item);
+        delete item;
+    }
+}
+
+void MainWindow::clearFirmwareMazeOverlay()
+{
+    const QList<QGraphicsItem *> overlayItems = firmwareMazeOverlayItems_;
+    for (QGraphicsItem *item : overlayItems) {
+        if (item->scene() == scene_) {
+            scene_->removeItem(item);
+        }
+        delete item;
+    }
+    firmwareMazeOverlayItems_.clear();
+}
+
+void MainWindow::resetFirmwareMazeOverlayCache()
+{
+    clearFirmwareMazeOverlay();
+    firmwareMazeOverlaySignature_.clear();
+}
+
+QByteArray MainWindow::buildFirmwareMazeOverlaySignature(const FirmwareSimBridge::Debug &debug) const
+{
+    QByteArray signature;
+    signature.reserve(1 + 3 + FirmwareSimBridge::kFirmwareMazeWidth * FirmwareSimBridge::kFirmwareMazeHeight);
+    signature.append(debug.fw_maze_map_valid ? '\1' : '\0');
+    if (!debug.fw_maze_map_valid) {
+        return signature;
+    }
+
+    signature.append(static_cast<char>(debug.fw_maze_current_x));
+    signature.append(static_cast<char>(debug.fw_maze_current_y));
+    signature.append(static_cast<char>(debug.fw_maze_heading));
+    for (const auto &column : debug.fw_maze_cells) {
+        for (uint8_t cell : column) {
+            signature.append(static_cast<char>(cell));
+        }
+    }
+
+    return signature;
+}
+
+bool MainWindow::firmwareMazeLogicalToWorldCell(uint8_t logical_x,
+                                                uint8_t logical_y,
+                                                int *world_col,
+                                                int *world_row) const
+{
+    if (world_.cellSizeMm() <= 0.0) {
+        return false;
+    }
+
+    const int col = static_cast<int>(logical_x);
+    const int row = world_.rows() - 1 - static_cast<int>(logical_y);
+    if (col < 0 || col >= world_.cols() || row < 0 || row >= world_.rows()) {
+        return false;
+    }
+
+    if (world_col != nullptr) {
+        *world_col = col;
+    }
+    if (world_row != nullptr) {
+        *world_row = row;
+    }
+    return true;
+}
+
+void MainWindow::addFirmwareMazeOverlayItem(QGraphicsItem *item)
+{
+    if (item != nullptr) {
+        firmwareMazeOverlayItems_.append(item);
+    }
+}
+
+void MainWindow::updateFirmwareMazeOverlay()
+{
+    const FirmwareSimBridge::Debug debug = firmwareBridge_.debug();
+    const QByteArray signature = buildFirmwareMazeOverlaySignature(debug);
+
+    if (!showFirmwareMazeOverlay_ || !debug.fw_maze_map_valid) {
+        if (signature != firmwareMazeOverlaySignature_) {
+            clearFirmwareMazeOverlay();
+            firmwareMazeOverlaySignature_ = signature;
+        }
+        return;
+    }
+
+    if (signature == firmwareMazeOverlaySignature_) {
+        return;
+    }
+
+    clearFirmwareMazeOverlay();
+
+    const double cellSize = world_.cellSizeMm();
+    const QPen noPen(Qt::NoPen);
+    const QBrush visitedBrush(QColor(65, 190, 255, 45));
+    const QBrush currentBrush(QColor(45, 170, 255, 90));
+    const QPen currentBorderPen(QColor(0, 80, 210, 220), 3.0);
+    const QPen wallHaloPen(QColor(215, 238, 255, 230), 6.0, Qt::SolidLine, Qt::RoundCap);
+    const QPen knownWallPen(QColor(8, 45, 88, 235), 2.4, Qt::SolidLine, Qt::RoundCap);
+
+    auto cellRect = [cellSize](int col, int row) {
+        return QRectF(col * cellSize, row * cellSize, cellSize, cellSize);
+    };
+
+    auto drawKnownWall = [&](int col, int row, uint8_t wallBit) {
+        const QRectF rect = cellRect(col, row);
+        const double inset = std::min(5.0, cellSize * 0.04);
+        QPointF start;
+        QPointF end;
+
+        if (wallBit == FirmwareSimBridge::kFirmwareMazeWallNorth) {
+            start = QPointF(rect.left() + inset, rect.top() + inset);
+            end = QPointF(rect.right() - inset, rect.top() + inset);
+        } else if (wallBit == FirmwareSimBridge::kFirmwareMazeWallSouth) {
+            start = QPointF(rect.left() + inset, rect.bottom() - inset);
+            end = QPointF(rect.right() - inset, rect.bottom() - inset);
+        } else if (wallBit == FirmwareSimBridge::kFirmwareMazeWallEast) {
+            start = QPointF(rect.right() - inset, rect.top() + inset);
+            end = QPointF(rect.right() - inset, rect.bottom() - inset);
+        } else if (wallBit == FirmwareSimBridge::kFirmwareMazeWallWest) {
+            start = QPointF(rect.left() + inset, rect.top() + inset);
+            end = QPointF(rect.left() + inset, rect.bottom() - inset);
+        } else {
+            return;
+        }
+
+        QGraphicsLineItem *halo = scene_->addLine(QLineF(start, end), wallHaloPen);
+        halo->setZValue(6.0);
+        addFirmwareMazeOverlayItem(halo);
+
+        QGraphicsLineItem *line = scene_->addLine(QLineF(start, end), knownWallPen);
+        line->setZValue(6.1);
+        addFirmwareMazeOverlayItem(line);
+    };
+
+    for (int x = 0; x < FirmwareSimBridge::kFirmwareMazeWidth; ++x) {
+        for (int y = 0; y < FirmwareSimBridge::kFirmwareMazeHeight; ++y) {
+            const uint8_t cell = debug.fw_maze_cells[x][y];
+            int col = 0;
+            int row = 0;
+            if (!firmwareMazeLogicalToWorldCell(static_cast<uint8_t>(x), static_cast<uint8_t>(y), &col, &row)) {
+                continue;
+            }
+
+            if ((cell & FirmwareSimBridge::kFirmwareMazeCellVisited) != 0U) {
+                QGraphicsRectItem *visited = scene_->addRect(cellRect(col, row), noPen, visitedBrush);
+                visited->setZValue(3.1);
+                addFirmwareMazeOverlayItem(visited);
+            }
+        }
+    }
+
+    for (int x = 0; x < FirmwareSimBridge::kFirmwareMazeWidth; ++x) {
+        for (int y = 0; y < FirmwareSimBridge::kFirmwareMazeHeight; ++y) {
+            const uint8_t cell = debug.fw_maze_cells[x][y];
+            int col = 0;
+            int row = 0;
+            if (!firmwareMazeLogicalToWorldCell(static_cast<uint8_t>(x), static_cast<uint8_t>(y), &col, &row)) {
+                continue;
+            }
+
+            if ((cell & FirmwareSimBridge::kFirmwareMazeWallNorth) != 0U) {
+                drawKnownWall(col, row, FirmwareSimBridge::kFirmwareMazeWallNorth);
+            }
+            if ((cell & FirmwareSimBridge::kFirmwareMazeWallEast) != 0U) {
+                drawKnownWall(col, row, FirmwareSimBridge::kFirmwareMazeWallEast);
+            }
+            const bool southAlreadyDrawn =
+                y > 0
+                && (debug.fw_maze_cells[x][y - 1] & FirmwareSimBridge::kFirmwareMazeWallNorth) != 0U;
+            if ((cell & FirmwareSimBridge::kFirmwareMazeWallSouth) != 0U && !southAlreadyDrawn) {
+                drawKnownWall(col, row, FirmwareSimBridge::kFirmwareMazeWallSouth);
+            }
+            const bool westAlreadyDrawn =
+                x > 0
+                && (debug.fw_maze_cells[x - 1][y] & FirmwareSimBridge::kFirmwareMazeWallEast) != 0U;
+            if ((cell & FirmwareSimBridge::kFirmwareMazeWallWest) != 0U && !westAlreadyDrawn) {
+                drawKnownWall(col, row, FirmwareSimBridge::kFirmwareMazeWallWest);
+            }
+        }
+    }
+
+    int currentCol = 0;
+    int currentRow = 0;
+    if (firmwareMazeLogicalToWorldCell(debug.fw_maze_current_x, debug.fw_maze_current_y, &currentCol, &currentRow)) {
+        const QRectF currentRect = cellRect(currentCol, currentRow);
+        QGraphicsRectItem *currentFill = scene_->addRect(currentRect, noPen, currentBrush);
+        currentFill->setZValue(3.2);
+        addFirmwareMazeOverlayItem(currentFill);
+
+        QGraphicsRectItem *currentBorder = scene_->addRect(currentRect.adjusted(2.0, 2.0, -2.0, -2.0),
+                                                           currentBorderPen,
+                                                           QBrush(Qt::NoBrush));
+        currentBorder->setZValue(6.3);
+        addFirmwareMazeOverlayItem(currentBorder);
+
+        QPointF direction(0.0, -1.0);
+        if (debug.fw_maze_heading == 1U) {
+            direction = QPointF(1.0, 0.0);
+        } else if (debug.fw_maze_heading == 2U) {
+            direction = QPointF(0.0, 1.0);
+        } else if (debug.fw_maze_heading == 3U) {
+            direction = QPointF(-1.0, 0.0);
+        }
+
+        const QPointF center = currentRect.center();
+        const double arrowLength = cellSize * 0.34;
+        const QPointF end = center + QPointF(direction.x() * arrowLength, direction.y() * arrowLength);
+        const QPen arrowPen(QColor(0, 95, 220, 230), 4.0, Qt::SolidLine, Qt::RoundCap);
+        QGraphicsLineItem *arrowLine = scene_->addLine(QLineF(center, end), arrowPen);
+        arrowLine->setZValue(6.5);
+        addFirmwareMazeOverlayItem(arrowLine);
+
+        const double headLength = std::max(10.0, cellSize * 0.08);
+        const double headHalfWidth = std::max(6.0, cellSize * 0.05);
+        const QPointF base = end - QPointF(direction.x() * headLength, direction.y() * headLength);
+        const QPointF perpendicular(-direction.y(), direction.x());
+        QPolygonF arrowHead;
+        arrowHead << end
+                  << base + QPointF(perpendicular.x() * headHalfWidth, perpendicular.y() * headHalfWidth)
+                  << base - QPointF(perpendicular.x() * headHalfWidth, perpendicular.y() * headHalfWidth);
+        QGraphicsPolygonItem *arrowHeadItem = scene_->addPolygon(arrowHead,
+                                                                 QPen(Qt::NoPen),
+                                                                 QBrush(QColor(0, 95, 220, 230)));
+        arrowHeadItem->setZValue(6.6);
+        addFirmwareMazeOverlayItem(arrowHeadItem);
+    }
+
+    firmwareMazeOverlaySignature_ = signature;
+}
+
 void MainWindow::refreshScene()
 {
-    scene_->clear();
+    clearNonFirmwareMazeOverlayItems();
     scene_->setSceneRect(0.0, 0.0, world_.widthMm(), world_.heightMm());
 
     // Visual convention:
@@ -1001,6 +1312,8 @@ void MainWindow::refreshScene()
         QGraphicsLineItem *item = scene_->addLine(segment.x1_mm, segment.y1_mm, segment.x2_mm, segment.y2_mm, wallPen);
         item->setZValue(4.0);
     }
+
+    updateFirmwareMazeOverlay();
 
     const QPen rayPen(QColor(230, 90, 20), 2.0);
     const QPen hitPen(QColor(160, 40, 0), 1.0);

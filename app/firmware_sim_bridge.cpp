@@ -537,6 +537,63 @@ void FirmwareSimBridge::updateMazeDebug()
 #endif
 }
 
+void FirmwareSimBridge::updateFirmwareMazeMapDebug()
+{
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    debug_.fw_maze_map_valid = false;
+    debug_.fw_maze_cells = FirmwareMazeCells{};
+
+    if (MAZE_WIDTH > kFirmwareMazeWidth || MAZE_HEIGHT > kFirmwareMazeHeight) {
+        return;
+    }
+
+    FirmwareMazeCells cells = {};
+    uint8_t currentX = 0;
+    uint8_t currentY = 0;
+    uint8_t heading = 0;
+    bool havePosition = false;
+
+    for (uint8_t col = 0; col < MAZE_WIDTH; ++col) {
+        uint8_t buffer[APP_MAZE_COLUMN_SYNC_PAYLOAD_SIZE] = {};
+        const uint8_t payloadSize = App_Maze_WriteColumnSyncPayload(col, buffer);
+        if (payloadSize != APP_MAZE_COLUMN_SYNC_PAYLOAD_SIZE || buffer[0] != col) {
+            return;
+        }
+
+        for (uint8_t row = 0; row < MAZE_HEIGHT; ++row) {
+            cells[col][row] = buffer[1U + row];
+        }
+
+        const uint8_t positionOffset = 1U + MAZE_HEIGHT;
+        const uint8_t columnCurrentX = buffer[positionOffset];
+        const uint8_t columnCurrentY = buffer[positionOffset + 1U];
+        const uint8_t columnHeading = buffer[positionOffset + 2U];
+        if (!havePosition) {
+            currentX = columnCurrentX;
+            currentY = columnCurrentY;
+            heading = columnHeading;
+            havePosition = true;
+        } else if (currentX != columnCurrentX
+                   || currentY != columnCurrentY
+                   || heading != columnHeading) {
+            return;
+        }
+    }
+
+    debug_.fw_maze_cells = cells;
+    debug_.fw_maze_current_x = currentX;
+    debug_.fw_maze_current_y = currentY;
+    debug_.fw_maze_heading = heading;
+    debug_.fw_maze_map_valid = havePosition;
+#else
+    debug_.fw_maze_map_valid = false;
+    debug_.fw_maze_cells = FirmwareMazeCells{};
+    debug_.fw_maze_current_x = 0;
+    debug_.fw_maze_current_y = 0;
+    debug_.fw_maze_heading = 0;
+#endif
+}
+
 void FirmwareSimBridge::updateSupervisorDebug()
 {
 #if SIM_AUTITO_HAS_NAV_SUPERVISOR
@@ -600,6 +657,7 @@ void FirmwareSimBridge::reset()
     debug_.state = QStringLiteral("FW: reset");
     debug_.reason = QStringLiteral("Firmware core initialized and reset");
     updateMazeDebug();
+    updateFirmwareMazeMapDebug();
 #else
     debug_ = Debug{};
 #endif
@@ -980,7 +1038,59 @@ void FirmwareSimBridge::startPivot180()
 #endif
 }
 
+bool FirmwareSimBridge::resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uint8_t heading)
+{
+    ensureFirmwareCoreInitialized();
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    const bool validPose =
+        x < MAZE_WIDTH
+        && y < MAZE_HEIGHT
+        && heading <= static_cast<uint8_t>(HEADING_WEST);
+    const bool resetOk = validPose
+        && App_NavSupervisor_ResetWithInitialPose(x, y, static_cast<HeadingTypeDef>(heading));
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    if (resetOk) {
+        updateSupervisorDebug();
+        updateMazeDebug();
+        updateFirmwareMazeMapDebug();
+        debug_.state = QStringLiteral("FW: reset");
+        debug_.reason = QStringLiteral("Supervisor V1 initial pose set");
+        return true;
+    }
+
+    debug_.fw_maze_map_valid = false;
+    debug_.fw_maze_cells = FirmwareMazeCells{};
+    debug_.state = QStringLiteral("FW: reset");
+    debug_.reason = QStringLiteral("Supervisor V1 initial pose invalid");
+    return false;
+#else
+    Q_UNUSED(x);
+    Q_UNUSED(y);
+    Q_UNUSED(heading);
+    debug_.fw_maze_map_valid = false;
+    debug_.fw_maze_cells = FirmwareMazeCells{};
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Supervisor V1 initial pose unsupported without app_nav_supervisor");
+    return false;
+#endif
+}
+
 bool FirmwareSimBridge::startSupervisorV1()
+{
+    return startSupervisorV1Internal(false, 0U, 0U, 0U);
+}
+
+bool FirmwareSimBridge::startSupervisorV1(uint8_t x, uint8_t y, uint8_t heading)
+{
+    return startSupervisorV1Internal(true, x, y, heading);
+}
+
+bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
+                                                  uint8_t x,
+                                                  uint8_t y,
+                                                  uint8_t heading)
 {
     ensureFirmwareCoreInitialized();
     advance_yaw_reference_valid_ = false;
@@ -1000,7 +1110,32 @@ bool FirmwareSimBridge::startSupervisorV1()
 #endif
 
 #if SIM_AUTITO_HAS_NAV_SUPERVISOR
-    App_NavSupervisor_Reset();
+    bool poseResetOk = true;
+    if (has_initial_pose) {
+        if (x >= MAZE_WIDTH || y >= MAZE_HEIGHT || heading > static_cast<uint8_t>(HEADING_WEST)) {
+            poseResetOk = false;
+        } else {
+            poseResetOk = App_NavSupervisor_ResetWithInitialPose(x,
+                                                                 y,
+                                                                 static_cast<HeadingTypeDef>(heading));
+        }
+    } else {
+        App_NavSupervisor_Reset();
+    }
+
+    if (!poseResetOk) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        updateSupervisorDebug();
+        debug_.fw_maze_map_valid = false;
+        debug_.fw_maze_cells = FirmwareMazeCells{};
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("Supervisor V1 initial pose invalid");
+        return false;
+    }
+
     const bool started = App_NavSupervisor_Start();
     enabled_ = started;
     control_mode_ = started ? ControlMode::SupervisorV1 : ControlMode::TelemetryOnly;
@@ -1272,6 +1407,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.adc_floor_front = firmware_debug.floor_front_adc;
     debug_.adc_floor_rear = firmware_debug.floor_rear_adc;
     updateMazeDebug();
+    updateFirmwareMazeMapDebug();
 #else
     Q_UNUSED(snapshot);
 
