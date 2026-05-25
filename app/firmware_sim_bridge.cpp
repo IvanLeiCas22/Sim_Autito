@@ -312,6 +312,10 @@ QString supervisorStateText(AppNavSupervisorState state)
     switch (state) {
     case APP_NAV_SUPERVISOR_IDLE:
         return QStringLiteral("idle");
+    case APP_NAV_SUPERVISOR_START_INITIAL_ADVANCE:
+        return QStringLiteral("start_initial_advance");
+    case APP_NAV_SUPERVISOR_RUN_INITIAL_ADVANCE:
+        return QStringLiteral("run_initial_advance");
     case APP_NAV_SUPERVISOR_DECIDE:
         return QStringLiteral("decide");
     case APP_NAV_SUPERVISOR_RUN_ADVANCE:
@@ -336,6 +340,8 @@ QString supervisorActionText(AppNavSupervisorAction action)
     switch (action) {
     case APP_NAV_SUPERVISOR_ACTION_NONE:
         return QStringLiteral("none");
+    case APP_NAV_SUPERVISOR_ACTION_INITIAL_ADVANCE:
+        return QStringLiteral("initial_advance");
     case APP_NAV_SUPERVISOR_ACTION_ADVANCE:
         return QStringLiteral("advance");
     case APP_NAV_SUPERVISOR_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
@@ -1248,6 +1254,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
         supervisor_ticked = true;
         supervisor_state = App_NavSupervisor_Tick(&input, &supervisor_output);
         if (supervisor_state == APP_NAV_SUPERVISOR_DECIDE
+            || supervisor_state == APP_NAV_SUPERVISOR_RUN_INITIAL_ADVANCE
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_ADVANCE
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_APPROACH_FRONT_WALL_FOR_PIVOT
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT
