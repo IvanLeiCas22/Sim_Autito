@@ -124,6 +124,7 @@ constexpr uint16_t kSimWallTargetMm = 62;
 constexpr uint16_t kSimWallThresholdSideMm = 135;
 constexpr uint16_t kSimWallThresholdDiagonalMm = 145;
 constexpr uint16_t kSimWallThresholdFrontMm = 140;
+constexpr uint16_t kSimWallHysteresisMm = 5;
 constexpr uint32_t kDecisionRandomValue = 0U;
 
 double effectiveMotorGain(double gain)
@@ -188,6 +189,7 @@ void applySimulationFirmwareDefaults(AppNavConfig *config, double left_gain, dou
     config->wall_threshold_mm_side = kSimWallThresholdSideMm;
     config->wall_threshold_mm_diagonal = kSimWallThresholdDiagonalMm;
     config->wall_threshold_mm_front = kSimWallThresholdFrontMm;
+    config->wall_hysteresis_mm = kSimWallHysteresisMm;
 }
 
 uint16_t toFirmwareDistanceMm(double distance_mm)
