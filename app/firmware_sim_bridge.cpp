@@ -244,8 +244,6 @@ QString advanceActionStateText(AppNavAdvanceActionState state)
         return QStringLiteral("yaw_hold");
     case APP_NAV_ADVANCE_ACTION_DONE_REAR_TAPE:
         return QStringLiteral("done_rear_tape");
-    case APP_NAV_ADVANCE_ACTION_FRONT_OBSTACLE_SAFETY:
-        return QStringLiteral("front_obstacle_safety");
     case APP_NAV_ADVANCE_ACTION_TIMEOUT:
         return QStringLiteral("timeout");
     case APP_NAV_ADVANCE_ACTION_ERROR:
@@ -309,6 +307,8 @@ QString supervisorStateText(AppNavSupervisorState state)
         return QStringLiteral("decide");
     case APP_NAV_SUPERVISOR_RUN_ADVANCE:
         return QStringLiteral("run_advance");
+    case APP_NAV_SUPERVISOR_RUN_APPROACH_FRONT_WALL_FOR_PIVOT:
+        return QStringLiteral("run_approach_front_wall_for_pivot");
     case APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT:
         return QStringLiteral("run_smooth_left");
     case APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT:
@@ -329,6 +329,8 @@ QString supervisorActionText(AppNavSupervisorAction action)
         return QStringLiteral("none");
     case APP_NAV_SUPERVISOR_ACTION_ADVANCE:
         return QStringLiteral("advance");
+    case APP_NAV_SUPERVISOR_ACTION_APPROACH_FRONT_WALL_FOR_PIVOT:
+        return QStringLiteral("approach_front_wall_for_pivot");
     case APP_NAV_SUPERVISOR_ACTION_SMOOTH_LEFT:
         return QStringLiteral("smooth_left");
     case APP_NAV_SUPERVISOR_ACTION_SMOOTH_RIGHT:
@@ -1236,6 +1238,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
         supervisor_state = App_NavSupervisor_Tick(&input, &supervisor_output);
         if (supervisor_state == APP_NAV_SUPERVISOR_DECIDE
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_ADVANCE
+            || supervisor_state == APP_NAV_SUPERVISOR_RUN_APPROACH_FRONT_WALL_FOR_PIVOT
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT
             || supervisor_state == APP_NAV_SUPERVISOR_RUN_PIVOT_180) {
@@ -1262,7 +1265,6 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
             const bool advanceTerminalState =
                 advance_action_state == APP_NAV_ADVANCE_ACTION_DONE_REAR_TAPE
-                || advance_action_state == APP_NAV_ADVANCE_ACTION_FRONT_OBSTACLE_SAFETY
                 || advance_action_state == APP_NAV_ADVANCE_ACTION_TIMEOUT
                 || advance_action_state == APP_NAV_ADVANCE_ACTION_ERROR;
             if (advanceTerminalState) {
@@ -1337,9 +1339,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     }
     if (advance_action_ticked) {
         debug_.advance_state = advanceActionStateText(advance_action_state);
-        if (advance_action_state == APP_NAV_ADVANCE_ACTION_FRONT_OBSTACLE_SAFETY) {
-            debug_.reason += QStringLiteral(" advance_action=front_obstacle_safety");
-        } else if (advance_action_state == APP_NAV_ADVANCE_ACTION_TIMEOUT) {
+        if (advance_action_state == APP_NAV_ADVANCE_ACTION_TIMEOUT) {
             debug_.reason += QStringLiteral(" advance_action=timeout");
         } else if (advance_action_state == APP_NAV_ADVANCE_ACTION_ERROR) {
             debug_.reason += QStringLiteral(" advance_action=error");
