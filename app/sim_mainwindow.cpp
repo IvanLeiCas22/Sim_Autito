@@ -186,6 +186,7 @@ void MainWindow::setupActions()
     auto *startPivotLeft90Action = new QAction(QStringLiteral("Start pivot left 90"), this);
     auto *startPivotRight90Action = new QAction(QStringLiteral("Start pivot right 90"), this);
     auto *startPivot180Action = new QAction(QStringLiteral("Start pivot 180"), this);
+    auto *startSupervisorV1Action = new QAction(QStringLiteral("Start supervisor V1"), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
 
@@ -209,6 +210,7 @@ void MainWindow::setupActions()
     connect(startPivotLeft90Action, &QAction::triggered, this, [this]() { startPivotLeft90Control(); });
     connect(startPivotRight90Action, &QAction::triggered, this, [this]() { startPivotRight90Control(); });
     connect(startPivot180Action, &QAction::triggered, this, [this]() { startPivot180Control(); });
+    connect(startSupervisorV1Action, &QAction::triggered, this, [this]() { startSupervisorV1Control(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
 
@@ -240,6 +242,7 @@ void MainWindow::setupActions()
     firmwareMenu->addAction(startPivotLeft90Action);
     firmwareMenu->addAction(startPivotRight90Action);
     firmwareMenu->addAction(startPivot180Action);
+    firmwareMenu->addAction(startSupervisorV1Action);
     firmwareMenu->addAction(stopFirmwareControlAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
@@ -304,6 +307,7 @@ void MainWindow::setupActions()
     addAction(startPivotLeft90Action);
     addAction(startPivotRight90Action);
     addAction(startPivot180Action);
+    addAction(startSupervisorV1Action);
     addAction(stopFirmwareControlAction);
     addAction(tuneFirmwareConfigAction);
 }
@@ -499,6 +503,25 @@ void MainWindow::startPivot180Control()
 {
     updateSensors();
     firmwareBridge_.startPivot180();
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startSupervisorV1Control()
+{
+    updateSensors();
+    firmwareBridge_.startSupervisorV1();
 
     if (firmwareBridge_.debug().enabled) {
         simulationRunning_ = true;
@@ -1081,6 +1104,14 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  advance_state: %1\n").arg(debug.advance_state);
     text += QStringLiteral("  pivot_state: %1\n").arg(debug.pivot_state);
     text += QStringLiteral("  smooth_state: %1\n").arg(debug.smooth_state);
+    if (debug.supervisor_state != QStringLiteral("n/a")) {
+        text += QStringLiteral("  supervisor: state=%1 action=%2 result=%3\n")
+            .arg(debug.supervisor_state)
+            .arg(debug.supervisor_action)
+            .arg(static_cast<unsigned int>(debug.supervisor_result));
+    } else {
+        text += QStringLiteral("  supervisor: n/a\n");
+    }
     text += QStringLiteral("  sim_config_left_base: %1\n").arg(debug.sim_config_left_base);
     text += QStringLiteral("  sim_config_right_base: %1\n").arg(debug.sim_config_right_base);
     text += QStringLiteral("  left_pwm: %1\n").arg(lastCommand_.left_pwm);

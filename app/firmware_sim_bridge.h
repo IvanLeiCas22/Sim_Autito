@@ -20,7 +20,8 @@ public:
         SmoothTurnRight,
         PivotLeft90,
         PivotRight90,
-        Pivot180
+        Pivot180,
+        SupervisorV1
     };
 
     struct SensorSnapshot
@@ -55,6 +56,9 @@ public:
         QString advance_state = QStringLiteral("n/a");
         QString pivot_state = QStringLiteral("n/a");
         QString smooth_state = QStringLiteral("n/a");
+        QString supervisor_state = QStringLiteral("n/a");
+        QString supervisor_action = QStringLiteral("n/a");
+        uint8_t supervisor_result = 0;
         uint16_t sim_config_left_base = 0;
         uint16_t sim_config_right_base = 0;
         uint8_t maze_x = 0;
@@ -135,6 +139,7 @@ public:
     void startPivotLeft90();
     void startPivotRight90();
     void startPivot180();
+    bool startSupervisorV1();
     void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);
@@ -148,6 +153,7 @@ private:
     void ensureFirmwareCoreInitialized();
     void applySimulationFirmwareConfig(const SensorSnapshot &snapshot);
     void updateMazeDebug();
+    void updateSupervisorDebug();
 
     bool enabled_ = false;
     bool firmware_initialized_ = false;

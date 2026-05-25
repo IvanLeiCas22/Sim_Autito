@@ -10,6 +10,10 @@
 #define SIM_AUTITO_HAS_FIRMWARE_CORE 0
 #endif
 
+#ifndef SIM_AUTITO_HAS_NAV_SUPERVISOR
+#define SIM_AUTITO_HAS_NAV_SUPERVISOR 0
+#endif
+
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
 extern "C" {
 #include "app_nav_types.h"
@@ -17,6 +21,9 @@ extern "C" {
 #include "app_nav_debug.h"
 #include "app_nav.h"
 #include "app_maze.h"
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+#include "app_nav_supervisor.h"
+#endif
 }
 #endif
 
@@ -40,6 +47,8 @@ QString controlModeText(FirmwareSimBridge::ControlMode mode)
         return QStringLiteral("PivotRight90");
     case FirmwareSimBridge::ControlMode::Pivot180:
         return QStringLiteral("Pivot180");
+    case FirmwareSimBridge::ControlMode::SupervisorV1:
+        return QStringLiteral("SupervisorV1");
     }
 
     return QStringLiteral("Unknown");
@@ -61,6 +70,11 @@ bool isSmoothControlMode(FirmwareSimBridge::ControlMode mode)
 bool isAdvanceControlMode(FirmwareSimBridge::ControlMode mode)
 {
     return mode == FirmwareSimBridge::ControlMode::WallFollowAdvance;
+}
+
+bool isSupervisorControlMode(FirmwareSimBridge::ControlMode mode)
+{
+    return mode == FirmwareSimBridge::ControlMode::SupervisorV1;
 }
 
 double shortestDeltaDeg(double current_deg, double target_deg)
@@ -285,6 +299,48 @@ QString pivotActionStateText(AppNavPivotActionState state)
     return QStringLiteral("unknown");
 }
 
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+QString supervisorStateText(AppNavSupervisorState state)
+{
+    switch (state) {
+    case APP_NAV_SUPERVISOR_IDLE:
+        return QStringLiteral("idle");
+    case APP_NAV_SUPERVISOR_DECIDE:
+        return QStringLiteral("decide");
+    case APP_NAV_SUPERVISOR_RUN_ADVANCE:
+        return QStringLiteral("run_advance");
+    case APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT:
+        return QStringLiteral("run_smooth_left");
+    case APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT:
+        return QStringLiteral("run_smooth_right");
+    case APP_NAV_SUPERVISOR_RUN_PIVOT_180:
+        return QStringLiteral("run_pivot_180");
+    case APP_NAV_SUPERVISOR_ERROR:
+        return QStringLiteral("error");
+    }
+
+    return QStringLiteral("unknown");
+}
+
+QString supervisorActionText(AppNavSupervisorAction action)
+{
+    switch (action) {
+    case APP_NAV_SUPERVISOR_ACTION_NONE:
+        return QStringLiteral("none");
+    case APP_NAV_SUPERVISOR_ACTION_ADVANCE:
+        return QStringLiteral("advance");
+    case APP_NAV_SUPERVISOR_ACTION_SMOOTH_LEFT:
+        return QStringLiteral("smooth_left");
+    case APP_NAV_SUPERVISOR_ACTION_SMOOTH_RIGHT:
+        return QStringLiteral("smooth_right");
+    case APP_NAV_SUPERVISOR_ACTION_PIVOT_180:
+        return QStringLiteral("pivot_180");
+    }
+
+    return QStringLiteral("unknown");
+}
+#endif
+
 FirmwareSimBridge::FirmwareConfig toBridgeConfig(const AppNavConfig &config)
 {
     FirmwareSimBridge::FirmwareConfig out;
@@ -417,6 +473,9 @@ void FirmwareSimBridge::ensureFirmwareCoreInitialized()
     }
 
     App_Nav_Init(nullptr);
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    App_NavSupervisor_Init();
+#endif
     firmware_initialized_ = true;
     debug_.state = QStringLiteral("FW: initialized");
     debug_.reason = QStringLiteral("Firmware core initialized");
@@ -478,6 +537,21 @@ void FirmwareSimBridge::updateMazeDebug()
 #endif
 }
 
+void FirmwareSimBridge::updateSupervisorDebug()
+{
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    AppNavSupervisorDebug supervisorDebug = {};
+    App_NavSupervisor_GetDebug(&supervisorDebug);
+    debug_.supervisor_state = supervisorStateText(supervisorDebug.state);
+    debug_.supervisor_action = supervisorActionText(supervisorDebug.current_action);
+    debug_.supervisor_result = supervisorDebug.last_result;
+#else
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
+#endif
+}
+
 void FirmwareSimBridge::reset()
 {
     ensureFirmwareCoreInitialized();
@@ -485,6 +559,7 @@ void FirmwareSimBridge::reset()
     const bool wasAdvanceControl = isAdvanceControlMode(control_mode_);
     const bool wasSmoothControl = isSmoothControlMode(control_mode_);
     const bool wasPivotControl = isPivotControlMode(control_mode_);
+    const bool wasSupervisorControl = isSupervisorControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
     simulation_config_applied_ = false;
@@ -506,8 +581,16 @@ void FirmwareSimBridge::reset()
     if (wasPivotControl) {
         App_Nav_StopPivotAction();
     }
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (wasSupervisorControl) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     App_Nav_Reset();
     App_Maze_ResetState();
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    App_NavSupervisor_Reset();
+#endif
 
     debug_ = Debug{};
     debug_.enabled = enabled_;
@@ -529,6 +612,7 @@ void FirmwareSimBridge::start()
     const bool wasAdvanceControl = isAdvanceControlMode(control_mode_);
     const bool wasSmoothControl = isSmoothControlMode(control_mode_);
     const bool wasPivotControl = isPivotControlMode(control_mode_);
+    const bool wasSupervisorControl = isSupervisorControlMode(control_mode_);
     enabled_ = true;
     control_mode_ = ControlMode::TelemetryOnly;
     advance_yaw_reference_valid_ = false;
@@ -539,6 +623,9 @@ void FirmwareSimBridge::start()
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     if (wasAdvanceControl) {
@@ -550,6 +637,11 @@ void FirmwareSimBridge::start()
     if (wasPivotControl) {
         App_Nav_StopPivotAction();
     }
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (wasSupervisorControl) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     App_Nav_StartFindCells();
     debug_.state = QStringLiteral("FW: running");
     debug_.reason = QStringLiteral("Firmware core find-cells mode started");
@@ -566,6 +658,7 @@ void FirmwareSimBridge::stop()
     const bool wasAdvanceControl = isAdvanceControlMode(control_mode_);
     const bool wasSmoothControl = isSmoothControlMode(control_mode_);
     const bool wasPivotControl = isPivotControlMode(control_mode_);
+    const bool wasSupervisorControl = isSupervisorControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
     advance_yaw_reference_valid_ = false;
@@ -576,6 +669,9 @@ void FirmwareSimBridge::stop()
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
     if (wasAdvanceControl) {
@@ -587,6 +683,11 @@ void FirmwareSimBridge::stop()
     if (wasPivotControl) {
         App_Nav_StopPivotAction();
     }
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (wasSupervisorControl) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     App_Nav_Stop();
     debug_.state = QStringLiteral("FW: stopped");
     debug_.reason = QStringLiteral("Firmware core stopped");
@@ -605,8 +706,16 @@ void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     straight_yaw_target_deg_ = current_yaw_deg;
     const bool started = App_Nav_StartStraightDriveYawHold(toQ16Deg(straight_yaw_target_deg_));
     enabled_ = started;
@@ -638,8 +747,16 @@ void FirmwareSimBridge::startWallFollowAdvance()
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     const bool started = App_Nav_StartAdvanceAction(APP_NAV_ADVANCE_ACTION_WALL_FOLLOW_AUTO_YAW_HOLD);
     enabled_ = started;
     control_mode_ = started ? ControlMode::WallFollowAdvance : ControlMode::TelemetryOnly;
@@ -671,8 +788,16 @@ void FirmwareSimBridge::startSmoothTurnLeft()
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     const bool started = App_Nav_StartSmoothAction(APP_NAV_SMOOTH_ACTION_LEFT);
     enabled_ = started;
     control_mode_ = started ? ControlMode::SmoothTurnLeft : ControlMode::TelemetryOnly;
@@ -704,8 +829,16 @@ void FirmwareSimBridge::startSmoothTurnRight()
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
     debug_.pivot_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     const bool started = App_Nav_StartSmoothAction(APP_NAV_SMOOTH_ACTION_RIGHT);
     enabled_ = started;
     control_mode_ = started ? ControlMode::SmoothTurnRight : ControlMode::TelemetryOnly;
@@ -736,8 +869,16 @@ void FirmwareSimBridge::startPivotLeft90()
     pivot_yaw_start_deg_ = 0.0;
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     const bool started = App_Nav_StartPivotAction(APP_NAV_PIVOT_LEFT_90);
     enabled_ = started;
     control_mode_ = started ? ControlMode::PivotLeft90 : ControlMode::TelemetryOnly;
@@ -768,8 +909,16 @@ void FirmwareSimBridge::startPivotRight90()
     pivot_yaw_start_deg_ = 0.0;
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     const bool started = App_Nav_StartPivotAction(APP_NAV_PIVOT_RIGHT_90);
     enabled_ = started;
     control_mode_ = started ? ControlMode::PivotRight90 : ControlMode::TelemetryOnly;
@@ -800,8 +949,16 @@ void FirmwareSimBridge::startPivot180()
     pivot_yaw_start_deg_ = 0.0;
     debug_.advance_state = QStringLiteral("n/a");
     debug_.smooth_state = QStringLiteral("n/a");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
 
 #if SIM_AUTITO_HAS_FIRMWARE_CORE
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (isSupervisorControlMode(control_mode_)) {
+        App_NavSupervisor_Stop();
+    }
+#endif
     const bool started = App_Nav_StartPivotAction(APP_NAV_PIVOT_180_RIGHT);
     enabled_ = started;
     control_mode_ = started ? ControlMode::Pivot180 : ControlMode::TelemetryOnly;
@@ -820,6 +977,52 @@ void FirmwareSimBridge::startPivot180()
     debug_.pivot_state = QStringLiteral("n/a");
     debug_.state = QStringLiteral("STUB");
     debug_.reason = QStringLiteral("Pivot 180 unsupported without firmware core");
+#endif
+}
+
+bool FirmwareSimBridge::startSupervisorV1()
+{
+    ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
+    advance_yaw_start_deg_ = 0.0;
+    smooth_yaw_reference_valid_ = false;
+    smooth_yaw_start_deg_ = 0.0;
+    pivot_yaw_reference_valid_ = false;
+    pivot_yaw_start_deg_ = 0.0;
+    debug_.advance_state = QStringLiteral("n/a");
+    debug_.smooth_state = QStringLiteral("n/a");
+    debug_.pivot_state = QStringLiteral("n/a");
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    App_Nav_StopAdvanceAction();
+    App_Nav_StopSmoothAction();
+    App_Nav_StopPivotAction();
+#endif
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    App_NavSupervisor_Reset();
+    const bool started = App_NavSupervisor_Start();
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::SupervisorV1 : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    updateSupervisorDebug();
+    debug_.state = started ? QStringLiteral("FW: supervisor V1") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("Supervisor V1 started")
+        : QStringLiteral("Supervisor V1 could not start");
+    return started;
+#else
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Supervisor V1 unsupported without app_nav_supervisor");
+    return false;
 #endif
 }
 
@@ -868,7 +1071,9 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     App_Nav_Tick(&input, &output);
 
     AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
-    App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
+    if (!isSupervisorControlMode(control_mode_)) {
+        App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
+    }
 
     bool straight_yaw_hold_ok = true;
     bool advance_action_ticked = false;
@@ -877,6 +1082,10 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     AppNavSmoothActionState smooth_action_state = APP_NAV_SMOOTH_ACTION_IDLE;
     bool pivot_action_ticked = false;
     AppNavPivotActionState pivot_action_state = APP_NAV_PIVOT_ACTION_IDLE;
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    bool supervisor_ticked = false;
+    AppNavSupervisorState supervisor_state = APP_NAV_SUPERVISOR_IDLE;
+#endif
     if (control_mode_ == ControlMode::StraightYawHold) {
         AppNavOutput primitive_output = {};
         straight_yaw_hold_ok = App_Nav_ComputeStraightDrivePwm(&input, &primitive_output);
@@ -884,7 +1093,26 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
         }
-    } else if (control_mode_ == ControlMode::WallFollowAdvance) {
+    }
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    else if (control_mode_ == ControlMode::SupervisorV1) {
+        AppNavOutput supervisor_output = {};
+        supervisor_ticked = true;
+        supervisor_state = App_NavSupervisor_Tick(&input, &supervisor_output);
+        if (supervisor_state == APP_NAV_SUPERVISOR_DECIDE
+            || supervisor_state == APP_NAV_SUPERVISOR_RUN_ADVANCE
+            || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT
+            || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT
+            || supervisor_state == APP_NAV_SUPERVISOR_RUN_PIVOT_180) {
+            command.left_pwm = supervisor_output.left_motor_pwm;
+            command.right_pwm = supervisor_output.right_motor_pwm;
+        } else {
+            command.left_pwm = 0;
+            command.right_pwm = 0;
+        }
+    }
+#endif
+    else if (control_mode_ == ControlMode::WallFollowAdvance) {
         AppNavOutput primitive_output = {};
         advance_action_ticked = true;
         advance_action_state = App_Nav_TickAdvanceAction(&input, &primitive_output);
@@ -999,6 +1227,22 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     } else if (!isPivotControlMode(control_mode_)) {
         debug_.pivot_state = QStringLiteral("n/a");
     }
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (supervisor_ticked) {
+        updateSupervisorDebug();
+        if (supervisor_state == APP_NAV_SUPERVISOR_ERROR) {
+            debug_.reason += QStringLiteral(" supervisor=error");
+        }
+    } else if (!isSupervisorControlMode(control_mode_)) {
+        debug_.supervisor_state = QStringLiteral("n/a");
+        debug_.supervisor_action = QStringLiteral("n/a");
+        debug_.supervisor_result = 0;
+    }
+#else
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
+#endif
     debug_.control_mode = controlModeText(control_mode_);
     debug_.sim_config_left_base = sim_config_left_base_;
     debug_.sim_config_right_base = sim_config_right_base_;
@@ -1007,7 +1251,8 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.available_options_mask = firmware_debug.available_options_mask;
     debug_.valid_option_count = firmware_debug.valid_option_count;
     debug_.decision_random_value = kDecisionRandomValue;
-    if (static_cast<int>(firmware_debug.last_recommended_action) != debug_.recommended_action) {
+    if (!isSupervisorControlMode(control_mode_)
+        && static_cast<int>(firmware_debug.last_recommended_action) != debug_.recommended_action) {
         debug_.reason += QStringLiteral(" last_recommended_action=%1")
             .arg(static_cast<int>(firmware_debug.last_recommended_action));
     }

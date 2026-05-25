@@ -66,6 +66,7 @@ private:
     void startPivotLeft90Control();
     void startPivotRight90Control();
     void startPivot180Control();
+    void startSupervisorV1Control();
     void stopFirmwareControl();
     void tuneFirmwareConfig();
     void simulationStep();
