@@ -1142,6 +1142,8 @@ void MainWindow::updateFirmwareMazeOverlay()
     const double cellSize = world_.cellSizeMm();
     const QPen noPen(Qt::NoPen);
     const QBrush visitedBrush(QColor(65, 190, 255, 45));
+    const QBrush specialBrush(QColor(255, 205, 40, 150));
+    const QPen specialBorderPen(QColor(130, 90, 0, 230), 2.0);
     const QBrush currentBrush(QColor(45, 170, 255, 90));
     const QPen currentBorderPen(QColor(0, 80, 210, 220), 3.0);
     const QPen wallHaloPen(QColor(215, 238, 255, 230), 6.0, Qt::SolidLine, Qt::RoundCap);
@@ -1195,6 +1197,16 @@ void MainWindow::updateFirmwareMazeOverlay()
                 QGraphicsRectItem *visited = scene_->addRect(cellRect(col, row), noPen, visitedBrush);
                 visited->setZValue(3.1);
                 addFirmwareMazeOverlayItem(visited);
+            }
+
+            if ((cell & FirmwareSimBridge::kFirmwareMazeCellSpecial) != 0U) {
+                const QRectF rect = cellRect(col, row);
+                const double margin = std::max(8.0, cellSize * 0.22);
+                const QRectF specialRect = rect.adjusted(margin, margin, -margin, -margin);
+
+                QGraphicsRectItem *special = scene_->addRect(specialRect, specialBorderPen, specialBrush);
+                special->setZValue(3.35);
+                addFirmwareMazeOverlayItem(special);
             }
         }
     }

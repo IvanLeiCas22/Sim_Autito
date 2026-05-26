@@ -17,6 +17,7 @@ public:
     static constexpr uint8_t kFirmwareMazeWallEast = 0x04;
     static constexpr uint8_t kFirmwareMazeWallWest = 0x08;
     static constexpr uint8_t kFirmwareMazeCellVisited = 0x10;
+    static constexpr uint8_t kFirmwareMazeCellSpecial = 0x20;
     static constexpr uint8_t kFirmwareMazeHeadingNorth = 0;
     static constexpr uint8_t kFirmwareMazeHeadingEast = 1;
     static constexpr uint8_t kFirmwareMazeHeadingSouth = 2;
