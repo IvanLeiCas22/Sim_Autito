@@ -1,0 +1,47 @@
+{
+  "name": "goal_frontier_entry_08",
+  "cells": {
+    "width": 6,
+    "height": 4,
+    "cell_size_mm": 200
+  },
+  "start": {
+    "x_mm": 100,
+    "y_mm": 100,
+    "yaw_deg": 90
+  },
+  "special_cells": [
+    {
+      "cell_x": 0,
+      "cell_y": 1,
+      "size_mm": 140
+    },
+    {
+      "cell_x": 0,
+      "cell_y": 3,
+      "size_mm": 140
+    },
+    {
+      "cell_x": 2,
+      "cell_y": 3,
+      "size_mm": 140
+    }
+  ],
+  "walls": [
+    {
+      "cell_x": 0,
+      "cell_y": 1,
+      "dir": "E"
+    },
+    {
+      "cell_x": 0,
+      "cell_y": 2,
+      "dir": "E"
+    },
+    {
+      "cell_x": 0,
+      "cell_y": 1,
+      "dir": "E"
+    }
+  ]
+}
