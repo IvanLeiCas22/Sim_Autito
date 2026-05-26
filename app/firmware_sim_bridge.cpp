@@ -1157,6 +1157,17 @@ bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
         return false;
     }
 
+    if (!App_NavSupervisor_SetMission(APP_NAV_SUPERVISOR_MISSION_FIND_CELLS)) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        updateSupervisorDebug();
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("supervisor mission setup failed");
+        return false;
+    }
+
     const bool started = App_NavSupervisor_Start();
     enabled_ = started;
     control_mode_ = started ? ControlMode::SupervisorV1 : ControlMode::TelemetryOnly;
@@ -1166,7 +1177,7 @@ bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
     debug_.state = started ? QStringLiteral("FW: supervisor V1") : QStringLiteral("FW: idle");
     debug_.reason = started
         ? QStringLiteral("Supervisor V1 started")
-        : QStringLiteral("Supervisor V1 could not start");
+        : QStringLiteral("supervisor start failed");
     return started;
 #else
     enabled_ = false;
