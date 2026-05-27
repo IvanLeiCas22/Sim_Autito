@@ -5,12 +5,21 @@
 
 #include <stddef.h>
 
-#define APP_NAV_SUPERVISOR_RESULT_OK 0U
-#define APP_NAV_SUPERVISOR_RESULT_INVALID_ARGUMENT 1U
-#define APP_NAV_SUPERVISOR_RESULT_START_FAILED 2U
-#define APP_NAV_SUPERVISOR_RESULT_PRIMITIVE_ERROR 3U
-#define APP_NAV_SUPERVISOR_RESULT_UNSUPPORTED_ACTION 4U
-#define APP_NAV_SUPERVISOR_RESULT_FIND_CELLS_COMPLETE 5U
+/*
+ * Portable mission supervisor.
+ *
+ * This module owns high-level navigation sequencing for FIND_CELLS:
+ * - selects which primitive action to start;
+ * - updates the logical maze pose/cell after confirmed movement;
+ * - detects and counts unique CELL_SPECIAL cells;
+ * - finishes FIND_CELLS when the target number of special cells is reached.
+ *
+ * It does not implement low-level motor control. Motion primitives live in
+ * app_nav.c and are driven through App_Nav_*Action APIs.
+ *
+ * It does not access HAL directly. Hardware/simulator adapters must provide
+ * AppNavInput and consume AppNavOutput.
+ */
 
 #define APP_NAV_SUPERVISOR_SPECIAL_TARGET_COUNT 3U
 
@@ -28,6 +37,10 @@ static HeadingTypeDef app_nav_supervisor_initial_heading;
 static uint8_t app_nav_supervisor_initial_pose_valid;
 static AppNavSupervisorMission app_nav_supervisor_mission =
     APP_NAV_SUPERVISOR_MISSION_FIND_CELLS;
+
+/* -------------------------------------------------------------------------- */
+/* State, output and shared utility helpers                                    */
+/* -------------------------------------------------------------------------- */
 
 static void App_NavSupervisor_ClearOutput(AppNavOutput *output)
 {
@@ -170,6 +183,10 @@ static AppNavSupervisorState App_NavSupervisor_SetError(uint8_t result)
     return app_nav_supervisor_debug.state;
 }
 
+/* -------------------------------------------------------------------------- */
+/* FIND_CELLS completion and special-cell detection                            */
+/* -------------------------------------------------------------------------- */
+
 static AppNavSupervisorState App_NavSupervisor_FinishFindCells(AppNavOutput *output)
 {
     App_NavSupervisor_ClearOutput(output);
@@ -217,6 +234,10 @@ static bool App_NavSupervisor_CheckSpecialAtConfirmedCellEntry(const AppNavInput
 
     return (app_nav_supervisor_special_found_count >= APP_NAV_SUPERVISOR_SPECIAL_TARGET_COUNT);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Primitive start helpers                                                     */
+/* -------------------------------------------------------------------------- */
 
 static TurnTypeDef App_NavSupervisor_SmoothTurnForState(AppNavSupervisorState state)
 {
@@ -308,6 +329,36 @@ static bool App_NavSupervisor_StartPivot180(const AppNavInput *input)
     return true;
 }
 
+static bool App_NavSupervisor_StartSmoothWithState(const AppNavInput *input,
+                                                   AppNavSmoothActionType smooth_action,
+                                                   AppNavSupervisorState state,
+                                                   AppNavSupervisorAction action)
+{
+    AppNavRearTapeProfile rear_tape_profile = APP_NAV_REAR_TAPE_PROFILE_NORMAL_CELL;
+
+    if (!App_NavSupervisor_CaptureActionYawReference(input))
+    {
+        return false;
+    }
+
+    if (App_Maze_IsCurrentCellSpecial())
+    {
+        rear_tape_profile = APP_NAV_REAR_TAPE_PROFILE_SPECIAL_CELL;
+    }
+
+    if (!App_Nav_StartSmoothActionWithRearTapeProfile(smooth_action,
+                                                      rear_tape_profile))
+    {
+        App_NavSupervisor_ClearActionYawReference();
+        return false;
+    }
+
+    App_NavSupervisor_SetState(state,
+                               action,
+                               APP_NAV_SUPERVISOR_RESULT_OK);
+    return true;
+}
+
 static bool App_NavSupervisor_StartRecommendedAction(AppNavRecommendedAction action,
                                                      const AppNavInput *input)
 {
@@ -318,58 +369,16 @@ static bool App_NavSupervisor_StartRecommendedAction(AppNavRecommendedAction act
         return App_NavSupervisor_StartAdvance(input);
 
     case APP_NAV_ACTION_SMOOTH_LEFT:
-    {
-        AppNavRearTapeProfile rear_tape_profile = APP_NAV_REAR_TAPE_PROFILE_NORMAL_CELL;
-
-        if (!App_NavSupervisor_CaptureActionYawReference(input))
-        {
-            return false;
-        }
-
-        if (App_Maze_IsCurrentCellSpecial())
-        {
-            rear_tape_profile = APP_NAV_REAR_TAPE_PROFILE_SPECIAL_CELL;
-        }
-
-        if (!App_Nav_StartSmoothActionWithRearTapeProfile(APP_NAV_SMOOTH_ACTION_LEFT,
-                                                          rear_tape_profile))
-        {
-            App_NavSupervisor_ClearActionYawReference();
-            return false;
-        }
-
-        App_NavSupervisor_SetState(APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT,
-                                   APP_NAV_SUPERVISOR_ACTION_SMOOTH_LEFT,
-                                   APP_NAV_SUPERVISOR_RESULT_OK);
-        return true;
-    }
+        return App_NavSupervisor_StartSmoothWithState(input,
+                                                      APP_NAV_SMOOTH_ACTION_LEFT,
+                                                      APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT,
+                                                      APP_NAV_SUPERVISOR_ACTION_SMOOTH_LEFT);
 
     case APP_NAV_ACTION_SMOOTH_RIGHT:
-    {
-        AppNavRearTapeProfile rear_tape_profile = APP_NAV_REAR_TAPE_PROFILE_NORMAL_CELL;
-
-        if (!App_NavSupervisor_CaptureActionYawReference(input))
-        {
-            return false;
-        }
-
-        if (App_Maze_IsCurrentCellSpecial())
-        {
-            rear_tape_profile = APP_NAV_REAR_TAPE_PROFILE_SPECIAL_CELL;
-        }
-
-        if (!App_Nav_StartSmoothActionWithRearTapeProfile(APP_NAV_SMOOTH_ACTION_RIGHT,
-                                                          rear_tape_profile))
-        {
-            App_NavSupervisor_ClearActionYawReference();
-            return false;
-        }
-
-        App_NavSupervisor_SetState(APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT,
-                                   APP_NAV_SUPERVISOR_ACTION_SMOOTH_RIGHT,
-                                   APP_NAV_SUPERVISOR_RESULT_OK);
-        return true;
-    }
+        return App_NavSupervisor_StartSmoothWithState(input,
+                                                      APP_NAV_SMOOTH_ACTION_RIGHT,
+                                                      APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT,
+                                                      APP_NAV_SUPERVISOR_ACTION_SMOOTH_RIGHT);
 
     case APP_NAV_ACTION_GO_BACK:
         return App_NavSupervisor_StartApproachFrontWallForPivot(input);
@@ -379,6 +388,10 @@ static bool App_NavSupervisor_StartRecommendedAction(AppNavRecommendedAction act
         return false;
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Supervisor state handlers                                                   */
+/* -------------------------------------------------------------------------- */
 
 static AppNavSupervisorState App_NavSupervisor_HandleDecide(const AppNavInput *input)
 {
@@ -650,6 +663,10 @@ static AppNavSupervisorState App_NavSupervisor_HandlePivot(const AppNavInput *in
         return App_NavSupervisor_SetError(APP_NAV_SUPERVISOR_RESULT_PRIMITIVE_ERROR);
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Public API                                                                  */
+/* -------------------------------------------------------------------------- */
 
 void App_NavSupervisor_Init(void)
 {

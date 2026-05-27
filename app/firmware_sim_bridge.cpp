@@ -721,7 +721,7 @@ void FirmwareSimBridge::start()
         App_NavSupervisor_Stop();
     }
 #endif
-    App_Nav_StartFindCells();
+    //App_Nav_StartFindCells();
     debug_.state = QStringLiteral("FW: running");
     debug_.reason = QStringLiteral("Firmware core find-cells mode started");
 #else
@@ -767,7 +767,7 @@ void FirmwareSimBridge::stop()
         App_NavSupervisor_Stop();
     }
 #endif
-    App_Nav_Stop();
+    //App_Nav_Stop();
     debug_.state = QStringLiteral("FW: stopped");
     debug_.reason = QStringLiteral("Firmware core stopped");
 #else
