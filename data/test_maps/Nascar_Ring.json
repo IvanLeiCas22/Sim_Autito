@@ -42,6 +42,11 @@
       "cell_x": 0,
       "cell_y": 1,
       "dir": "E"
+    },
+    {
+      "cell_x": 1,
+      "cell_y": 3,
+      "dir": "N"
     }
   ]
 }
