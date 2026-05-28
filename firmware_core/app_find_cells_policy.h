@@ -15,18 +15,23 @@
  * Current implementation stage:
  * - prefer immediate unvisited neighbors in relative priority order:
  *   front -> right -> left;
- * - if no immediate unvisited neighbor is available, return false so the
- *   supervisor can fall back to the current local App_Nav_RecommendAction().
+ * - if no immediate unvisited neighbor is available, route toward the nearest
+ *   exploration frontier using flood fill implemented as multi-source BFS;
+ * - if the best next step is behind the robot, report BACKTRACK_REQUIRED and
+ *   return false until the future CENTER_BY_FRONT_TAPE_FOR_PIVOT primitive is
+ *   available.
  *
- * Future stages:
- * - route to the nearest exploration frontier using flood fill/BFS;
- * - support route backtracking when the best next step is behind the robot.
+ * Tie-break rule:
+ * - front -> right -> left -> back.
  */
 
 typedef enum
 {
     APP_FIND_CELLS_DECISION_REASON_NONE = 0,
-    APP_FIND_CELLS_DECISION_REASON_IMMEDIATE_UNVISITED
+    APP_FIND_CELLS_DECISION_REASON_IMMEDIATE_UNVISITED,
+    APP_FIND_CELLS_DECISION_REASON_ROUTE_TO_FRONTIER,
+    APP_FIND_CELLS_DECISION_REASON_BACKTRACK_REQUIRED,
+    APP_FIND_CELLS_DECISION_REASON_NO_FRONTIER
 } AppFindCellsDecisionReason;
 
 typedef struct
@@ -41,8 +46,12 @@ typedef struct
 /*
  * Evaluate the current FIND_CELLS decision.
  *
- * Returns true only when this policy found a concrete action to execute.
+ * Returns true only when this policy found a concrete executable action.
  * Returns false when the supervisor should use the existing local fallback.
+ *
+ * Important:
+ * - BACKTRACK_REQUIRED is intentionally not executable yet, because the current
+ *   APP_NAV_ACTION_GO_BACK path is tied to the dead-end front-wall approach.
  */
 bool App_FindCellsPolicy_Evaluate(AppFindCellsDecision *decision_out);
 
