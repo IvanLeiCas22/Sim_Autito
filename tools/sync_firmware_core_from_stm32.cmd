@@ -42,6 +42,8 @@ call :copy_if_exists "Core\Inc\app_maze.h"             "app_maze.h"
 call :copy_if_exists "Core\Inc\app_maze_types.h"       "app_maze_types.h"
 call :copy_if_exists "Core\Src\pid_controller.c"       "pid_controller.c"
 call :copy_if_exists "Core\Inc\pid_controller.h"       "pid_controller.h"
+call :copy_if_exists "Core\Src\app_find_cells_policy.c"       "app_find_cells_policy.c"
+call :copy_if_exists "Core\Inc\app_find_cells_policy.h"       "app_find_cells_policy.h"
 
 echo.
 echo Done. Review git diff before committing.
