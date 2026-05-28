@@ -8,7 +8,7 @@
   "start": {
     "x_mm": 100,
     "y_mm": 100,
-    "yaw_deg": 90
+    "yaw_deg": 0
   },
   "special_cells": [
     {
