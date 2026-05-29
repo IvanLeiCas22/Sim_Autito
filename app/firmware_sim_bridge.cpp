@@ -330,6 +330,8 @@ QString supervisorStateText(AppNavSupervisorState state)
         return QStringLiteral("run_smooth_right");
     case APP_NAV_SUPERVISOR_RUN_PIVOT_180:
         return QStringLiteral("run_pivot_180");
+    case APP_NAV_SUPERVISOR_RUN_CENTER_FRONT_TAPE_FOR_PIVOT:
+        return QStringLiteral("run_center_front_tape_for_pivot");
     case APP_NAV_SUPERVISOR_ERROR:
         return QStringLiteral("error");
     }
@@ -354,9 +356,33 @@ QString supervisorActionText(AppNavSupervisorAction action)
         return QStringLiteral("smooth_right");
     case APP_NAV_SUPERVISOR_ACTION_PIVOT_180:
         return QStringLiteral("pivot_180");
+    case APP_NAV_SUPERVISOR_ACTION_CENTER_FRONT_TAPE_FOR_PIVOT:
+        return QStringLiteral("center_front_tape_for_pivot");
     }
 
     return QStringLiteral("unknown");
+}
+
+bool supervisorStateAllowsMotorOutput(AppNavSupervisorState state)
+{
+    switch (state) {
+    case APP_NAV_SUPERVISOR_IDLE:
+    case APP_NAV_SUPERVISOR_ERROR:
+        return false;
+
+    case APP_NAV_SUPERVISOR_START_INITIAL_ADVANCE:
+    case APP_NAV_SUPERVISOR_RUN_INITIAL_ADVANCE:
+    case APP_NAV_SUPERVISOR_DECIDE:
+    case APP_NAV_SUPERVISOR_RUN_ADVANCE:
+    case APP_NAV_SUPERVISOR_RUN_APPROACH_FRONT_WALL_FOR_PIVOT:
+    case APP_NAV_SUPERVISOR_RUN_CENTER_FRONT_TAPE_FOR_PIVOT:
+    case APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT:
+    case APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT:
+    case APP_NAV_SUPERVISOR_RUN_PIVOT_180:
+        return true;
+    }
+
+    return false;
 }
 #endif
 
@@ -1266,13 +1292,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
         AppNavOutput supervisor_output = {};
         supervisor_ticked = true;
         supervisor_state = App_NavSupervisor_Tick(&input, &supervisor_output);
-        if (supervisor_state == APP_NAV_SUPERVISOR_DECIDE
-            || supervisor_state == APP_NAV_SUPERVISOR_RUN_INITIAL_ADVANCE
-            || supervisor_state == APP_NAV_SUPERVISOR_RUN_ADVANCE
-            || supervisor_state == APP_NAV_SUPERVISOR_RUN_APPROACH_FRONT_WALL_FOR_PIVOT
-            || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_LEFT
-            || supervisor_state == APP_NAV_SUPERVISOR_RUN_SMOOTH_RIGHT
-            || supervisor_state == APP_NAV_SUPERVISOR_RUN_PIVOT_180) {
+        if (supervisorStateAllowsMotorOutput(supervisor_state)) {
             command.left_pwm = supervisor_output.left_motor_pwm;
             command.right_pwm = supervisor_output.right_motor_pwm;
         } else {
