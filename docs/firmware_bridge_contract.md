@@ -1,106 +1,233 @@
 # Contrato del Firmware Bridge
 
-Este documento define la intención de `FirmwareSimBridge`: conectar el mundo simulado con un núcleo portable del firmware STM32 sin que el simulador implemente navegación propia.
+Este documento define el contrato de `FirmwareSimBridge`: conectar el mundo simulado Qt/C++ con el núcleo portable del firmware STM32 sin que el simulador implemente navegación propia.
+
+## Estado actual
+
+`FirmwareSimBridge` puede operar en dos situaciones:
+
+1. **Sin `firmware_core` disponible**: modo seguro/stub, `TelemetryOnly`, PWM cero.
+2. **Con `firmware_core` disponible**: el bridge inicializa y llama al núcleo portable real.
+
+Cuando existe `firmware_core/app_nav.c`, CMake define `SIM_AUTITO_HAS_FIRMWARE_CORE=1`. Cuando además existe `app_nav_supervisor.c` y `app_nav_supervisor.h`, define `SIM_AUTITO_HAS_NAV_SUPERVISOR=1`.
 
 ## Rol del bridge
 
-`FirmwareSimBridge` debe convertir:
+El bridge convierte:
 
 ```text
-sensores simulados + tiempo + pose/yaw
+sensores simulados + dt + yaw/yaw-rate
         ↓
-entrada portable del firmware
+AppNavInput
         ↓
-núcleo de navegación portable
+firmware_core portable
         ↓
-salida de motores/debug
+AppNavOutput
         ↓
-SimRobot + telemetría Qt
+PWM para SimRobot + telemetría Qt
 ```
 
-En la etapa actual el bridge es un stub. Su salida debe permanecer en PWM cero hasta conectar `firmware_core`.
+## Entrada al firmware portable
 
-## Responsabilidades permitidas
+`FirmwareSimBridge::tick(...)` debe construir un `AppNavInput` coherente a partir de `SensorSnapshot`.
 
-El bridge puede:
+Entradas principales:
 
-- convertir unidades del simulador a unidades del firmware;
-- convertir sensores IR simulados a distancias en mm;
-- convertir sensores de piso a lecturas equivalentes o booleanos según la API portable final;
-- entregar `dt_ms`;
-- pasar yaw/yaw-rate si el núcleo los requiere;
-- llamar funciones del núcleo portable;
-- convertir PWM de salida al formato usado por `SimRobot`;
-- exponer debug para telemetría.
-
-## Responsabilidades prohibidas
-
-El bridge no debe:
-
-- decidir si avanzar, girar o frenar;
-- implementar reglas de mano derecha;
-- implementar flood fill propio;
-- modificar el mapa lógico por su cuenta;
-- esconder clamps/configuraciones que el firmware debería controlar;
-- duplicar la máquina de estados del STM32.
-
-## API futura esperada
-
-La API final puede variar, pero debe tender a una forma similar a esta:
-
-```c
-typedef struct
-{
-    uint32_t dt_ms;
-
-    uint16_t dist_front_left_mm;
-    uint16_t dist_front_right_mm;
-    uint16_t dist_left_mm;
-    uint16_t dist_right_mm;
-    uint16_t dist_diag_left_mm;
-    uint16_t dist_diag_right_mm;
-
-    uint16_t adc_floor_front;
-    uint16_t adc_floor_rear;
-
-    int16_t yaw_deg;
-    int16_t yaw_rate_dps;
-} AppNavInput;
-
-typedef struct
-{
-    int16_t left_motor_pwm;
-    int16_t right_motor_pwm;
-} AppNavOutput;
-
-void App_Nav_Init(const AppNavConfig *config);
-void App_Nav_Reset(void);
-void App_Nav_Start(void);
-void App_Nav_Stop(void);
-void App_Nav_Tick(const AppNavInput *input, AppNavOutput *output);
-void App_Nav_GetDebug(AppNavDebug *debug);
+```text
+dt_ms
+ir_distance_mm[front_left]
+ir_distance_mm[front_right]
+ir_distance_mm[left]
+ir_distance_mm[right]
+ir_distance_mm[diag_left]
+ir_distance_mm[diag_right]
+floor_front_black
+floor_rear_black
+yaw_deg
+yaw_rate_deg_s
 ```
 
-## Convención de motores
+El bridge es responsable de convertir esas señales al formato exacto esperado por `AppNavInput`, incluyendo canales ADC simulados cuando corresponda.
 
-El firmware real suele trabajar con comandos de motor izquierdo/derecho o derecho/izquierdo según la capa. Para evitar ambigüedad, el bridge debe documentar explícitamente la conversión final.
+## Salida hacia el simulador
 
-En el lado del simulador, la salida visible debe quedar como:
+La salida pública del bridge hacia el robot simulado es:
+
+```cpp
+struct Command
+{
+    int left_pwm = 0;
+    int right_pwm = 0;
+};
+```
+
+El orden visible del simulador debe ser siempre:
 
 ```text
 left_pwm
 right_pwm
 ```
 
-Si el firmware entrega otro orden, la conversión debe hacerse en `FirmwareSimBridge` y no dispersarse por la UI.
+Si el firmware portable usa otra convención interna, la conversión debe quedar localizada en `FirmwareSimBridge`.
 
-## Criterio de aceptación al conectar firmware_core
+## Modos de operación
 
-Una conexión inicial se considera válida cuando:
+El bridge puede ejecutar modos de prueba de primitivas o el supervisor:
+
+```text
+TelemetryOnly
+StraightYawHold
+WallFollowAdvance
+SmoothTurnLeft
+SmoothTurnRight
+PivotLeft90
+PivotRight90
+Pivot180
+SupervisorV1
+```
+
+Los modos de primitivas sirven para depuración física/sensorial. La navegación de misión debe validarse usando `SupervisorV1`.
+
+## SupervisorV1
+
+Al iniciar `SupervisorV1`, el bridge debe:
+
+1. asegurar que `firmware_core` esté inicializado;
+2. detener primitivas directas activas;
+3. resetear el supervisor o resetearlo con pose inicial explícita;
+4. configurar la misión `APP_NAV_SUPERVISOR_MISSION_FIND_CELLS`;
+5. llamar a `App_NavSupervisor_Start()`;
+6. pasar a `ControlMode::SupervisorV1` solo si el arranque fue exitoso;
+7. dejar `TelemetryOnly` y PWM cero si falla algún paso.
+
+## Tick de SupervisorV1
+
+En modo supervisor, el bridge debe llamar:
+
+```cpp
+AppNavOutput supervisor_output = {};
+AppNavSupervisorState supervisor_state = App_NavSupervisor_Tick(&input, &supervisor_output);
+```
+
+Luego debe decidir si copia `supervisor_output` al comando del simulador.
+
+## Gate de motores del supervisor
+
+El bridge debe bloquear PWM en estados que no representen ejecución válida.
+
+Estados que deben bloquear salida:
+
+```text
+APP_NAV_SUPERVISOR_IDLE
+APP_NAV_SUPERVISOR_ERROR
+```
+
+Estados de ejecución o decisión conocidos deben permitir salida. Ejemplo actual importante:
+
+```text
+APP_NAV_SUPERVISOR_RUN_CENTER_FRONT_TAPE_FOR_PIVOT
+```
+
+Este estado corresponde al centrado por cinta frontal antes de pivotar en backtracking abierto.
+
+## Reglas al agregar un estado o acción nueva
+
+Cada vez que se agregue un nuevo estado/acción en `app_nav_supervisor.h`, revisar obligatoriamente:
+
+```text
+app/firmware_sim_bridge.cpp
+  supervisorStateText(...)
+  supervisorActionText(...)
+  supervisorStateAllowsMotorOutput(...)
+
+app/sim_mainwindow.cpp
+  Render de telemetría si se agregan campos de debug nuevos.
+
+docs/
+  Arquitectura y contrato del bridge si cambia el flujo.
+```
+
+Si no se actualiza el bridge, pueden aparecer síntomas como:
+
+```text
+supervisor: state=unknown action=unknown result=0
+left_pwm=0
+right_pwm=0
+```
+
+Ese patrón indica que el firmware puede estar funcionando, pero el adaptador del simulador no reconoce el estado/acción o bloquea el PWM.
+
+## Debug y telemetría mínima
+
+El bridge debe exponer al menos:
+
+```text
+state
+reason
+enabled
+control_mode
+advance_state
+smooth_state
+pivot_state
+supervisor_state
+supervisor_action
+supervisor_result
+left_pwm
+right_pwm
+pose lógica del mapa
+paredes detectadas
+sensores IR simulados
+sensores de piso
+```
+
+Mejora recomendada para próximas etapas:
+
+```text
+supervisor_state_id
+supervisor_action_id
+supervisor_motor_output_allowed
+supervisor_raw_left_pwm
+supervisor_raw_right_pwm
+```
+
+Estos campos ayudan a separar tres problemas distintos:
+
+1. el firmware genera PWM cero;
+2. el bridge bloquea el PWM;
+3. la UI está mostrando texto obsoleto.
+
+## Responsabilidades permitidas
+
+El bridge puede:
+
+- convertir unidades;
+- mapear sensores simulados a `AppNavInput`;
+- llamar funciones del firmware portable;
+- copiar `AppNavOutput` al simulador;
+- proteger el simulador en estados `IDLE`/`ERROR`;
+- exponer debug;
+- ofrecer modos de prueba de primitivas.
+
+## Responsabilidades prohibidas
+
+El bridge no debe:
+
+- decidir políticas de navegación;
+- implementar flood fill propio;
+- modificar el mapa lógico por fuera de `app_maze`;
+- reemplazar decisiones del supervisor;
+- traducir `BACKTRACK_REQUIRED` a una acción legacy distinta;
+- ocultar clamps o decisiones de seguridad que pertenezcan al firmware portable.
+
+## Criterio de aceptación
+
+La integración bridge + firmware portable se considera correcta cuando:
 
 1. el simulador compila sin HAL STM32;
 2. `FirmwareSimBridge` llama al núcleo portable real;
-3. Start/Stop/Reset controlan el núcleo portable;
-4. la telemetría muestra estado/debug del firmware;
-5. el robot simulado se mueve solo por comandos del firmware;
-6. los controles manuales siguen existiendo solo como modo de prueba sensorial.
+3. Start/Stop/Reset controlan el firmware portable;
+4. `SupervisorV1` arranca `FIND_CELLS`;
+5. el robot se mueve solo por `AppNavOutput`;
+6. la telemetría muestra estado/acción/result del supervisor;
+7. los mapas de prueba reproducen casos de exploración, dead-end y backtracking abierto;
+8. un nuevo estado/acción de supervisor no queda como `unknown` ni bloquea PWM por omisión.

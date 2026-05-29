@@ -4,23 +4,42 @@ Reglas para crear mapas compatibles con el simulador Qt/C++ de micromouse/autito
 
 ## Estado actual del simulador
 
-El simulador actual es un banco físico/sensorial con `FirmwareSimBridge` stub. No tiene navegación propia activa, no tiene batch runner y no ejecuta todavía el core real STM32.
+El simulador es un banco físico/sensorial conectado al núcleo portable del firmware STM32 mediante `FirmwareSimBridge`.
 
-Por lo tanto, estas reglas se enfocan en geometría física, sensores y representación visual. Las reglas de `PASS/FAIL`, `Shift+B`, flood, smart recognition y retorno inteligente pertenecen a la navegación legacy y no aplican al estado actual.
+Actualmente puede ejecutar `SupervisorV1` con misión `FIND_CELLS` cuando `firmware_core` está presente. No debe usarse navegación legacy propia del simulador como fuente de verdad.
+
+Los mapas JSON deben servir para validar:
+
+- geometría física;
+- sensores IR por raycast;
+- sensores de piso;
+- paredes;
+- cintas de frontera;
+- marcas de celda especial;
+- primitivas portables;
+- supervisor portable;
+- política `FIND_CELLS`;
+- backtracking abierto y dead-ends.
 
 ## Carpetas
 
-- `data/test_maps/`: mapas útiles para pruebas manuales de geometría, sensores IR, sensores de piso, paredes y celdas especiales.
-- `data/stress_maps/` o `data/dev_maps/`: sugeridas para mapas extremos, experimentales o casos conflictivos.
-- Mapas sueltos en `data/`: pruebas manuales rápidas o compatibilidad.
+- `data/test_maps/`: mapas útiles para pruebas manuales y regresiones del simulador actual.
+- `data/stress_maps/` o `data/dev_maps/`: opcionales para mapas extremos o experimentales.
+- Mapas sueltos en `data/`: pruebas rápidas o compatibilidad.
 
-`data/test_maps` debe contener mapas físicamente válidos y útiles para validar el simulador. No implica que exista un runner automático activo.
+Los mapas en `data/test_maps/` deben ser físicamente válidos y reproducibles. No deben depender de estados legacy eliminados del simulador.
 
-## Formato JSON
+## Parser real
 
-Parser real: `SimWorld::loadFromJsonFile(...)`.
+El parser usado por el simulador es:
 
-Formato recomendado:
+```cpp
+SimWorld::loadFromJsonFile(...)
+```
+
+Por lo tanto, las reglas de este documento se basan en lo que acepta `SimWorld`.
+
+## Formato JSON recomendado
 
 ```json
 {
@@ -44,112 +63,215 @@ Formato recomendado:
 }
 ```
 
-Campos:
+Campos principales:
 
-- `name`: opcional.
-- `cells.width`, `cells.height`, `cells.cell_size_mm`.
-- `start.x_mm`, `start.y_mm`, `start.yaw_deg`.
-- `walls`.
-- `special_cells`.
+- `name`: nombre visible del mapa.
+- `cells.width`: cantidad de columnas.
+- `cells.height`: cantidad de filas.
+- `cells.cell_size_mm`: tamaño de celda en milímetros.
+- `start.x_mm`: posición inicial física X.
+- `start.y_mm`: posición inicial física Y.
+- `start.yaw_deg`: yaw inicial físico.
+- `walls`: paredes internas.
+- `special_cells`: marcas especiales/target.
 
 Alias aceptados por compatibilidad:
 
 - raíz `cols`, `rows`, `cell_size_mm`;
 - `col`/`row` como alias de `cell_x`/`cell_y`.
 
-Para mapas nuevos, preferir siempre el formato recomendado.
+Para mapas nuevos, usar siempre el formato recomendado.
 
 ## Coordenadas
 
-- `cell_x`: columna.
-- `cell_y`: fila.
-- origen lógico: esquina superior izquierda `(0, 0)`.
-- X crece hacia Este.
-- Y crece hacia Sur.
-- `cell_size_mm` recomendado: `200`.
+Sistema lógico:
 
-Direcciones válidas:
+```text
+cell_x = columna
+cell_y = fila
+origen lógico = esquina superior izquierda (0, 0)
+X crece hacia Este
+Y crece hacia Sur
+```
 
-- `N` / `NORTH`;
-- `E` / `EAST`;
-- `S` / `SOUTH`;
-- `W` / `WEST`.
+Sistema físico:
 
-Preferir `N`, `E`, `S`, `W`.
+```text
+x_mm = coordenada horizontal en mm
+y_mm = coordenada vertical en mm
+cell_size_mm recomendado = 200
+centro de celda (x, y) = ((cell_x + 0.5) * cell_size_mm, (cell_y + 0.5) * cell_size_mm)
+```
+
+Para una celda de 200 mm, el centro de `(0, 0)` es:
+
+```text
+x_mm = 100
+y_mm = 100
+```
+
+## Yaw inicial
+
+Convención esperada:
+
+```text
+0°   = Este
+90°  = Sur
+180° = Oeste
+270° / -90° = Norte
+```
+
+Usar valores simples y cardinales cuando el mapa se use para probar navegación.
 
 ## Paredes
 
-- Todas las paredes deben referenciar celdas dentro del mapa.
-- No declarar paredes fuera de límites.
-- Evitar duplicados conflictivos.
-- Si se declara una pared compartida, no hace falta declarar la opuesta.
-- `SimWorld::setWall(...)` propaga la pared al vecino cuando corresponde.
-- `SimWorld::addBoundaryWalls()` genera el perímetro exterior automáticamente.
+Formato:
 
-## Cintas y celdas especiales
+```json
+{ "cell_x": 1, "cell_y": 0, "dir": "E" }
+```
 
-`SimWorld` distingue internamente:
+Direcciones aceptadas:
 
-- cinta de frontera de celda: `boundary`;
-- celda especial/target: `target`;
-- superposición: `boundary+target`.
+```text
+N / NORTH
+E / EAST
+S / SOUTH
+W / WEST
+```
 
-Visualmente:
+Reglas:
 
-- las cintas de frontera se dibujan en gris translúcido;
-- las celdas especiales se dibujan como cuadrados gris oscuro;
-- las paredes se dibujan como líneas negras gruesas por encima de las cintas.
+1. Definir solo paredes internas necesarias.
+2. Las paredes exteriores del laberinto son agregadas automáticamente por `SimWorld::addBoundaryWalls()`.
+3. Al agregar una pared interna, `SimWorld::setWall(...)` refleja la pared opuesta en la celda vecina si existe.
+4. No duplicar paredes internas salvo que sea intencional por legibilidad.
+5. No crear paredes fuera del rango del mapa.
+
+## Cintas de frontera
+
+Las cintas de frontera entre celdas no se definen manualmente en JSON. El simulador las genera según las divisiones de la grilla.
+
+Para `cell_size_mm = 200`, existen líneas de frontera en:
+
+```text
+x = 200, 400, 600, ...
+y = 200, 400, 600, ...
+```
+
+Estas cintas son detectadas por los sensores de piso simulados y se usan para confirmar ingreso/salida de celda.
 
 ## Celdas especiales
 
-- Cada especial debe estar dentro del mapa.
-- `size_mm` usado normalmente: `120`.
-- Si falta `size_mm`, el simulador usa su default.
-- Para pruebas normales, evitar ambigüedades innecesarias:
-  - start sobre especial;
-  - especiales contiguas si no se busca probar ese caso;
-  - especiales pegadas a paredes que impidan pisarlas.
+Formato:
 
-Casos ambiguos son válidos como stress si están documentados.
+```json
+{ "cell_x": 3, "cell_y": 2, "size_mm": 120 }
+```
 
-## Start
+Reglas:
 
-- `start.x_mm` y `start.y_mm` deben caer dentro del mapa.
-- `yaw_deg` recomendado: `0`, `90`, `180` o `270`.
-- Start no debe quedar encerrado.
-- Start debe permitir verificar sensores sin colisión visual inmediata.
-- Start sobre especial debe tratarse como stress, salvo que se busque probar explícitamente la detección inicial de especial.
+1. La celda especial se representa como un cuadrado centrado dentro de la celda.
+2. `size_mm` recomendado: `120`.
+3. La marca especial no reemplaza la cinta de frontera.
+4. Los mapas de `FIND_CELLS` normalmente deben tener tres celdas especiales si se quiere validar misión completa.
+5. Evitar colocar marcas especiales ambiguas si el objetivo del test no es justamente validar ese borde.
 
-## Clasificación sugerida
+## Nombres recomendados
 
-- `normal_sensor`: mapa simple para validar sensores y representación.
-- `stress_sensor`: mapa difícil o ambiguo para sensores/geometría.
-- `debug`: prueba una función puntual.
-- `legacy_nav`: mapa creado para navegación antigua; conservar solo si todavía sirve como geometría física.
+Usar nombres descriptivos:
 
-## Checklist para generar un mapa
+```text
+normal_pass_open_3_specials.json
+stress_pass_dead_ends_3_specials.json
+stress_frontier_backtracking.json
+stress_open_adjacent_specials.json
+stress_center_pivot_cases_v2.json
+stress_open_backtracking_front_tape.json
+```
 
-- Elegir `width`, `height` y `cell_size_mm`.
-- Definir start dentro del mapa.
-- Usar yaw cardinal.
-- Generar paredes interiores válidas.
-- No declarar paredes exteriores.
-- Colocar celdas especiales solo si son necesarias para la prueba.
-- Usar JSON puro, sin comentarios.
-- Usar nombre descriptivo.
-- Cargar el mapa y verificar visualmente paredes/cintas/especiales.
-- Usar movimiento manual para verificar IR y sensores de piso.
+Prefijos sugeridos:
 
-## Validación manual actual
+```text
+normal_    caso representativo esperado
+stress_    caso extremo o de regresión
+shortcut_  casos de retorno/ruta alternativa
+frontier_  casos de frontera de exploración
+```
 
-1. Cargar el mapa.
-2. Usar `Fit map` si hace falta.
-3. Mover el robot con `W/S/A/D` o flechas.
-4. Verificar telemetría de sensores IR.
-5. Verificar sensores de piso:
-   - `kind=none` fuera de cinta;
-   - `kind=boundary` sobre cinta de frontera;
-   - `kind=target` sobre celda especial;
-   - `kind=boundary+target` si hay superposición.
-6. Verificar que las paredes negras coincidan con el JSON.
-7. Verificar que el raycast IR corte contra paredes físicas, no contra cintas.
+## Mapa de regresión para backtracking abierto
+
+Cuando se quiera probar `CENTER_BY_FRONT_TAPE_FOR_PIVOT`, el mapa debe generar una situación donde:
+
+1. el robot esté en una celda ya visitada;
+2. no haya vecino no visitado inmediato útil;
+3. la política `FIND_CELLS` necesite volver hacia atrás;
+4. la celda actual no sea un dead-end físico;
+5. exista salida frontal abierta para poder avanzar hasta la cinta frontal;
+6. el frente no tenga pared conocida/presente;
+7. el supervisor devuelva `BACKTRACK_REQUIRED`;
+8. el supervisor entre en `APP_NAV_SUPERVISOR_RUN_CENTER_FRONT_TAPE_FOR_PIVOT`;
+9. el bridge deje pasar PWM distinto de cero.
+
+Telemetría esperada:
+
+```text
+supervisor: state=run_center_front_tape_for_pivot action=center_front_tape_for_pivot result=0
+left_pwm != 0
+right_pwm != 0
+```
+
+## Dead-end vs backtracking abierto
+
+No confundir estos dos casos:
+
+### Dead-end
+
+```text
+frente bloqueado
+izquierda bloqueada
+derecha bloqueada
+solo queda volver por atrás
+```
+
+Preparación esperada:
+
+```text
+APPROACH_FRONT_WALL_FOR_PIVOT
+PIVOT_180
+```
+
+### Backtracking abierto
+
+```text
+no hay vecino no visitado inmediato conveniente
+existe una ruta a frontera que requiere volver hacia atrás
+la celda no es un dead-end físico
+el frente está abierto para buscar cinta frontal
+```
+
+Preparación esperada:
+
+```text
+CENTER_BY_FRONT_TAPE_FOR_PIVOT
+PIVOT_180
+```
+
+## Checklist antes de agregar un mapa
+
+Revisar:
+
+- `width` y `height` correctos;
+- `cell_size_mm = 200`, salvo test específico;
+- pose inicial centrada en celda;
+- yaw inicial cardinal;
+- paredes internas dentro de rango;
+- no duplicar innecesariamente paredes reflejadas;
+- celdas especiales dentro de rango;
+- nombre descriptivo;
+- el caso físico reproduce una situación concreta;
+- si es regresión, anotar qué telemetría se espera.
+
+## Regla final
+
+Un mapa válido debe probar al firmware portable a través del simulador, no a una lógica alternativa implementada en Qt.
