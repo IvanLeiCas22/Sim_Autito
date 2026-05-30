@@ -44,6 +44,8 @@ call :copy_if_exists "Core\Src\pid_controller.c"       "pid_controller.c"
 call :copy_if_exists "Core\Inc\pid_controller.h"       "pid_controller.h"
 call :copy_if_exists "Core\Src\app_find_cells_policy.c"       "app_find_cells_policy.c"
 call :copy_if_exists "Core\Inc\app_find_cells_policy.h"       "app_find_cells_policy.h"
+call :copy_if_exists "Core\Src\app_go_to_b_policy.c"       "app_go_to_b_policy.c"
+call :copy_if_exists "Core\Inc\app_go_to_b_policy.h"       "app_go_to_b_policy.h"
 
 echo.
 echo Done. Review git diff before committing.

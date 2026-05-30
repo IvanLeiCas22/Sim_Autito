@@ -18,6 +18,7 @@
 #include <QList>
 #include <QLineF>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QFont>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -189,6 +190,7 @@ void MainWindow::setupActions()
     auto *startPivotRight90Action = new QAction(QStringLiteral("Start pivot right 90"), this);
     auto *startPivot180Action = new QAction(QStringLiteral("Start pivot 180"), this);
     auto *startSupervisorV1Action = new QAction(QStringLiteral("Start supervisor V1"), this);
+    auto *startGoToBAction = new QAction(QStringLiteral("Start GO_A_TO_B..."), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
 
@@ -213,6 +215,7 @@ void MainWindow::setupActions()
     connect(startPivotRight90Action, &QAction::triggered, this, [this]() { startPivotRight90Control(); });
     connect(startPivot180Action, &QAction::triggered, this, [this]() { startPivot180Control(); });
     connect(startSupervisorV1Action, &QAction::triggered, this, [this]() { startSupervisorV1Control(); });
+    connect(startGoToBAction, &QAction::triggered, this, [this]() { startGoToBControl(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
 
@@ -257,6 +260,7 @@ void MainWindow::setupActions()
     firmwareMenu->addAction(startPivotRight90Action);
     firmwareMenu->addAction(startPivot180Action);
     firmwareMenu->addAction(startSupervisorV1Action);
+    firmwareMenu->addAction(startGoToBAction);
     firmwareMenu->addAction(stopFirmwareControlAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
@@ -552,6 +556,71 @@ void MainWindow::startSupervisorV1Control()
     } else {
         firmwareBridge_.startSupervisorV1(0xffU, 0xffU, 0xffU);
     }
+
+    if (firmwareBridge_.debug().enabled) {
+        simulationRunning_ = true;
+        simulationTimer_->start();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
+        simulationRunning_ = false;
+        simulationTimer_->stop();
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startGoToBControl()
+{
+    const int maxGoalX = std::min(world_.cols(), FirmwareSimBridge::kFirmwareMazeWidth) - 1;
+    const int maxGoalY = std::min(world_.rows(), FirmwareSimBridge::kFirmwareMazeHeight) - 1;
+
+    if (maxGoalX < 0 || maxGoalY < 0) {
+        QMessageBox::warning(this,
+                             QStringLiteral("GO_A_TO_B"),
+                             QStringLiteral("Current maze dimensions are invalid."));
+        return;
+    }
+
+    bool ok = false;
+    const int goalX = QInputDialog::getInt(
+        this,
+        QStringLiteral("GO_A_TO_B target"),
+        QStringLiteral("Goal X (logical coordinate, 0 = west):"),
+        0,
+        0,
+        maxGoalX,
+        1,
+        &ok);
+    if (!ok) {
+        return;
+    }
+
+    const int goalY = QInputDialog::getInt(
+        this,
+        QStringLiteral("GO_A_TO_B target"),
+        QStringLiteral("Goal Y (logical coordinate, 0 = south):"),
+        0,
+        0,
+        maxGoalY,
+        1,
+        &ok);
+    if (!ok) {
+        return;
+    }
+
+    updateSensors();
+    uint8_t initialX = 0;
+    uint8_t initialY = 0;
+    uint8_t initialHeading = 0;
+    const bool poseOk = computeFirmwareInitialMazePose(&initialX, &initialY, &initialHeading);
+    firmwareBridge_.startSupervisorGoToB(poseOk ? initialX : 0xffU,
+                                         poseOk ? initialY : 0xffU,
+                                         poseOk ? initialHeading : 0xffU,
+                                         static_cast<uint8_t>(goalX),
+                                         static_cast<uint8_t>(goalY));
+    resetFirmwareMazeOverlayCache();
 
     if (firmwareBridge_.debug().enabled) {
         simulationRunning_ = true;

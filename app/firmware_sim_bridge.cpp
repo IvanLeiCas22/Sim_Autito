@@ -1134,6 +1134,114 @@ bool FirmwareSimBridge::startSupervisorV1(uint8_t x, uint8_t y, uint8_t heading)
     return startSupervisorV1Internal(true, x, y, heading);
 }
 
+bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
+                                             uint8_t y,
+                                             uint8_t heading,
+                                             uint8_t goal_x,
+                                             uint8_t goal_y)
+{
+    ensureFirmwareCoreInitialized();
+    advance_yaw_reference_valid_ = false;
+    advance_yaw_start_deg_ = 0.0;
+    smooth_yaw_reference_valid_ = false;
+    smooth_yaw_start_deg_ = 0.0;
+    pivot_yaw_reference_valid_ = false;
+    pivot_yaw_start_deg_ = 0.0;
+    debug_.advance_state = QStringLiteral("n/a");
+    debug_.smooth_state = QStringLiteral("n/a");
+    debug_.pivot_state = QStringLiteral("n/a");
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    App_Nav_StopAdvanceAction();
+    App_Nav_StopSmoothAction();
+    App_Nav_StopPivotAction();
+#endif
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (x >= MAZE_WIDTH || y >= MAZE_HEIGHT || heading > static_cast<uint8_t>(HEADING_WEST)) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        updateSupervisorDebug();
+        debug_.fw_maze_map_valid = false;
+        debug_.fw_maze_cells = FirmwareMazeCells{};
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("GO_A_TO_B initial pose invalid");
+        return false;
+    }
+
+    if (!App_NavSupervisor_ResetWithInitialPose(x, y, static_cast<HeadingTypeDef>(heading))) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        updateSupervisorDebug();
+        debug_.fw_maze_map_valid = false;
+        debug_.fw_maze_cells = FirmwareMazeCells{};
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("GO_A_TO_B initial pose reset failed");
+        return false;
+    }
+
+    if (!App_NavSupervisor_SetGoalCell(goal_x, goal_y)) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        updateSupervisorDebug();
+        updateMazeDebug();
+        updateFirmwareMazeMapDebug();
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("GO_A_TO_B target invalid");
+        return false;
+    }
+
+    if (!App_NavSupervisor_SetMission(APP_NAV_SUPERVISOR_MISSION_GO_A_TO_B)) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        updateSupervisorDebug();
+        updateMazeDebug();
+        updateFirmwareMazeMapDebug();
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("GO_A_TO_B mission setup failed");
+        return false;
+    }
+
+    const bool started = App_NavSupervisor_Start();
+    enabled_ = started;
+    control_mode_ = started ? ControlMode::SupervisorV1 : ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = controlModeText(control_mode_);
+    updateSupervisorDebug();
+    updateMazeDebug();
+    updateFirmwareMazeMapDebug();
+    debug_.state = started ? QStringLiteral("FW: GO_A_TO_B") : QStringLiteral("FW: idle");
+    debug_.reason = started
+        ? QStringLiteral("GO_A_TO_B started")
+        : QStringLiteral("GO_A_TO_B start failed");
+    return started;
+#else
+    Q_UNUSED(x);
+    Q_UNUSED(y);
+    Q_UNUSED(heading);
+    Q_UNUSED(goal_x);
+    Q_UNUSED(goal_y);
+    enabled_ = false;
+    control_mode_ = ControlMode::TelemetryOnly;
+    debug_.enabled = enabled_;
+    debug_.control_mode = QStringLiteral("TelemetryOnly");
+    debug_.supervisor_state = QStringLiteral("n/a");
+    debug_.supervisor_action = QStringLiteral("n/a");
+    debug_.supervisor_result = 0;
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("GO_A_TO_B unsupported without app_nav_supervisor");
+    return false;
+#endif
+}
+
 bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
                                                   uint8_t x,
                                                   uint8_t y,

@@ -161,6 +161,11 @@ public:
     bool resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uint8_t heading);
     bool startSupervisorV1();
     bool startSupervisorV1(uint8_t x, uint8_t y, uint8_t heading);
+    bool startSupervisorGoToB(uint8_t x,
+                              uint8_t y,
+                              uint8_t heading,
+                              uint8_t goal_x,
+                              uint8_t goal_y);
     void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);

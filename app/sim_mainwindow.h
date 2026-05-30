@@ -70,6 +70,7 @@ private:
     void startPivotRight90Control();
     void startPivot180Control();
     void startSupervisorV1Control();
+    void startGoToBControl();
     void stopFirmwareControl();
     void tuneFirmwareConfig();
     void simulationStep();
