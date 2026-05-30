@@ -46,6 +46,8 @@ call :copy_if_exists "Core\Src\app_find_cells_policy.c"       "app_find_cells_po
 call :copy_if_exists "Core\Inc\app_find_cells_policy.h"       "app_find_cells_policy.h"
 call :copy_if_exists "Core\Src\app_go_to_b_policy.c"       "app_go_to_b_policy.c"
 call :copy_if_exists "Core\Inc\app_go_to_b_policy.h"       "app_go_to_b_policy.h"
+call :copy_if_exists "Core\Src\app_route_planner.c"       "app_route_planner.c"
+call :copy_if_exists "Core\Inc\app_route_planner.h"       "app_route_planner.h"
 
 echo.
 echo Done. Review git diff before committing.

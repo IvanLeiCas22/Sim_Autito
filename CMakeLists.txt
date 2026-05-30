@@ -32,6 +32,7 @@ if(EXISTS "${SIM_AUTITO_FIRMWARE_CORE_APP_NAV}")
         firmware_core/app_maze.c
         firmware_core/app_find_cells_policy.c
 	firmware_core/app_go_to_b_policy.c
+	firmware_core/app_route_planner.c
     )
 
     foreach(optional_firmware_source IN LISTS SIM_AUTITO_FIRMWARE_CORE_OPTIONAL_SOURCES)
