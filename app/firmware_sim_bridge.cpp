@@ -18,7 +18,6 @@
 extern "C" {
 #include "app_nav_types.h"
 #include "app_nav_config.h"
-#include "app_nav_debug.h"
 #include "app_nav.h"
 #include "app_maze.h"
 #if SIM_AUTITO_HAS_NAV_SUPERVISOR
@@ -240,6 +239,40 @@ QString recommendedActionText(AppNavRecommendedAction action)
     }
 
     return QStringLiteral("UNKNOWN");
+}
+
+struct LocalDecisionTelemetry
+{
+    uint8_t available_options_mask = 0U;
+    uint8_t valid_option_count = 0U;
+};
+
+LocalDecisionTelemetry localDecisionTelemetryFromPerception(const AppNavPerception &perception)
+{
+    constexpr uint8_t kDecisionBack = 0U;
+    constexpr uint8_t kDecisionFront = 1U;
+    constexpr uint8_t kDecisionRight = 2U;
+    constexpr uint8_t kDecisionLeft = 3U;
+
+    LocalDecisionTelemetry telemetry;
+    telemetry.available_options_mask = static_cast<uint8_t>(1U << kDecisionBack);
+
+    if (perception.wall_front == 0U) {
+        telemetry.available_options_mask |= static_cast<uint8_t>(1U << kDecisionFront);
+        telemetry.valid_option_count++;
+    }
+
+    if (perception.wall_right == 0U) {
+        telemetry.available_options_mask |= static_cast<uint8_t>(1U << kDecisionRight);
+        telemetry.valid_option_count++;
+    }
+
+    if (perception.wall_left == 0U) {
+        telemetry.available_options_mask |= static_cast<uint8_t>(1U << kDecisionLeft);
+        telemetry.valid_option_count++;
+    }
+
+    return telemetry;
 }
 
 QString advanceActionStateText(AppNavAdvanceActionState state)
@@ -1367,13 +1400,17 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     }
 
     const AppNavInput input = buildAppNavInput(firmware_snapshot);
-    AppNavOutput output = {};
-
-    App_Nav_Tick(&input, &output);
+    AppNavPerception perception = {};
+    const bool perception_ok = App_Nav_EvaluatePerception(&input, &perception);
 
     AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
-    if (!isSupervisorControlMode(control_mode_)) {
+    if (perception_ok && !isSupervisorControlMode(control_mode_)) {
         App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
+    }
+
+    LocalDecisionTelemetry decision_telemetry;
+    if (perception_ok) {
+        decision_telemetry = localDecisionTelemetryFromPerception(perception);
     }
 
     bool straight_yaw_hold_ok = true;
@@ -1484,15 +1521,11 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
         }
     }
 
-    AppNavDebug firmware_debug = {};
-    App_Nav_GetDebug(&firmware_debug);
-
-    debug_.state = QStringLiteral("FW: mode=%1 state=%2")
-        .arg(static_cast<int>(firmware_debug.mode))
-        .arg(static_cast<int>(firmware_debug.state));
-    debug_.reason = QStringLiteral("last_transition_reason=%1 transition_sequence=%2")
-        .arg(static_cast<int>(firmware_debug.last_transition_reason))
-        .arg(static_cast<int>(firmware_debug.transition_sequence));
+    debug_.state = QStringLiteral("FW: mode=%1")
+        .arg(controlModeText(control_mode_));
+    debug_.reason = perception_ok
+        ? QStringLiteral("perception=ok")
+        : QStringLiteral("perception=error");
     if (control_mode_ == ControlMode::StraightYawHold && !straight_yaw_hold_ok) {
         debug_.reason += QStringLiteral(" straight_yaw_hold_pwm=false");
     }
@@ -1542,29 +1575,24 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.sim_config_right_base = sim_config_right_base_;
     debug_.recommended_action = static_cast<int>(recommended_action);
     debug_.recommended_action_text = recommendedActionText(recommended_action);
-    debug_.available_options_mask = firmware_debug.available_options_mask;
-    debug_.valid_option_count = firmware_debug.valid_option_count;
+    debug_.available_options_mask = decision_telemetry.available_options_mask;
+    debug_.valid_option_count = decision_telemetry.valid_option_count;
     debug_.decision_random_value = kDecisionRandomValue;
-    if (!isSupervisorControlMode(control_mode_)
-        && static_cast<int>(firmware_debug.last_recommended_action) != debug_.recommended_action) {
-        debug_.reason += QStringLiteral(" last_recommended_action=%1")
-            .arg(static_cast<int>(firmware_debug.last_recommended_action));
-    }
-    debug_.floor_front_black = firmware_debug.floor_front_black != 0U;
-    debug_.floor_rear_black = firmware_debug.floor_rear_black != 0U;
-    debug_.wall_front = firmware_debug.wall_front != 0U;
-    debug_.wall_left = firmware_debug.wall_left != 0U;
-    debug_.wall_right = firmware_debug.wall_right != 0U;
-    debug_.wall_diag_left = firmware_debug.wall_diag_left != 0U;
-    debug_.wall_diag_right = firmware_debug.wall_diag_right != 0U;
-    debug_.dist_front_left_mm = firmware_debug.dist_front_left_mm;
-    debug_.dist_front_right_mm = firmware_debug.dist_front_right_mm;
-    debug_.dist_left_lat_mm = firmware_debug.dist_left_lat_mm;
-    debug_.dist_right_lat_mm = firmware_debug.dist_right_lat_mm;
-    debug_.dist_diagonal_left_mm = firmware_debug.dist_diagonal_left_mm;
-    debug_.dist_diagonal_right_mm = firmware_debug.dist_diagonal_right_mm;
-    debug_.adc_floor_front = firmware_debug.floor_front_adc;
-    debug_.adc_floor_rear = firmware_debug.floor_rear_adc;
+    debug_.floor_front_black = perception.floor_front_black != 0U;
+    debug_.floor_rear_black = perception.floor_rear_black != 0U;
+    debug_.wall_front = perception.wall_front != 0U;
+    debug_.wall_left = perception.wall_left != 0U;
+    debug_.wall_right = perception.wall_right != 0U;
+    debug_.wall_diag_left = perception.wall_diag_left != 0U;
+    debug_.wall_diag_right = perception.wall_diag_right != 0U;
+    debug_.dist_front_left_mm = perception.dist_front_left_mm;
+    debug_.dist_front_right_mm = perception.dist_front_right_mm;
+    debug_.dist_left_lat_mm = perception.dist_left_lat_mm;
+    debug_.dist_right_lat_mm = perception.dist_right_lat_mm;
+    debug_.dist_diagonal_left_mm = perception.dist_diagonal_left_mm;
+    debug_.dist_diagonal_right_mm = perception.dist_diagonal_right_mm;
+    debug_.adc_floor_front = perception.floor_front_adc;
+    debug_.adc_floor_rear = perception.floor_rear_adc;
     updateMazeDebug();
     updateFirmwareMazeMapDebug();
 #else

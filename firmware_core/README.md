@@ -19,7 +19,6 @@ app_nav.c
 app_nav.h
 app_nav_types.h
 app_nav_config.h
-app_nav_debug.h
 
 app_nav_supervisor.c
 app_nav_supervisor.h
