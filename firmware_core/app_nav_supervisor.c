@@ -1,6 +1,7 @@
 #include "app_nav_supervisor.h"
 
 #include "app_find_cells_policy.h"
+#include "app_go_to_b_policy.h"
 #include "app_maze.h"
 #include "app_nav.h"
 
@@ -9,14 +10,14 @@
 /*
  * Portable mission supervisor.
  *
- * This module owns high-level navigation sequencing for FIND_CELLS:
+ * This module owns high-level navigation sequencing for FIND_CELLS and
+ * GO_A_TO_B:
  * - maps the current logical cell from relative wall perception;
- * - asks app_find_cells_policy for the next exploration decision;
+ * - asks the active mission policy for the next decision;
  * - selects and sequences the required primitive action;
  * - updates the logical maze pose/cell after confirmed movement;
- * - detects and counts unique CELL_SPECIAL cells;
- * - finishes FIND_CELLS when the target number of special cells is reached;
- * - finishes FIND_CELLS as incomplete when no reachable frontier remains.
+ * - detects and counts unique CELL_SPECIAL cells during FIND_CELLS;
+ * - finishes missions with their public APP_NAV_SUPERVISOR_RESULT_* code.
  *
  * It does not implement low-level motor control. Motion primitives live in
  * app_nav.c and are driven through App_Nav_*Action APIs.
@@ -39,6 +40,9 @@ static uint8_t app_nav_supervisor_initial_x;
 static uint8_t app_nav_supervisor_initial_y;
 static HeadingTypeDef app_nav_supervisor_initial_heading;
 static uint8_t app_nav_supervisor_initial_pose_valid;
+static uint8_t app_nav_supervisor_goal_x;
+static uint8_t app_nav_supervisor_goal_y;
+static uint8_t app_nav_supervisor_goal_valid;
 static AppNavSupervisorMission app_nav_supervisor_mission =
     APP_NAV_SUPERVISOR_MISSION_FIND_CELLS;
 
@@ -77,6 +81,11 @@ static void App_NavSupervisor_SetDefaultInitialPose(void)
     app_nav_supervisor_initial_y = APP_MAZE_DEFAULT_START_Y;
     app_nav_supervisor_initial_heading = APP_MAZE_DEFAULT_START_HEADING;
     app_nav_supervisor_initial_pose_valid = 1U;
+}
+
+static bool App_NavSupervisor_IsValidCell(uint8_t x, uint8_t y)
+{
+    return ((x < MAZE_WIDTH) && (y < MAZE_HEIGHT));
 }
 
 static void App_NavSupervisor_ClearActionYawReference(void)
@@ -191,11 +200,11 @@ static AppNavSupervisorState App_NavSupervisor_SetError(uint8_t result)
 }
 
 /* -------------------------------------------------------------------------- */
-/* FIND_CELLS completion and special-cell detection                            */
+/* Mission completion and special-cell detection                               */
 /* -------------------------------------------------------------------------- */
 
-static AppNavSupervisorState App_NavSupervisor_FinishFindCellsWithResult(AppNavOutput *output,
-                                                                         uint8_t result)
+static AppNavSupervisorState App_NavSupervisor_FinishMissionWithResult(AppNavOutput *output,
+                                                                       uint8_t result)
 {
     App_NavSupervisor_ClearOutput(output);
     App_NavSupervisor_StopActions();
@@ -214,18 +223,13 @@ static AppNavSupervisorState App_NavSupervisor_FinishFindCellsWithResult(AppNavO
 
 static AppNavSupervisorState App_NavSupervisor_FinishFindCells(AppNavOutput *output)
 {
-    return App_NavSupervisor_FinishFindCellsWithResult(
+    return App_NavSupervisor_FinishMissionWithResult(
         output,
         APP_NAV_SUPERVISOR_RESULT_FIND_CELLS_COMPLETE);
 }
 
 static bool App_NavSupervisor_CheckSpecialAtConfirmedCellEntry(const AppNavInput *input)
 {
-    if (app_nav_supervisor_mission != APP_NAV_SUPERVISOR_MISSION_FIND_CELLS)
-    {
-        return false;
-    }
-
     if (input == NULL)
     {
         return false;
@@ -239,12 +243,20 @@ static bool App_NavSupervisor_CheckSpecialAtConfirmedCellEntry(const AppNavInput
 
     if (App_Maze_MarkCurrentCellSpecial())
     {
-        if (app_nav_supervisor_special_found_count < 255U)
-        {
-            app_nav_supervisor_special_found_count++;
-        }
-
         App_NavSupervisor_UpdateMazeDebug();
+
+        if (app_nav_supervisor_mission == APP_NAV_SUPERVISOR_MISSION_FIND_CELLS)
+        {
+            if (app_nav_supervisor_special_found_count < 255U)
+            {
+                app_nav_supervisor_special_found_count++;
+            }
+        }
+    }
+
+    if (app_nav_supervisor_mission != APP_NAV_SUPERVISOR_MISSION_FIND_CELLS)
+    {
+        return false;
     }
 
     return (app_nav_supervisor_special_found_count >= APP_NAV_SUPERVISOR_SPECIAL_TARGET_COUNT);
@@ -472,13 +484,11 @@ static bool App_NavSupervisor_StartRecommendedAction(AppNavRecommendedAction act
 /* Supervisor state handlers                                                   */
 /* -------------------------------------------------------------------------- */
 
-static AppNavSupervisorState App_NavSupervisor_HandleDecide(const AppNavInput *input,
-                                                            AppNavOutput *output)
+static AppNavSupervisorState App_NavSupervisor_HandleFindCellsDecide(const AppNavInput *input,
+                                                                     AppNavOutput *output)
 {
     AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
     AppFindCellsDecision find_cells_decision = {0};
-
-    App_NavSupervisor_MapCurrentCellFromInput(input);
 
     /*
      * Production FIND_CELLS policy:
@@ -497,7 +507,7 @@ static AppNavSupervisorState App_NavSupervisor_HandleDecide(const AppNavInput *i
     }
     else if (find_cells_decision.reason == APP_FIND_CELLS_DECISION_REASON_NO_FRONTIER)
     {
-        return App_NavSupervisor_FinishFindCellsWithResult(
+        return App_NavSupervisor_FinishMissionWithResult(
             output,
             APP_NAV_SUPERVISOR_RESULT_FIND_CELLS_INCOMPLETE_NO_FRONTIER);
     }
@@ -524,6 +534,74 @@ static AppNavSupervisorState App_NavSupervisor_HandleDecide(const AppNavInput *i
     }
 
     return app_nav_supervisor_debug.state;
+}
+
+static AppNavSupervisorState App_NavSupervisor_HandleGoToBDecide(const AppNavInput *input,
+                                                                 AppNavOutput *output)
+{
+    AppGoToBDecision go_to_b_decision = {0};
+
+    if (!App_GoToBPolicy_Evaluate(app_nav_supervisor_goal_x,
+                                  app_nav_supervisor_goal_y,
+                                  &go_to_b_decision))
+    {
+        if (go_to_b_decision.reason == APP_GO_TO_B_DECISION_REASON_NO_PATH)
+        {
+            return App_NavSupervisor_FinishMissionWithResult(
+                output,
+                APP_NAV_SUPERVISOR_RESULT_GO_TO_B_NO_PATH);
+        }
+
+        if (go_to_b_decision.reason == APP_GO_TO_B_DECISION_REASON_BACKTRACK_REQUIRED)
+        {
+            if (!App_NavSupervisor_StartRouteBacktrackingPivotPrep(input))
+            {
+                return App_NavSupervisor_SetError(APP_NAV_SUPERVISOR_RESULT_START_FAILED);
+            }
+
+            return app_nav_supervisor_debug.state;
+        }
+
+        return App_NavSupervisor_SetError(APP_NAV_SUPERVISOR_RESULT_UNSUPPORTED_ACTION);
+    }
+
+    if (go_to_b_decision.reason == APP_GO_TO_B_DECISION_REASON_GOAL_REACHED)
+    {
+        return App_NavSupervisor_FinishMissionWithResult(
+            output,
+            APP_NAV_SUPERVISOR_RESULT_GO_TO_B_COMPLETE);
+    }
+
+    if ((go_to_b_decision.reason != APP_GO_TO_B_DECISION_REASON_ROUTE_STEP) ||
+        (go_to_b_decision.action == APP_NAV_ACTION_NONE))
+    {
+        return App_NavSupervisor_SetError(APP_NAV_SUPERVISOR_RESULT_UNSUPPORTED_ACTION);
+    }
+
+    if (!App_NavSupervisor_StartRecommendedAction(go_to_b_decision.action, input))
+    {
+        return App_NavSupervisor_SetError(APP_NAV_SUPERVISOR_RESULT_START_FAILED);
+    }
+
+    return app_nav_supervisor_debug.state;
+}
+
+static AppNavSupervisorState App_NavSupervisor_HandleDecide(const AppNavInput *input,
+                                                            AppNavOutput *output)
+{
+    App_NavSupervisor_MapCurrentCellFromInput(input);
+
+    switch (app_nav_supervisor_mission)
+    {
+    case APP_NAV_SUPERVISOR_MISSION_FIND_CELLS:
+        return App_NavSupervisor_HandleFindCellsDecide(input, output);
+
+    case APP_NAV_SUPERVISOR_MISSION_GO_A_TO_B:
+        return App_NavSupervisor_HandleGoToBDecide(input, output);
+
+    default:
+        return App_NavSupervisor_SetError(APP_NAV_SUPERVISOR_RESULT_UNSUPPORTED_ACTION);
+    }
 }
 
 static AppNavSupervisorState App_NavSupervisor_HandleStartInitialAdvance(const AppNavInput *input,
@@ -829,6 +907,9 @@ static AppNavSupervisorState App_NavSupervisor_HandlePivot(const AppNavInput *in
 void App_NavSupervisor_Init(void)
 {
     app_nav_supervisor_mission = APP_NAV_SUPERVISOR_MISSION_FIND_CELLS;
+    app_nav_supervisor_goal_x = 0U;
+    app_nav_supervisor_goal_y = 0U;
+    app_nav_supervisor_goal_valid = 0U;
     App_NavSupervisor_SetDefaultInitialPose();
     App_NavSupervisor_Reset();
 }
@@ -897,6 +978,36 @@ bool App_NavSupervisor_ResetWithInitialPose(uint8_t x,
     return true;
 }
 
+bool App_NavSupervisor_SetGoalCell(uint8_t x, uint8_t y)
+{
+    if (!App_NavSupervisor_IsValidCell(x, y))
+    {
+        app_nav_supervisor_goal_x = 0U;
+        app_nav_supervisor_goal_y = 0U;
+        app_nav_supervisor_goal_valid = 0U;
+        return false;
+    }
+
+    app_nav_supervisor_goal_x = x;
+    app_nav_supervisor_goal_y = y;
+    app_nav_supervisor_goal_valid = 1U;
+    return true;
+}
+
+bool App_NavSupervisor_GetGoalCell(uint8_t *x, uint8_t *y, bool *valid)
+{
+    if ((x == NULL) || (y == NULL) || (valid == NULL))
+    {
+        return false;
+    }
+
+    *x = app_nav_supervisor_goal_x;
+    *y = app_nav_supervisor_goal_y;
+    *valid = (app_nav_supervisor_goal_valid != 0U);
+
+    return true;
+}
+
 bool App_NavSupervisor_SetMission(AppNavSupervisorMission mission)
 {
     switch (mission)
@@ -918,11 +1029,39 @@ AppNavSupervisorMission App_NavSupervisor_GetMission(void)
 
 bool App_NavSupervisor_Start(void)
 {
+    uint8_t current_x = 0U;
+    uint8_t current_y = 0U;
+    HeadingTypeDef current_heading = HEADING_NORTH;
+
     App_NavSupervisor_StopActions();
     App_NavSupervisor_ClearActionYawReference();
     App_NavSupervisor_ClearPivotExitLatch();
 
-    if (app_nav_supervisor_mission != APP_NAV_SUPERVISOR_MISSION_FIND_CELLS)
+    if (app_nav_supervisor_mission == APP_NAV_SUPERVISOR_MISSION_GO_A_TO_B)
+    {
+        if (app_nav_supervisor_goal_valid == 0U)
+        {
+            app_nav_supervisor_debug.active = 0U;
+            App_NavSupervisor_SetState(APP_NAV_SUPERVISOR_IDLE,
+                                       APP_NAV_SUPERVISOR_ACTION_NONE,
+                                       APP_NAV_SUPERVISOR_RESULT_GO_TO_B_INVALID_TARGET);
+            App_NavSupervisor_UpdateMazeDebug();
+            return false;
+        }
+
+        if (App_Maze_GetRobotPose(&current_x, &current_y, &current_heading) &&
+            (current_x == app_nav_supervisor_goal_x) &&
+            (current_y == app_nav_supervisor_goal_y))
+        {
+            app_nav_supervisor_debug.active = 0U;
+            App_NavSupervisor_SetState(APP_NAV_SUPERVISOR_IDLE,
+                                       APP_NAV_SUPERVISOR_ACTION_NONE,
+                                       APP_NAV_SUPERVISOR_RESULT_GO_TO_B_COMPLETE);
+            App_NavSupervisor_UpdateMazeDebug();
+            return true;
+        }
+    }
+    else if (app_nav_supervisor_mission != APP_NAV_SUPERVISOR_MISSION_FIND_CELLS)
     {
         app_nav_supervisor_debug.active = 0U;
         App_NavSupervisor_SetState(APP_NAV_SUPERVISOR_ERROR,
