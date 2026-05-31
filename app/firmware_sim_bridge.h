@@ -139,11 +139,6 @@ public:
         int32_t pivot_turn_pid_kd_q16 = 0;
         int32_t pivot_turn_pid_output_limit_pwm = 0;
 
-        int32_t braking_pid_kp_q16 = 0;
-        int32_t braking_pid_ki_q16 = 0;
-        int32_t braking_pid_kd_q16 = 0;
-        int32_t braking_pid_output_limit_pwm = 0;
-        int16_t braking_min_speed_pwm = 0;
     };
 
     FirmwareSimBridge();

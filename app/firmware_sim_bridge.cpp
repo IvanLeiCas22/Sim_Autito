@@ -312,8 +312,6 @@ QString smoothActionStateText(AppNavSmoothActionState state)
         return QStringLiteral("done_wall");
     case APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE:
         return QStringLiteral("done_post_yaw_rear_tape");
-    case APP_NAV_SMOOTH_ACTION_FRONT_WALL_SAFETY:
-        return QStringLiteral("front_wall_safety");
     case APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT:
         return QStringLiteral("post_yaw_timeout");
     case APP_NAV_SMOOTH_ACTION_ERROR:
@@ -449,12 +447,6 @@ FirmwareSimBridge::FirmwareConfig toBridgeConfig(const AppNavConfig &config)
     out.pivot_turn_pid_ki_q16 = config.pivot_turn_pid_ki_q16;
     out.pivot_turn_pid_kd_q16 = config.pivot_turn_pid_kd_q16;
     out.pivot_turn_pid_output_limit_pwm = config.pivot_turn_pid_output_limit_pwm;
-
-    out.braking_pid_kp_q16 = config.braking_pid_kp_q16;
-    out.braking_pid_ki_q16 = config.braking_pid_ki_q16;
-    out.braking_pid_kd_q16 = config.braking_pid_kd_q16;
-    out.braking_pid_output_limit_pwm = config.braking_pid_output_limit_pwm;
-    out.braking_min_speed_pwm = config.braking_min_speed_pwm;
     return out;
 }
 
@@ -492,12 +484,6 @@ void copyEditableConfigToFirmware(const FirmwareSimBridge::FirmwareConfig &input
     config->pivot_turn_pid_ki_q16 = input.pivot_turn_pid_ki_q16;
     config->pivot_turn_pid_kd_q16 = input.pivot_turn_pid_kd_q16;
     config->pivot_turn_pid_output_limit_pwm = input.pivot_turn_pid_output_limit_pwm;
-
-    config->braking_pid_kp_q16 = input.braking_pid_kp_q16;
-    config->braking_pid_ki_q16 = input.braking_pid_ki_q16;
-    config->braking_pid_kd_q16 = input.braking_pid_kd_q16;
-    config->braking_pid_output_limit_pwm = input.braking_pid_output_limit_pwm;
-    config->braking_min_speed_pwm = input.braking_min_speed_pwm;
 }
 
 AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
@@ -1487,7 +1473,6 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
                 smooth_action_state == APP_NAV_SMOOTH_ACTION_DONE_REAR_TAPE
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_DONE_WALL
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE
-                || smooth_action_state == APP_NAV_SMOOTH_ACTION_FRONT_WALL_SAFETY
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_ERROR;
             if (smoothTerminalState) {

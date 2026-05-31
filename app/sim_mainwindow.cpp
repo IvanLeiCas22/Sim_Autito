@@ -736,18 +736,6 @@ void MainWindow::tuneFirmwareConfig()
                                       currentConfig.pivot_turn_pid_kd_q16,
                                       currentConfig.pivot_turn_pid_output_limit_pwm);
 
-    QFormLayout *brakingLayout = makeGroup(QStringLiteral("Braking"));
-    PidEditors brakingPid = addPidGroup(brakingLayout,
-                                        currentConfig.braking_pid_kp_q16,
-                                        currentConfig.braking_pid_ki_q16,
-                                        currentConfig.braking_pid_kd_q16,
-                                        currentConfig.braking_pid_output_limit_pwm);
-    QSpinBox *brakingMinSpeed = addSpin(brakingLayout,
-                                        QStringLiteral("braking min speed pwm"),
-                                        -32768,
-                                        32767,
-                                        currentConfig.braking_min_speed_pwm);
-
     QFormLayout *baseLayout = makeGroup(QStringLiteral("Bases PWM"));
     QSpinBox *leftBase = addSpin(baseLayout,
                                  QStringLiteral("left motor base speed"),
@@ -841,12 +829,6 @@ void MainWindow::tuneFirmwareConfig()
         config.pivot_turn_pid_kd_q16 = hundredthsToQ16(pivotPid.kd->value());
         config.pivot_turn_pid_output_limit_pwm = pivotPid.limit->value();
 
-        config.braking_pid_kp_q16 = hundredthsToQ16(brakingPid.kp->value());
-        config.braking_pid_ki_q16 = hundredthsToQ16(brakingPid.ki->value());
-        config.braking_pid_kd_q16 = hundredthsToQ16(brakingPid.kd->value());
-        config.braking_pid_output_limit_pwm = brakingPid.limit->value();
-        config.braking_min_speed_pwm = static_cast<int16_t>(brakingMinSpeed->value());
-
         config.left_motor_base_speed = static_cast<uint16_t>(leftBase->value());
         config.right_motor_base_speed = static_cast<uint16_t>(rightBase->value());
         config.faster_motor_smooth_turn_speed = static_cast<uint16_t>(fasterSmooth->value());
@@ -878,12 +860,6 @@ void MainWindow::tuneFirmwareConfig()
         pivotPid.ki->setValue(q16ToHundredths(config.pivot_turn_pid_ki_q16));
         pivotPid.kd->setValue(q16ToHundredths(config.pivot_turn_pid_kd_q16));
         pivotPid.limit->setValue(config.pivot_turn_pid_output_limit_pwm);
-
-        brakingPid.kp->setValue(q16ToHundredths(config.braking_pid_kp_q16));
-        brakingPid.ki->setValue(q16ToHundredths(config.braking_pid_ki_q16));
-        brakingPid.kd->setValue(q16ToHundredths(config.braking_pid_kd_q16));
-        brakingPid.limit->setValue(config.braking_pid_output_limit_pwm);
-        brakingMinSpeed->setValue(config.braking_min_speed_pwm);
 
         leftBase->setValue(config.left_motor_base_speed);
         rightBase->setValue(config.right_motor_base_speed);
