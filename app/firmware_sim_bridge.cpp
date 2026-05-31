@@ -1567,14 +1567,14 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     debug_.wall_right = perception.wall_right != 0U;
     debug_.wall_diag_left = perception.wall_diag_left != 0U;
     debug_.wall_diag_right = perception.wall_diag_right != 0U;
-    debug_.dist_front_left_mm = perception.dist_front_left_mm;
-    debug_.dist_front_right_mm = perception.dist_front_right_mm;
-    debug_.dist_left_lat_mm = perception.dist_left_lat_mm;
-    debug_.dist_right_lat_mm = perception.dist_right_lat_mm;
-    debug_.dist_diagonal_left_mm = perception.dist_diagonal_left_mm;
-    debug_.dist_diagonal_right_mm = perception.dist_diagonal_right_mm;
-    debug_.adc_floor_front = perception.floor_front_adc;
-    debug_.adc_floor_rear = perception.floor_rear_adc;
+    debug_.dist_front_left_mm = input.dist_front_left_mm;
+    debug_.dist_front_right_mm = input.dist_front_right_mm;
+    debug_.dist_left_lat_mm = input.dist_left_lat_mm;
+    debug_.dist_right_lat_mm = input.dist_right_lat_mm;
+    debug_.dist_diagonal_left_mm = input.dist_diagonal_left_mm;
+    debug_.dist_diagonal_right_mm = input.dist_diagonal_right_mm;
+    debug_.adc_floor_front = input.adc_filtered[kAdcFloorFrontCh];
+    debug_.adc_floor_rear = input.adc_filtered[kAdcFloorRearCh];
     updateMazeDebug();
     updateFirmwareMazeMapDebug();
 #else
