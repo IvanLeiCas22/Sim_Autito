@@ -490,9 +490,6 @@ AppNavInput buildAppNavInput(const FirmwareSimBridge::SensorSnapshot &snapshot)
 {
     AppNavInput input = {};
     input.dt_ms = snapshot.dt_ms;
-    input.floor_front_black = snapshot.floor_front_black ? 1U : 0U;
-    input.floor_rear_black = snapshot.floor_rear_black ? 1U : 0U;
-
     input.dist_front_left_mm = toFirmwareDistanceMm(snapshot.ir_distance_mm[0]);
     input.dist_front_right_mm = toFirmwareDistanceMm(snapshot.ir_distance_mm[1]);
     input.dist_left_lat_mm = toFirmwareDistanceMm(snapshot.ir_distance_mm[2]);
@@ -1391,7 +1388,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
     AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
     if (perception_ok && !isSupervisorControlMode(control_mode_)) {
-        App_Nav_RecommendAction(kDecisionRandomValue, &recommended_action);
+        App_Nav_RecommendAction(&perception, kDecisionRandomValue, &recommended_action);
     }
 
     LocalDecisionTelemetry decision_telemetry;
@@ -1422,7 +1419,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     else if (control_mode_ == ControlMode::SupervisorV1) {
         AppNavOutput supervisor_output = {};
         supervisor_ticked = true;
-        supervisor_state = App_NavSupervisor_Tick(&input, &supervisor_output);
+        supervisor_state = App_NavSupervisor_Tick(&input, &perception, &supervisor_output);
         if (supervisorStateAllowsMotorOutput(supervisor_state)) {
             command.left_pwm = supervisor_output.left_motor_pwm;
             command.right_pwm = supervisor_output.right_motor_pwm;
@@ -1435,7 +1432,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     else if (control_mode_ == ControlMode::WallFollowAdvance) {
         AppNavOutput primitive_output = {};
         advance_action_ticked = true;
-        advance_action_state = App_Nav_TickAdvanceAction(&input, &primitive_output);
+        advance_action_state = App_Nav_TickAdvanceAction(&input, &perception, &primitive_output);
         if (advance_action_state == APP_NAV_ADVANCE_ACTION_WAIT_LEAVE_REAR_TAPE
             || advance_action_state == APP_NAV_ADVANCE_ACTION_RUNNING_WALL_FOLLOW
             || advance_action_state == APP_NAV_ADVANCE_ACTION_RUNNING_YAW_HOLD) {
@@ -1460,7 +1457,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
                || control_mode_ == ControlMode::SmoothTurnRight) {
         AppNavOutput primitive_output = {};
         smooth_action_ticked = true;
-        smooth_action_state = App_Nav_TickSmoothAction(&input, &primitive_output);
+        smooth_action_state = App_Nav_TickSmoothAction(&input, &perception, &primitive_output);
         if (smooth_action_state == APP_NAV_SMOOTH_ACTION_TURNING
             || smooth_action_state == APP_NAV_SMOOTH_ACTION_POST_YAW_SEEK_REAR_TAPE) {
             command.left_pwm = primitive_output.left_motor_pwm;
@@ -1485,7 +1482,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     } else if (isPivotControlMode(control_mode_)) {
         AppNavOutput primitive_output = {};
         pivot_action_ticked = true;
-        pivot_action_state = App_Nav_TickPivotAction(&input, &primitive_output);
+        pivot_action_state = App_Nav_TickPivotAction(&input, &perception, &primitive_output);
         if (pivot_action_state == APP_NAV_PIVOT_ACTION_RUNNING) {
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
