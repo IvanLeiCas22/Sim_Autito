@@ -308,8 +308,6 @@ QString smoothActionStateText(AppNavSmoothActionState state)
         return QStringLiteral("post_yaw");
     case APP_NAV_SMOOTH_ACTION_DONE_REAR_TAPE:
         return QStringLiteral("done_rear_tape");
-    case APP_NAV_SMOOTH_ACTION_DONE_WALL:
-        return QStringLiteral("done_wall");
     case APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE:
         return QStringLiteral("done_post_yaw_rear_tape");
     case APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT:
@@ -1468,7 +1466,6 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
             const bool smoothTerminalState =
                 smooth_action_state == APP_NAV_SMOOTH_ACTION_DONE_REAR_TAPE
-                || smooth_action_state == APP_NAV_SMOOTH_ACTION_DONE_WALL
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT
                 || smooth_action_state == APP_NAV_SMOOTH_ACTION_ERROR;
