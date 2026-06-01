@@ -228,10 +228,8 @@ QString recommendedActionText(AppNavRecommendedAction action)
         return QStringLiteral("NONE");
     case APP_NAV_ACTION_GO_BACK:
         return QStringLiteral("GO_BACK");
-    case APP_NAV_ACTION_GO_FRONT_NAVIGATING:
-        return QStringLiteral("GO_FRONT_NAVIGATING");
-    case APP_NAV_ACTION_GO_FRONT_STRAIGHT:
-        return QStringLiteral("GO_FRONT_STRAIGHT");
+    case APP_NAV_ACTION_GO_FRONT:
+        return QStringLiteral("GO_FRONT");
     case APP_NAV_ACTION_SMOOTH_LEFT:
         return QStringLiteral("SMOOTH_LEFT");
     case APP_NAV_ACTION_SMOOTH_RIGHT:
