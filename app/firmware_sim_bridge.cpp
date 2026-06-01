@@ -833,16 +833,7 @@ void FirmwareSimBridge::startStraightYawHold(double current_yaw_deg)
         App_NavSupervisor_Stop();
     }
 #endif
-    straight_yaw_target_deg_ = current_yaw_deg;
-    const bool started = App_Nav_StartStraightDriveYawHold(toQ16Deg(straight_yaw_target_deg_));
-    enabled_ = started;
-    control_mode_ = started ? ControlMode::StraightYawHold : ControlMode::TelemetryOnly;
-    debug_.enabled = enabled_;
-    debug_.control_mode = controlModeText(control_mode_);
-    debug_.state = started ? QStringLiteral("FW: straight yaw-hold") : QStringLiteral("FW: idle");
-    debug_.reason = started
-        ? QStringLiteral("Straight yaw-hold primitive started")
-        : QStringLiteral("Straight yaw-hold primitive could not start");
+
 #else
     Q_UNUSED(current_yaw_deg);
     enabled_ = false;
@@ -1405,7 +1396,6 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 #endif
     if (control_mode_ == ControlMode::StraightYawHold) {
         AppNavOutput primitive_output = {};
-        straight_yaw_hold_ok = App_Nav_ComputeStraightDrivePwm(&input, &primitive_output);
         if (straight_yaw_hold_ok) {
             command.left_pwm = primitive_output.left_motor_pwm;
             command.right_pwm = primitive_output.right_motor_pwm;
