@@ -1386,7 +1386,7 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
 
     AppNavRecommendedAction recommended_action = APP_NAV_ACTION_NONE;
     if (perception_ok && !isSupervisorControlMode(control_mode_)) {
-        App_Nav_RecommendAction(&perception, kDecisionRandomValue, &recommended_action);
+        App_Nav_RecommendAction(&perception, &recommended_action);
     }
 
     LocalDecisionTelemetry decision_telemetry;
