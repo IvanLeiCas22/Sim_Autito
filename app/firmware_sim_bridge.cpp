@@ -865,16 +865,7 @@ void FirmwareSimBridge::startWallFollowAdvance()
         App_NavSupervisor_Stop();
     }
 #endif
-    const bool started = App_Nav_StartAdvanceAction(APP_NAV_ADVANCE_ACTION_WALL_FOLLOW_AUTO_YAW_HOLD);
-    enabled_ = started;
-    control_mode_ = started ? ControlMode::WallFollowAdvance : ControlMode::TelemetryOnly;
-    debug_.enabled = enabled_;
-    debug_.control_mode = controlModeText(control_mode_);
-    debug_.advance_state = started ? QStringLiteral("wait_leave_rear_tape") : QStringLiteral("error");
-    debug_.state = started ? QStringLiteral("FW: wall-follow advance") : QStringLiteral("FW: idle");
-    debug_.reason = started
-        ? QStringLiteral("Advance action started")
-        : QStringLiteral("Advance action could not start");
+
 #else
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
@@ -906,16 +897,7 @@ void FirmwareSimBridge::startSmoothTurnLeft()
         App_NavSupervisor_Stop();
     }
 #endif
-    const bool started = App_Nav_StartSmoothAction(APP_NAV_SMOOTH_ACTION_LEFT);
-    enabled_ = started;
-    control_mode_ = started ? ControlMode::SmoothTurnLeft : ControlMode::TelemetryOnly;
-    debug_.enabled = enabled_;
-    debug_.control_mode = controlModeText(control_mode_);
-    debug_.smooth_state = started ? QStringLiteral("turning") : QStringLiteral("error");
-    debug_.state = started ? QStringLiteral("FW: smooth turn left") : QStringLiteral("FW: idle");
-    debug_.reason = started
-        ? QStringLiteral("Smooth turn left action started")
-        : QStringLiteral("Smooth turn left action could not start");
+
 #else
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
@@ -947,16 +929,7 @@ void FirmwareSimBridge::startSmoothTurnRight()
         App_NavSupervisor_Stop();
     }
 #endif
-    const bool started = App_Nav_StartSmoothAction(APP_NAV_SMOOTH_ACTION_RIGHT);
-    enabled_ = started;
-    control_mode_ = started ? ControlMode::SmoothTurnRight : ControlMode::TelemetryOnly;
-    debug_.enabled = enabled_;
-    debug_.control_mode = controlModeText(control_mode_);
-    debug_.smooth_state = started ? QStringLiteral("turning") : QStringLiteral("error");
-    debug_.state = started ? QStringLiteral("FW: smooth turn right") : QStringLiteral("FW: idle");
-    debug_.reason = started
-        ? QStringLiteral("Smooth turn right action started")
-        : QStringLiteral("Smooth turn right action could not start");
+
 #else
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;

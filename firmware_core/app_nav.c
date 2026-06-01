@@ -80,6 +80,9 @@ static uint8_t app_nav_smooth_turn_active;
 static uint8_t app_nav_smooth_action_active;
 static uint8_t app_nav_smooth_was_rear_tape_detected;
 static uint8_t app_nav_pivot_turn_active;
+static AppNavPrimitiveTestType app_nav_primitive_test_type;
+static AppNavPrimitiveTestState app_nav_primitive_test_state;
+static uint8_t app_nav_primitive_test_action_started;
 
 static bool App_Nav_StartYawHoldAdvanceInternal(int32_t yaw_target_q16_deg,
                                                 uint8_t clear_smooth_action);
@@ -295,6 +298,13 @@ static void App_Nav_ClearSmoothActionState(void)
     app_nav_smooth_action_active = 0U;
     app_nav_smooth_was_rear_tape_detected = 0U;
     app_nav_smooth_post_yaw_ticks = 0U;
+}
+
+static void App_Nav_ClearPrimitiveTestState(void)
+{
+    app_nav_primitive_test_type = APP_NAV_PRIMITIVE_TEST_NONE;
+    app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_IDLE;
+    app_nav_primitive_test_action_started = 0U;
 }
 
 static void App_Nav_SetSmoothActionTerminal(AppNavSmoothActionState terminal_state)
@@ -544,6 +554,7 @@ void App_Nav_Init(const AppNavConfig *config)
     App_Nav_ClearCenterFrontTapeActionState();
     App_Nav_ClearSmoothActionState();
     App_Nav_ClearPivotActionState();
+    App_Nav_ClearPrimitiveTestState();
     App_Nav_ApplyAdvancePidConfig(1U);
     App_Nav_ApplySmoothTurnPidConfig(1U);
     App_Nav_ApplyPivotTurnPidConfig(1U);
@@ -585,6 +596,7 @@ void App_Nav_Reset(void)
     App_Nav_ClearApproachFrontWallActionState();
     App_Nav_ClearSmoothActionState();
     App_Nav_ClearPivotActionState();
+    App_Nav_ClearPrimitiveTestState();
     PID_Reset(&app_nav_advance_pid);
     PID_Reset(&app_nav_smooth_turn_pid);
     PID_Reset(&app_nav_pivot_turn_pid);
@@ -680,12 +692,12 @@ bool App_Nav_ComputeYawHoldAdvancePwm(const AppNavInput *input,
     int32_t right_pwm;
     int32_t left_pwm;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (output == NULL))
     {
         return false;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_straight_active == 0U)
     {
@@ -732,7 +744,7 @@ bool App_Nav_StartWallFollowAdvance(void)
     App_Nav_ClearPivotActionState();
 
     PID_Reset(&app_nav_advance_pid);
-    PID_Set_Setpoint(&app_nav_advance_pid, 0);
+    PID_Set_Setpoint_Fixed(&app_nav_advance_pid, 0);
 
     return true;
 }
@@ -777,12 +789,12 @@ bool App_Nav_ComputeSmoothTurnPwm(const AppNavInput *input,
     int16_t right_speed;
     int16_t left_speed;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (output == NULL))
     {
         return false;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_smooth_turn_active == 0U)
     {
@@ -826,12 +838,6 @@ void App_Nav_StopSmoothAction(void)
     App_Nav_ClearSmoothActionState();
     PID_Reset(&app_nav_smooth_turn_pid);
     PID_Reset(&app_nav_advance_pid);
-}
-
-bool App_Nav_StartSmoothAction(AppNavSmoothActionType action)
-{
-    return App_Nav_StartSmoothActionWithRearTapeProfile(action,
-                                                        APP_NAV_REAR_TAPE_PROFILE_NORMAL_CELL);
 }
 
 bool App_Nav_StartSmoothActionWithRearTapeProfile(AppNavSmoothActionType action,
@@ -888,13 +894,13 @@ AppNavSmoothActionState App_Nav_TickSmoothAction(const AppNavInput *input,
     int32_t yaw_completion_threshold;
     bool yaw_target_reached;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
         app_nav_smooth_action_state = APP_NAV_SMOOTH_ACTION_ERROR;
         return app_nav_smooth_action_state;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_smooth_action_state == APP_NAV_SMOOTH_ACTION_IDLE)
     {
@@ -1029,12 +1035,12 @@ bool App_Nav_ComputePivotTurnPwm(const AppNavInput *input,
     int32_t pid_output_fixed;
     int16_t correction_pwm;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (output == NULL))
     {
         return false;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_pivot_turn_active == 0U)
     {
@@ -1098,13 +1104,13 @@ AppNavPivotActionState App_Nav_TickPivotAction(const AppNavInput *input,
     int16_t base_target_dps;
     int16_t target_dps;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
         app_nav_pivot_action_state = APP_NAV_PIVOT_ACTION_ERROR;
         return app_nav_pivot_action_state;
     }
+
+    App_Nav_ClearOutput(output);
 
     (void)perception;
 
@@ -1187,12 +1193,12 @@ bool App_Nav_ComputeWallFollowPwm(const AppNavInput *input,
     int32_t right_pwm;
     int32_t left_pwm;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
         return false;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_wall_follow_active == 0U)
     {
@@ -1226,7 +1232,7 @@ bool App_Nav_ComputeWallFollowPwm(const AppNavInput *input,
         return false;
     }
 
-    PID_Set_Setpoint(&app_nav_advance_pid, 0);
+    PID_Set_Setpoint_Fixed(&app_nav_advance_pid, 0);
     pid_output_fixed = PID_Update(&app_nav_advance_pid, measured_diff, input->dt_ms);
     correction = App_Nav_LimitCorrectionToMotorBases(FIXED_TO_INT(pid_output_fixed),
                                                      right_base_pwm,
@@ -1343,14 +1349,128 @@ void App_Nav_StopAdvanceAction(void)
 }
 
 /* -------------------------------------------------------------------------- */
-/* AdvanceAction: drive until rear tape confirms next cell boundary             */
+/* Portable primitive-test runner                                              */
 /* -------------------------------------------------------------------------- */
 
-bool App_Nav_StartAdvanceAction(AppNavAdvanceActionMode mode)
+bool App_NavPrimitiveTest_Start(AppNavPrimitiveTestType type)
 {
-    return App_Nav_StartAdvanceActionWithRearTapeProfile(mode,
-                                                         APP_NAV_REAR_TAPE_PROFILE_NORMAL_CELL);
+    if (app_nav_primitive_test_state == APP_NAV_PRIMITIVE_TEST_RUNNING)
+    {
+        return false;
+    }
+
+    if ((type != APP_NAV_PRIMITIVE_TEST_SMOOTH_LEFT) &&
+        (type != APP_NAV_PRIMITIVE_TEST_SMOOTH_RIGHT))
+    {
+        app_nav_primitive_test_type = APP_NAV_PRIMITIVE_TEST_NONE;
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_REJECTED;
+        app_nav_primitive_test_action_started = 0U;
+        return false;
+    }
+
+    app_nav_primitive_test_type = type;
+    app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_RUNNING;
+    app_nav_primitive_test_action_started = 0U;
+
+    return true;
 }
+
+AppNavPrimitiveTestState App_NavPrimitiveTest_Tick(const AppNavInput *input,
+                                                   const AppNavPerception *perception,
+                                                   AppNavOutput *output)
+{
+    AppNavSmoothActionType smooth_action;
+    AppNavSmoothActionState smooth_state;
+
+    if ((input == NULL) || (perception == NULL) || (output == NULL))
+    {
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_ERROR;
+        app_nav_primitive_test_action_started = 0U;
+        return app_nav_primitive_test_state;
+    }
+
+    App_Nav_ClearOutput(output);
+
+    if (app_nav_primitive_test_state != APP_NAV_PRIMITIVE_TEST_RUNNING)
+    {
+        return app_nav_primitive_test_state;
+    }
+
+    if (app_nav_primitive_test_type == APP_NAV_PRIMITIVE_TEST_SMOOTH_LEFT)
+    {
+        smooth_action = APP_NAV_SMOOTH_ACTION_LEFT;
+    }
+    else if (app_nav_primitive_test_type == APP_NAV_PRIMITIVE_TEST_SMOOTH_RIGHT)
+    {
+        smooth_action = APP_NAV_SMOOTH_ACTION_RIGHT;
+    }
+    else
+    {
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_REJECTED;
+        app_nav_primitive_test_action_started = 0U;
+        return app_nav_primitive_test_state;
+    }
+
+    if (app_nav_primitive_test_action_started == 0U)
+    {
+        if (!App_Nav_StartSmoothActionWithRearTapeProfile(
+                smooth_action,
+                APP_NAV_REAR_TAPE_PROFILE_NORMAL_CELL))
+        {
+            app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_ERROR;
+            app_nav_primitive_test_action_started = 0U;
+            return app_nav_primitive_test_state;
+        }
+
+        app_nav_primitive_test_action_started = 1U;
+    }
+
+    smooth_state = App_Nav_TickSmoothAction(input, perception, output);
+
+    if ((smooth_state == APP_NAV_SMOOTH_ACTION_TURNING) ||
+        (smooth_state == APP_NAV_SMOOTH_ACTION_POST_YAW_SEEK_REAR_TAPE))
+    {
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_RUNNING;
+    }
+    else if ((smooth_state == APP_NAV_SMOOTH_ACTION_DONE_REAR_TAPE) ||
+             (smooth_state == APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE))
+    {
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_DONE;
+        app_nav_primitive_test_action_started = 0U;
+    }
+    else if (smooth_state == APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT)
+    {
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_TIMEOUT;
+        app_nav_primitive_test_action_started = 0U;
+    }
+    else
+    {
+        app_nav_primitive_test_state = APP_NAV_PRIMITIVE_TEST_ERROR;
+        app_nav_primitive_test_action_started = 0U;
+    }
+
+    return app_nav_primitive_test_state;
+}
+
+void App_NavPrimitiveTest_Stop(void)
+{
+    if ((app_nav_primitive_test_type == APP_NAV_PRIMITIVE_TEST_SMOOTH_LEFT) ||
+        (app_nav_primitive_test_type == APP_NAV_PRIMITIVE_TEST_SMOOTH_RIGHT))
+    {
+        App_Nav_StopSmoothAction();
+    }
+
+    App_Nav_ClearPrimitiveTestState();
+}
+
+AppNavPrimitiveTestState App_NavPrimitiveTest_GetState(void)
+{
+    return app_nav_primitive_test_state;
+}
+
+/* -------------------------------------------------------------------------- */
+/* AdvanceAction: drive until rear tape confirms next cell boundary             */
+/* -------------------------------------------------------------------------- */
 
 bool App_Nav_StartAdvanceActionWithRearTapeProfile(AppNavAdvanceActionMode mode,
                                                    AppNavRearTapeProfile rear_tape_profile)
@@ -1394,13 +1514,13 @@ AppNavAdvanceActionState App_Nav_TickAdvanceAction(const AppNavInput *input,
 {
     bool current_rear_tape;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
         app_nav_advance_action_state = APP_NAV_ADVANCE_ACTION_ERROR;
         return app_nav_advance_action_state;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_advance_action_state == APP_NAV_ADVANCE_ACTION_IDLE)
     {
@@ -1558,13 +1678,13 @@ AppNavApproachFrontWallActionState App_Nav_TickApproachFrontWallAction(const App
     uint16_t front_avg_mm;
     uint8_t force_yaw_hold;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
         app_nav_approach_front_wall_action_state = APP_NAV_APPROACH_FRONT_WALL_ACTION_ERROR;
         return app_nav_approach_front_wall_action_state;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_approach_front_wall_action_state == APP_NAV_APPROACH_FRONT_WALL_ACTION_IDLE)
     {
@@ -1726,13 +1846,13 @@ AppNavCenterFrontTapeActionState App_Nav_TickCenterByFrontTapeForPivotAction(con
     bool current_front_tape;
     uint8_t force_yaw_hold;
 
-    App_Nav_ClearOutput(output);
-
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
         app_nav_center_front_tape_action_state = APP_NAV_CENTER_FRONT_TAPE_ACTION_ERROR;
         return app_nav_center_front_tape_action_state;
     }
+
+    App_Nav_ClearOutput(output);
 
     if (app_nav_center_front_tape_action_state == APP_NAV_CENTER_FRONT_TAPE_ACTION_IDLE)
     {
