@@ -45,6 +45,20 @@ typedef enum
 
 typedef enum
 {
+    APP_NAV_CENTER_FRONT_TAPE_GATE_CONTINUE = 0,
+    APP_NAV_CENTER_FRONT_TAPE_GATE_BOUNDARY_DETECTED,
+    APP_NAV_CENTER_FRONT_TAPE_GATE_ERROR
+} AppNavCenterFrontTapeGateResult;
+
+typedef enum
+{
+    APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE = 0,
+    APP_NAV_SMOOTH_REAR_TAPE_GATE_EXIT_DETECTED,
+    APP_NAV_SMOOTH_REAR_TAPE_GATE_ERROR
+} AppNavSmoothRearTapeGateResult;
+
+typedef enum
+{
     APP_NAV_FORWARD_GUIDANCE_WALL_FOLLOW = 0,
     APP_NAV_FORWARD_GUIDANCE_YAW_HOLD
 } AppNavForwardGuidanceMode;
@@ -359,8 +373,9 @@ static void App_Nav_EnterSmoothPostYawSeek(const AppNavInput *input,
     output->left_motor_pwm = (int16_t)(app_nav_config.left_motor_base_speed);
 }
 
-static bool App_Nav_UpdateSmoothRearTapeGate(bool current_rear_tape,
-                                             bool exit_detection_enabled)
+static AppNavSmoothRearTapeGateResult App_Nav_UpdateSmoothRearTapeGate(
+    bool current_rear_tape,
+    bool exit_detection_enabled)
 {
     switch (app_nav_smooth_rear_tape_gate_state)
     {
@@ -368,7 +383,7 @@ static bool App_Nav_UpdateSmoothRearTapeGate(bool current_rear_tape,
         if (current_rear_tape)
         {
             app_nav_smooth_was_rear_tape_detected = 1U;
-            return false;
+            return APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE;
         }
 
         app_nav_smooth_was_rear_tape_detected = 0U;
@@ -381,7 +396,7 @@ static bool App_Nav_UpdateSmoothRearTapeGate(bool current_rear_tape,
         {
             app_nav_smooth_rear_tape_gate_state = APP_NAV_REAR_TAPE_GATE_ARMED_FOR_EXIT_TAPE;
         }
-        return false;
+        return APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE;
 
     case APP_NAV_REAR_TAPE_GATE_WAIT_SPECIAL_PATCH_BLACK:
         if (current_rear_tape)
@@ -393,7 +408,7 @@ static bool App_Nav_UpdateSmoothRearTapeGate(bool current_rear_tape,
         {
             app_nav_smooth_was_rear_tape_detected = 0U;
         }
-        return false;
+        return APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE;
 
     case APP_NAV_REAR_TAPE_GATE_WAIT_LEAVE_SPECIAL_PATCH:
         if (current_rear_tape)
@@ -405,20 +420,20 @@ static bool App_Nav_UpdateSmoothRearTapeGate(bool current_rear_tape,
             app_nav_smooth_was_rear_tape_detected = 0U;
             app_nav_smooth_rear_tape_gate_state = APP_NAV_REAR_TAPE_GATE_ARMED_FOR_EXIT_TAPE;
         }
-        return false;
+        return APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE;
 
     case APP_NAV_REAR_TAPE_GATE_ARMED_FOR_EXIT_TAPE:
         if (!current_rear_tape)
         {
             app_nav_smooth_was_rear_tape_detected = 0U;
-            return false;
+            return APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE;
         }
 
         if ((app_nav_smooth_was_rear_tape_detected == 0U) &&
             exit_detection_enabled)
         {
             app_nav_smooth_was_rear_tape_detected = 1U;
-            return true;
+            return APP_NAV_SMOOTH_REAR_TAPE_GATE_EXIT_DETECTED;
         }
 
         if (exit_detection_enabled)
@@ -426,11 +441,10 @@ static bool App_Nav_UpdateSmoothRearTapeGate(bool current_rear_tape,
             app_nav_smooth_was_rear_tape_detected = 1U;
         }
 
-        return false;
+        return APP_NAV_SMOOTH_REAR_TAPE_GATE_CONTINUE;
 
     default:
-        app_nav_smooth_action_state = APP_NAV_SMOOTH_ACTION_ERROR;
-        return false;
+        return APP_NAV_SMOOTH_REAR_TAPE_GATE_ERROR;
     }
 }
 
@@ -994,16 +1008,101 @@ bool App_Nav_StartSmoothActionWithRearTapeProfile(AppNavSmoothActionType action,
     return true;
 }
 
+static AppNavSmoothActionState App_Nav_TickSmoothActionPostYawSeek(
+    const AppNavInput *input,
+    bool rear_tape_detected,
+    AppNavOutput *output)
+{
+    if (rear_tape_detected)
+    {
+        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE);
+        return app_nav_smooth_action_state;
+    }
+
+    app_nav_smooth_post_yaw_ticks++;
+    if (app_nav_smooth_post_yaw_ticks >= app_nav_config.smooth_post_yaw_seek_timeout_ticks)
+    {
+        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT);
+        return app_nav_smooth_action_state;
+    }
+
+    if (!App_Nav_ComputeYawHoldAdvancePwm(input,
+                                          app_nav_config.right_motor_base_speed,
+                                          app_nav_config.left_motor_base_speed,
+                                          output))
+    {
+        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
+        return app_nav_smooth_action_state;
+    }
+
+    app_nav_smooth_action_state = APP_NAV_SMOOTH_ACTION_POST_YAW_SEEK_REAR_TAPE;
+    return app_nav_smooth_action_state;
+}
+
+static AppNavSmoothActionState App_Nav_TickSmoothActionTurning(
+    const AppNavInput *input,
+    int32_t yaw_deg,
+    bool rear_tape_detected,
+    AppNavOutput *output)
+{
+    bool wall_detected;
+    int32_t yaw_completion_threshold;
+    bool yaw_target_reached;
+
+    if (app_nav_smooth_action_type == APP_NAV_SMOOTH_ACTION_LEFT)
+    {
+        wall_detected = (input->dist_diagonal_left_mm < app_nav_config.after_turn_wall_threshold_mm);
+    }
+    else
+    {
+        wall_detected = (input->dist_diagonal_right_mm < app_nav_config.after_turn_wall_threshold_mm);
+    }
+
+    yaw_completion_threshold = 90 - (int32_t)app_nav_config.smooth_turn_completion_dead_zone_deg;
+    if (yaw_completion_threshold < 0)
+    {
+        yaw_completion_threshold = 0;
+    }
+    yaw_target_reached = (App_Nav_AbsInt32(yaw_deg) >= yaw_completion_threshold);
+
+    if (rear_tape_detected)
+    {
+        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_DONE_REAR_TAPE);
+        return app_nav_smooth_action_state;
+    }
+
+    if (wall_detected)
+    {
+        App_Nav_EnterSmoothPostYawSeek(input,
+                                       output);
+        return app_nav_smooth_action_state;
+    }
+
+    if (yaw_target_reached)
+    {
+        App_Nav_EnterSmoothPostYawSeek(input,
+                                       output);
+        return app_nav_smooth_action_state;
+    }
+
+    if (!App_Nav_ComputeSmoothTurnPwm(input, output))
+    {
+        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
+        return app_nav_smooth_action_state;
+    }
+
+    app_nav_smooth_action_state = APP_NAV_SMOOTH_ACTION_TURNING;
+    return app_nav_smooth_action_state;
+}
+
 AppNavSmoothActionState App_Nav_TickSmoothAction(const AppNavInput *input,
                                                  const AppNavPerception *perception,
                                                  AppNavOutput *output)
 {
     int32_t yaw_deg;
     bool current_rear_tape;
+    AppNavSmoothRearTapeGateResult smooth_rear_tape_gate_result;
     bool rear_tape_detected = false;
-    bool wall_detected = false;
-    int32_t yaw_completion_threshold;
-    bool yaw_target_reached;
 
     if ((input == NULL) || (perception == NULL) || (output == NULL))
     {
@@ -1035,86 +1134,42 @@ AppNavSmoothActionState App_Nav_TickSmoothAction(const AppNavInput *input,
     yaw_deg = FIXED_TO_INT(input->yaw_q16_deg);
     current_rear_tape = (perception->floor_rear_black != 0U);
 
-    rear_tape_detected = App_Nav_UpdateSmoothRearTapeGate(
+    smooth_rear_tape_gate_result = App_Nav_UpdateSmoothRearTapeGate(
         current_rear_tape,
         (App_Nav_AbsInt32(yaw_deg) > (int32_t)app_nav_config.smooth_rear_tape_min_yaw_deg));
 
-    if (app_nav_smooth_action_type == APP_NAV_SMOOTH_ACTION_LEFT)
-    {
-        wall_detected = (input->dist_diagonal_left_mm < app_nav_config.after_turn_wall_threshold_mm);
-    }
-    else if (app_nav_smooth_action_type == APP_NAV_SMOOTH_ACTION_RIGHT)
-    {
-        wall_detected = (input->dist_diagonal_right_mm < app_nav_config.after_turn_wall_threshold_mm);
-    }
-    else
+    if (smooth_rear_tape_gate_result == APP_NAV_SMOOTH_REAR_TAPE_GATE_ERROR)
     {
         App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
         return app_nav_smooth_action_state;
     }
 
-    yaw_completion_threshold = 90 - (int32_t)app_nav_config.smooth_turn_completion_dead_zone_deg;
-    if (yaw_completion_threshold < 0)
+    rear_tape_detected =
+        (smooth_rear_tape_gate_result == APP_NAV_SMOOTH_REAR_TAPE_GATE_EXIT_DETECTED);
+
+    if ((app_nav_smooth_action_type != APP_NAV_SMOOTH_ACTION_LEFT) &&
+        (app_nav_smooth_action_type != APP_NAV_SMOOTH_ACTION_RIGHT))
     {
-        yaw_completion_threshold = 0;
+        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
+        return app_nav_smooth_action_state;
     }
-    yaw_target_reached = (App_Nav_AbsInt32(yaw_deg) >= yaw_completion_threshold);
 
     if (app_nav_smooth_action_state == APP_NAV_SMOOTH_ACTION_POST_YAW_SEEK_REAR_TAPE)
     {
-        if (rear_tape_detected)
-        {
-            App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_DONE_POST_YAW_REAR_TAPE);
-            return app_nav_smooth_action_state;
-        }
-
-        app_nav_smooth_post_yaw_ticks++;
-        if (app_nav_smooth_post_yaw_ticks >= app_nav_config.smooth_post_yaw_seek_timeout_ticks)
-        {
-            App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_POST_YAW_TIMEOUT);
-            return app_nav_smooth_action_state;
-        }
-
-        if (!App_Nav_ComputeYawHoldAdvancePwm(input,
-                                              app_nav_config.right_motor_base_speed,
-                                              app_nav_config.left_motor_base_speed,
-                                              output))
-        {
-            App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
-            return app_nav_smooth_action_state;
-        }
-
-        app_nav_smooth_action_state = APP_NAV_SMOOTH_ACTION_POST_YAW_SEEK_REAR_TAPE;
-        return app_nav_smooth_action_state;
+        return App_Nav_TickSmoothActionPostYawSeek(input,
+                                                   rear_tape_detected,
+                                                   output);
     }
 
-    if (rear_tape_detected)
+    if (app_nav_smooth_action_state == APP_NAV_SMOOTH_ACTION_TURNING)
     {
-        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_DONE_REAR_TAPE);
-        return app_nav_smooth_action_state;
+        return App_Nav_TickSmoothActionTurning(input,
+                                               yaw_deg,
+                                               rear_tape_detected,
+                                               output);
     }
 
-    if (wall_detected)
-    {
-        App_Nav_EnterSmoothPostYawSeek(input,
-                                       output);
-        return app_nav_smooth_action_state;
-    }
-
-    if (yaw_target_reached)
-    {
-        App_Nav_EnterSmoothPostYawSeek(input,
-                                       output);
-        return app_nav_smooth_action_state;
-    }
-
-    if (!App_Nav_ComputeSmoothTurnPwm(input, output))
-    {
-        App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
-        return app_nav_smooth_action_state;
-    }
-
-    app_nav_smooth_action_state = APP_NAV_SMOOTH_ACTION_TURNING;
+    App_Nav_SetSmoothActionTerminal(APP_NAV_SMOOTH_ACTION_ERROR);
     return app_nav_smooth_action_state;
 }
 
@@ -1791,7 +1846,7 @@ AppNavApproachFrontWallActionState App_Nav_TickApproachFrontWallAction(const App
 /* CenterByFrontTapeForPivotAction: prepare in-cell 180 pivot in open cell      */
 /* -------------------------------------------------------------------------- */
 
-static bool App_Nav_UpdateCenterFrontTapeGate(bool current_front_tape)
+static AppNavCenterFrontTapeGateResult App_Nav_UpdateCenterFrontTapeGate(bool current_front_tape)
 {
     switch (app_nav_center_front_tape_gate_state)
     {
@@ -1814,25 +1869,25 @@ static bool App_Nav_UpdateCenterFrontTapeGate(bool current_front_tape)
             app_nav_center_front_tape_was_front_tape_detected = 0U;
             app_nav_center_front_tape_gate_state = APP_NAV_FRONT_TAPE_GATE_ARMED_FOR_BOUNDARY_TAPE;
         }
-        return false;
+        return APP_NAV_CENTER_FRONT_TAPE_GATE_CONTINUE;
 
     case APP_NAV_FRONT_TAPE_GATE_WAIT_LEAVE_CURRENT_BLACK:
         if (current_front_tape)
         {
             app_nav_center_front_tape_was_front_tape_detected = 1U;
-            return false;
+            return APP_NAV_CENTER_FRONT_TAPE_GATE_CONTINUE;
         }
 
         app_nav_center_front_tape_was_front_tape_detected = 0U;
         app_nav_center_front_tape_gate_state = APP_NAV_FRONT_TAPE_GATE_ARMED_FOR_BOUNDARY_TAPE;
-        return false;
+        return APP_NAV_CENTER_FRONT_TAPE_GATE_CONTINUE;
 
     case APP_NAV_FRONT_TAPE_GATE_ARMED_FOR_BOUNDARY_TAPE:
         if (current_front_tape)
         {
             if (app_nav_center_front_tape_was_front_tape_detected == 0U)
             {
-                return true;
+                return APP_NAV_CENTER_FRONT_TAPE_GATE_BOUNDARY_DETECTED;
             }
 
             app_nav_center_front_tape_was_front_tape_detected = 1U;
@@ -1841,11 +1896,10 @@ static bool App_Nav_UpdateCenterFrontTapeGate(bool current_front_tape)
         {
             app_nav_center_front_tape_was_front_tape_detected = 0U;
         }
-        return false;
+        return APP_NAV_CENTER_FRONT_TAPE_GATE_CONTINUE;
 
     default:
-        App_Nav_SetCenterFrontTapeActionTerminal(APP_NAV_CENTER_FRONT_TAPE_ACTION_ERROR);
-        return false;
+        return APP_NAV_CENTER_FRONT_TAPE_GATE_ERROR;
     }
 }
 
@@ -1887,6 +1941,7 @@ AppNavCenterFrontTapeActionState App_Nav_TickCenterByFrontTapeForPivotAction(con
                                                                              AppNavOutput *output)
 {
     AppNavForwardGuidanceMode guidance_mode;
+    AppNavCenterFrontTapeGateResult front_tape_gate_result;
     bool current_front_tape;
     uint8_t force_yaw_hold;
 
@@ -1922,10 +1977,17 @@ AppNavCenterFrontTapeActionState App_Nav_TickCenterByFrontTapeForPivotAction(con
      * perception layer that provides floor_front_black.
      */
     current_front_tape = (perception->floor_front_black != 0U);
+    front_tape_gate_result = App_Nav_UpdateCenterFrontTapeGate(current_front_tape);
 
-    if (App_Nav_UpdateCenterFrontTapeGate(current_front_tape))
+    if (front_tape_gate_result == APP_NAV_CENTER_FRONT_TAPE_GATE_BOUNDARY_DETECTED)
     {
         App_Nav_SetCenterFrontTapeActionTerminal(APP_NAV_CENTER_FRONT_TAPE_ACTION_DONE_FRONT_TAPE);
+        return app_nav_center_front_tape_action_state;
+    }
+
+    if (front_tape_gate_result == APP_NAV_CENTER_FRONT_TAPE_GATE_ERROR)
+    {
+        App_Nav_SetCenterFrontTapeActionTerminal(APP_NAV_CENTER_FRONT_TAPE_ACTION_ERROR);
         return app_nav_center_front_tape_action_state;
     }
 
