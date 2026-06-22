@@ -1053,6 +1053,22 @@ void MainWindow::realHmiTimerStep()
     updateSensors();
     const FirmwareSimBridge::SensorSnapshot snapshot = buildBridgeSnapshot();
     realHmiLink_.tick(100, firmwareBridge_, snapshot, lastCommand_);
+
+    if (realHmiLink_.consumeStopSimulationRequest()) {
+        simulationRunning_ = false;
+        if (simulationTimer_ != nullptr) {
+            simulationTimer_->stop();
+        }
+        lastCommand_ = FirmwareSimBridge::Command{};
+    }
+
+    if (realHmiLink_.consumeStartSimulationRequest()) {
+        simulationRunning_ = true;
+        if (simulationTimer_ != nullptr) {
+            simulationTimer_->start();
+        }
+    }
+
     refreshScene();
     refreshTelemetry();
 }

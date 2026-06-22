@@ -23,6 +23,8 @@ public:
     quint16 localPort() const;
     QString statusText() const;
 
+    bool consumeStartSimulationRequest();
+    bool consumeStopSimulationRequest();
     void resetTiming();
     void sendAlive();
     bool sendSupervisorStatus(const FirmwareSimBridge &bridge, bool force = false);
@@ -54,6 +56,8 @@ private:
                        const FirmwareSimBridge::Command &command);
 
     QByteArray buildSupervisorStatusPayload(const FirmwareSimBridge &bridge) const;
+    QByteArray buildSupervisorInitialPosePayload(const FirmwareSimBridge &bridge) const;
+    QByteArray buildSupervisorGoalCellPayload(const FirmwareSimBridge &bridge) const;
     QByteArray buildMazeColumnPayload(const FirmwareSimBridge &bridge, uint8_t column) const;
     QByteArray buildIrSensorSnapshotPayload(const FirmwareSimBridge &bridge) const;
     QByteArray buildMotorPwmPayload(const FirmwareSimBridge::Command &command) const;
@@ -69,6 +73,8 @@ private:
     int aliveElapsedMs_ = 0;
     int supervisorElapsedMs_ = 0;
     bool lastSupervisorActive_ = false;
+    bool startSimulationRequested_ = false;
+    bool stopSimulationRequested_ = false;
     QString lastEvent_ = QStringLiteral("idle");
 };
 

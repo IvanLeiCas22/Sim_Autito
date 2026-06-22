@@ -24,6 +24,9 @@ public:
     static constexpr uint8_t kFirmwareMazeHeadingWest = 3;
     static constexpr int kFirmwareSupervisorDebugStatusSize = 15;
     static constexpr int kFirmwareMazeColumnSyncPayloadSize = 1 + kFirmwareMazeHeight + 3;
+    static constexpr uint8_t kSupervisorRunModeIdle = 0;
+    static constexpr uint8_t kSupervisorRunModeFindCells = 1;
+    static constexpr uint8_t kSupervisorRunModeGoToB = 2;
 
     using FirmwareMazeCells = std::array<std::array<uint8_t, kFirmwareMazeHeight>, kFirmwareMazeWidth>;
     using FirmwareSupervisorDebugStatusPayload = std::array<uint8_t, kFirmwareSupervisorDebugStatusSize>;
@@ -120,6 +123,21 @@ public:
         uint32_t decision_random_value = 0;
     };
 
+    struct SupervisorInitialPose
+    {
+        uint8_t x = 0;
+        uint8_t y = 0;
+        uint8_t heading = kFirmwareMazeHeadingNorth;
+        bool valid = false;
+    };
+
+    struct SupervisorGoalCell
+    {
+        uint8_t x = 0;
+        uint8_t y = 0;
+        bool valid = false;
+    };
+
     struct FirmwareConfig
     {
         uint16_t right_motor_base_speed = 0;
@@ -164,6 +182,10 @@ public:
     void startPivotLeft90();
     void startPivotRight90();
     void startPivot180();
+    bool setSupervisorInitialPose(uint8_t x, uint8_t y, uint8_t heading);
+    SupervisorInitialPose supervisorInitialPose() const;
+    bool setSupervisorGoalCell(uint8_t x, uint8_t y);
+    SupervisorGoalCell supervisorGoalCell() const;
     bool resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uint8_t heading);
     bool clearSupervisorLearnedMap();
     bool startSupervisorV1();
@@ -173,6 +195,9 @@ public:
                               uint8_t heading,
                               uint8_t goal_x,
                               uint8_t goal_y);
+    bool startSupervisorFindCellsFromConfiguredPose();
+    bool startSupervisorGoToBFromConfiguredPose();
+    bool startSupervisorRun(uint8_t run_mode);
     void stopControl();
 
     Command tick(const SensorSnapshot &snapshot);
@@ -207,6 +232,9 @@ private:
     double smooth_yaw_start_deg_ = 0.0;
     bool pivot_yaw_reference_valid_ = false;
     double pivot_yaw_start_deg_ = 0.0;
+    SupervisorInitialPose supervisor_initial_pose_;
+    SupervisorGoalCell supervisor_goal_cell_;
+    uint8_t supervisor_run_mode_ = kSupervisorRunModeIdle;
     Debug debug_;
 };
 

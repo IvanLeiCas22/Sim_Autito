@@ -21,7 +21,13 @@ constexpr uint8_t kCmdGetPwmPeriod = 0x51U;
 constexpr uint8_t kCmdGetRobotStatus = 0x74U;
 constexpr uint8_t kCmdGetYawAngle = 0x75U;
 constexpr uint8_t kCmdSyncMazeColumn = 0x93U;
+constexpr uint8_t kCmdSetSupervisorInitialPose = 0x98U;
+constexpr uint8_t kCmdGetSupervisorInitialPose = 0x99U;
+constexpr uint8_t kCmdStartSupervisorRun = 0x9AU;
+constexpr uint8_t kCmdStopSupervisorRun = 0x9BU;
 constexpr uint8_t kCmdGetSupervisorDebugStatus = 0x9CU;
+constexpr uint8_t kCmdSetSupervisorGoalCell = 0x9DU;
+constexpr uint8_t kCmdGetSupervisorGoalCell = 0x9EU;
 constexpr uint8_t kCmdSupervisorStatusUpdate = 0x9FU;
 constexpr uint8_t kCmdClearSupervisorLearnedMap = 0xA9U;
 
@@ -138,6 +144,20 @@ QString SimUnerbusLink::statusText() const
         .arg(remoteConfigured_ ? QString::number(remotePort_) : QStringLiteral("-"))
         .arg(socket_.localPort())
         .arg(lastEvent_);
+}
+
+bool SimUnerbusLink::consumeStartSimulationRequest()
+{
+    const bool requested = startSimulationRequested_;
+    startSimulationRequested_ = false;
+    return requested;
+}
+
+bool SimUnerbusLink::consumeStopSimulationRequest()
+{
+    const bool requested = stopSimulationRequested_;
+    stopSimulationRequested_ = false;
+    return requested;
 }
 
 void SimUnerbusLink::resetTiming()
@@ -339,6 +359,59 @@ void SimUnerbusLink::handleCommand(const ParsedPacket &packet,
         sendAlive();
         break;
 
+    case kCmdSetSupervisorInitialPose:
+        if (packet.payload.size() >= 3) {
+            const bool ok = bridge.setSupervisorInitialPose(toByte(packet.payload.at(0)),
+                                                            toByte(packet.payload.at(1)),
+                                                            toByte(packet.payload.at(2)));
+            lastEvent_ = ok
+                ? QStringLiteral("set supervisor initial pose")
+                : QStringLiteral("rejected supervisor initial pose");
+        } else {
+            lastEvent_ = QStringLiteral("bad supervisor initial pose payload");
+        }
+        break;
+
+    case kCmdGetSupervisorInitialPose:
+        sendPacket(kCmdGetSupervisorInitialPose, buildSupervisorInitialPosePayload(bridge));
+        break;
+
+    case kCmdSetSupervisorGoalCell:
+        if (packet.payload.size() >= 2) {
+            const bool ok = bridge.setSupervisorGoalCell(toByte(packet.payload.at(0)),
+                                                         toByte(packet.payload.at(1)));
+            lastEvent_ = ok
+                ? QStringLiteral("set supervisor goal cell")
+                : QStringLiteral("rejected supervisor goal cell");
+        } else {
+            lastEvent_ = QStringLiteral("bad supervisor goal cell payload");
+        }
+        break;
+
+    case kCmdGetSupervisorGoalCell:
+        sendPacket(kCmdGetSupervisorGoalCell, buildSupervisorGoalCellPayload(bridge));
+        break;
+
+    case kCmdStartSupervisorRun:
+        if (!packet.payload.isEmpty()) {
+            const bool started = bridge.startSupervisorRun(toByte(packet.payload.at(0)));
+            startSimulationRequested_ = started;
+            stopSimulationRequested_ = !started;
+            lastEvent_ = started
+                ? QStringLiteral("started supervisor run")
+                : QStringLiteral("supervisor run start failed");
+        } else {
+            stopSimulationRequested_ = true;
+            lastEvent_ = QStringLiteral("bad supervisor run payload");
+        }
+        break;
+
+    case kCmdStopSupervisorRun:
+        bridge.stopControl();
+        stopSimulationRequested_ = true;
+        lastEvent_ = QStringLiteral("stopped supervisor run");
+        break;
+
     case kCmdGetSupervisorDebugStatus:
         sendPacket(kCmdGetSupervisorDebugStatus, buildSupervisorStatusPayload(bridge));
         break;
@@ -402,6 +475,30 @@ QByteArray SimUnerbusLink::buildSupervisorStatusPayload(const FirmwareSimBridge 
     for (uint8_t byte : rawPayload) {
         payload.append(static_cast<char>(byte));
     }
+    return payload;
+}
+
+QByteArray SimUnerbusLink::buildSupervisorInitialPosePayload(const FirmwareSimBridge &bridge) const
+{
+    const FirmwareSimBridge::SupervisorInitialPose pose = bridge.supervisorInitialPose();
+
+    QByteArray payload;
+    payload.reserve(3);
+    payload.append(static_cast<char>(pose.valid ? pose.x : 0U));
+    payload.append(static_cast<char>(pose.valid ? pose.y : 0U));
+    payload.append(static_cast<char>(pose.valid ? pose.heading : FirmwareSimBridge::kFirmwareMazeHeadingNorth));
+    return payload;
+}
+
+QByteArray SimUnerbusLink::buildSupervisorGoalCellPayload(const FirmwareSimBridge &bridge) const
+{
+    const FirmwareSimBridge::SupervisorGoalCell goal = bridge.supervisorGoalCell();
+
+    QByteArray payload;
+    payload.reserve(3);
+    payload.append(static_cast<char>(goal.valid ? goal.x : 0U));
+    payload.append(static_cast<char>(goal.valid ? goal.y : 0U));
+    payload.append(static_cast<char>(goal.valid ? 1U : 0U));
     return payload;
 }
 

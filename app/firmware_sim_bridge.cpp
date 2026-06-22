@@ -76,6 +76,18 @@ bool isSupervisorControlMode(FirmwareSimBridge::ControlMode mode)
     return mode == FirmwareSimBridge::ControlMode::SupervisorV1;
 }
 
+bool isValidFirmwareMazeCell(uint8_t x, uint8_t y)
+{
+    return x < FirmwareSimBridge::kFirmwareMazeWidth
+        && y < FirmwareSimBridge::kFirmwareMazeHeight;
+}
+
+bool isValidFirmwareMazePose(uint8_t x, uint8_t y, uint8_t heading)
+{
+    return isValidFirmwareMazeCell(x, y)
+        && heading <= FirmwareSimBridge::kFirmwareMazeHeadingWest;
+}
+
 double shortestDeltaDeg(double current_deg, double target_deg)
 {
     if (!std::isfinite(current_deg) || !std::isfinite(target_deg)) {
@@ -690,6 +702,7 @@ void FirmwareSimBridge::reset()
     const bool wasSupervisorControl = isSupervisorControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
+    supervisor_run_mode_ = kSupervisorRunModeIdle;
     simulation_config_applied_ = false;
     straight_yaw_target_deg_ = 0.0;
     advance_yaw_reference_valid_ = false;
@@ -790,6 +803,7 @@ void FirmwareSimBridge::stop()
     const bool wasSupervisorControl = isSupervisorControlMode(control_mode_);
     enabled_ = false;
     control_mode_ = ControlMode::TelemetryOnly;
+    supervisor_run_mode_ = kSupervisorRunModeIdle;
     advance_yaw_reference_valid_ = false;
     smooth_yaw_reference_valid_ = false;
     pivot_yaw_reference_valid_ = false;
@@ -1073,17 +1087,105 @@ void FirmwareSimBridge::startPivot180()
 #endif
 }
 
+bool FirmwareSimBridge::setSupervisorInitialPose(uint8_t x, uint8_t y, uint8_t heading)
+{
+    ensureFirmwareCoreInitialized();
+
+    if (!isValidFirmwareMazePose(x, y, heading)) {
+        supervisor_initial_pose_ = SupervisorInitialPose{};
+        debug_.state = QStringLiteral("FW: supervisor initial pose");
+        debug_.reason = QStringLiteral("Supervisor initial pose invalid");
+        return false;
+    }
+
+    supervisor_initial_pose_.x = x;
+    supervisor_initial_pose_.y = y;
+    supervisor_initial_pose_.heading = heading;
+    supervisor_initial_pose_.valid = true;
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (!App_NavSupervisor_SetInitialPose(x, y, static_cast<HeadingTypeDef>(heading))) {
+        supervisor_initial_pose_ = SupervisorInitialPose{};
+        debug_.state = QStringLiteral("FW: supervisor initial pose");
+        debug_.reason = QStringLiteral("Supervisor initial pose rejected by firmware");
+        return false;
+    }
+
+    updateSupervisorDebug();
+    updateMazeDebug();
+    updateFirmwareMazeMapDebug();
+    debug_.state = QStringLiteral("FW: supervisor initial pose");
+    debug_.reason = QStringLiteral("Supervisor initial pose set");
+#else
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Supervisor initial pose cached without app_nav_supervisor");
+#endif
+
+    return true;
+}
+
+FirmwareSimBridge::SupervisorInitialPose FirmwareSimBridge::supervisorInitialPose() const
+{
+    return supervisor_initial_pose_;
+}
+
+bool FirmwareSimBridge::setSupervisorGoalCell(uint8_t x, uint8_t y)
+{
+    ensureFirmwareCoreInitialized();
+
+    if (!isValidFirmwareMazeCell(x, y)) {
+        supervisor_goal_cell_ = SupervisorGoalCell{};
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+        (void)App_NavSupervisor_SetGoalCell(x, y);
+#endif
+        debug_.state = QStringLiteral("FW: supervisor goal");
+        debug_.reason = QStringLiteral("Supervisor goal cell invalid");
+        return false;
+    }
+
+    supervisor_goal_cell_.x = x;
+    supervisor_goal_cell_.y = y;
+    supervisor_goal_cell_.valid = true;
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    if (!App_NavSupervisor_SetGoalCell(x, y)) {
+        supervisor_goal_cell_ = SupervisorGoalCell{};
+        debug_.state = QStringLiteral("FW: supervisor goal");
+        debug_.reason = QStringLiteral("Supervisor goal rejected by firmware");
+        return false;
+    }
+
+    updateSupervisorDebug();
+    updateMazeDebug();
+    updateFirmwareMazeMapDebug();
+    debug_.state = QStringLiteral("FW: supervisor goal");
+    debug_.reason = QStringLiteral("Supervisor goal cell set");
+#else
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Supervisor goal cell cached without app_nav_supervisor");
+#endif
+
+    return true;
+}
+
+FirmwareSimBridge::SupervisorGoalCell FirmwareSimBridge::supervisorGoalCell() const
+{
+    return supervisor_goal_cell_;
+}
+
 bool FirmwareSimBridge::resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uint8_t heading)
 {
     ensureFirmwareCoreInitialized();
 
+    const bool validPose = isValidFirmwareMazePose(x, y, heading);
+    supervisor_initial_pose_ = validPose ? SupervisorInitialPose{x, y, heading, true} : SupervisorInitialPose{};
+
 #if SIM_AUTITO_HAS_NAV_SUPERVISOR
-    const bool validPose =
-        x < MAZE_WIDTH
-        && y < MAZE_HEIGHT
-        && heading <= static_cast<uint8_t>(HEADING_WEST);
     const bool resetOk = validPose
         && App_NavSupervisor_ResetWithInitialPose(x, y, static_cast<HeadingTypeDef>(heading));
+    if (!resetOk) {
+        supervisor_initial_pose_ = SupervisorInitialPose{};
+    }
     debug_.enabled = enabled_;
     debug_.control_mode = controlModeText(control_mode_);
     if (resetOk) {
@@ -1101,14 +1203,13 @@ bool FirmwareSimBridge::resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uin
     debug_.reason = QStringLiteral("Supervisor V1 initial pose invalid");
     return false;
 #else
-    Q_UNUSED(x);
-    Q_UNUSED(y);
-    Q_UNUSED(heading);
     debug_.fw_maze_map_valid = false;
     debug_.fw_maze_cells = FirmwareMazeCells{};
     debug_.state = QStringLiteral("STUB");
-    debug_.reason = QStringLiteral("Supervisor V1 initial pose unsupported without app_nav_supervisor");
-    return false;
+    debug_.reason = validPose
+        ? QStringLiteral("Supervisor V1 initial pose cached without app_nav_supervisor")
+        : QStringLiteral("Supervisor V1 initial pose invalid");
+    return validPose;
 #endif
 }
 
@@ -1165,7 +1266,8 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
 #endif
 
 #if SIM_AUTITO_HAS_NAV_SUPERVISOR
-    if (x >= MAZE_WIDTH || y >= MAZE_HEIGHT || heading > static_cast<uint8_t>(HEADING_WEST)) {
+    if (!isValidFirmwareMazePose(x, y, heading)) {
+        supervisor_initial_pose_ = SupervisorInitialPose{};
         enabled_ = false;
         control_mode_ = ControlMode::TelemetryOnly;
         debug_.enabled = enabled_;
@@ -1179,6 +1281,7 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
     }
 
     if (!App_NavSupervisor_ResetRunPreservingMapWithInitialPose(x, y, static_cast<HeadingTypeDef>(heading))) {
+        supervisor_initial_pose_ = SupervisorInitialPose{};
         enabled_ = false;
         control_mode_ = ControlMode::TelemetryOnly;
         debug_.enabled = enabled_;
@@ -1191,7 +1294,10 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
         return false;
     }
 
+    supervisor_initial_pose_ = SupervisorInitialPose{x, y, heading, true};
+
     if (!App_NavSupervisor_SetGoalCell(goal_x, goal_y)) {
+        supervisor_goal_cell_ = SupervisorGoalCell{};
         enabled_ = false;
         control_mode_ = ControlMode::TelemetryOnly;
         debug_.enabled = enabled_;
@@ -1203,6 +1309,8 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
         debug_.reason = QStringLiteral("GO_A_TO_B target invalid");
         return false;
     }
+
+    supervisor_goal_cell_ = SupervisorGoalCell{goal_x, goal_y, true};
 
     if (!App_NavSupervisor_SetMission(APP_NAV_SUPERVISOR_MISSION_GO_A_TO_B)) {
         enabled_ = false;
@@ -1218,6 +1326,7 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
     }
 
     const bool started = App_NavSupervisor_Start();
+    supervisor_run_mode_ = started ? kSupervisorRunModeGoToB : kSupervisorRunModeIdle;
     enabled_ = started;
     control_mode_ = started ? ControlMode::SupervisorV1 : ControlMode::TelemetryOnly;
     debug_.enabled = enabled_;
@@ -1249,6 +1358,71 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
 #endif
 }
 
+bool FirmwareSimBridge::startSupervisorFindCellsFromConfiguredPose()
+{
+    if (!supervisor_initial_pose_.valid) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        supervisor_run_mode_ = kSupervisorRunModeIdle;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("FIND_CELLS initial pose not configured");
+        return false;
+    }
+
+    return startSupervisorV1(supervisor_initial_pose_.x,
+                             supervisor_initial_pose_.y,
+                             supervisor_initial_pose_.heading);
+}
+
+bool FirmwareSimBridge::startSupervisorGoToBFromConfiguredPose()
+{
+    if (!supervisor_initial_pose_.valid) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        supervisor_run_mode_ = kSupervisorRunModeIdle;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("GO_A_TO_B initial pose not configured");
+        return false;
+    }
+
+    if (!supervisor_goal_cell_.valid) {
+        enabled_ = false;
+        control_mode_ = ControlMode::TelemetryOnly;
+        supervisor_run_mode_ = kSupervisorRunModeIdle;
+        debug_.enabled = enabled_;
+        debug_.control_mode = controlModeText(control_mode_);
+        debug_.state = QStringLiteral("FW: idle");
+        debug_.reason = QStringLiteral("GO_A_TO_B goal cell not configured");
+        return false;
+    }
+
+    return startSupervisorGoToB(supervisor_initial_pose_.x,
+                                supervisor_initial_pose_.y,
+                                supervisor_initial_pose_.heading,
+                                supervisor_goal_cell_.x,
+                                supervisor_goal_cell_.y);
+}
+
+bool FirmwareSimBridge::startSupervisorRun(uint8_t run_mode)
+{
+    if (run_mode == kSupervisorRunModeFindCells) {
+        return startSupervisorFindCellsFromConfiguredPose();
+    }
+
+    if (run_mode == kSupervisorRunModeGoToB) {
+        return startSupervisorGoToBFromConfiguredPose();
+    }
+
+    stopControl();
+    debug_.state = QStringLiteral("FW: idle");
+    debug_.reason = QStringLiteral("Unsupported supervisor run mode");
+    return false;
+}
+
 bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
                                                   uint8_t x,
                                                   uint8_t y,
@@ -1274,12 +1448,14 @@ bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
 #if SIM_AUTITO_HAS_NAV_SUPERVISOR
     bool poseResetOk = true;
     if (has_initial_pose) {
-        if (x >= MAZE_WIDTH || y >= MAZE_HEIGHT || heading > static_cast<uint8_t>(HEADING_WEST)) {
+        if (!isValidFirmwareMazePose(x, y, heading)) {
             poseResetOk = false;
+            supervisor_initial_pose_ = SupervisorInitialPose{};
         } else {
             poseResetOk = App_NavSupervisor_ResetWithInitialPose(x,
                                                                  y,
                                                                  static_cast<HeadingTypeDef>(heading));
+            supervisor_initial_pose_ = poseResetOk ? SupervisorInitialPose{x, y, heading, true} : SupervisorInitialPose{};
         }
     } else {
         App_NavSupervisor_Reset();
@@ -1310,6 +1486,7 @@ bool FirmwareSimBridge::startSupervisorV1Internal(bool has_initial_pose,
     }
 
     const bool started = App_NavSupervisor_Start();
+    supervisor_run_mode_ = started ? kSupervisorRunModeFindCells : kSupervisorRunModeIdle;
     enabled_ = started;
     control_mode_ = started ? ControlMode::SupervisorV1 : ControlMode::TelemetryOnly;
     debug_.enabled = enabled_;

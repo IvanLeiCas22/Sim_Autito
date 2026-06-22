@@ -115,6 +115,39 @@ Al iniciar `GO_A_TO_B`, el bridge debe:
 
 La limpieza del mapa aprendido debe ser explícita mediante `FirmwareSimBridge::clearSupervisorLearnedMap()` o por reset completo de la simulación. No debe ocurrir automáticamente al iniciar una nueva run `GO_A_TO_B`.
 
+## Configuración A/B desde HMI real
+
+El simulador debe aceptar que la HMI Qt real sea la fuente de configuración de misión cuando está conectada por UNERBUS simulado.
+
+`SimUnerbusLink` debe soportar estos comandos de supervisor:
+
+```text
+CMD_SET_SUPERVISOR_INITIAL_POSE = 0x98
+CMD_GET_SUPERVISOR_INITIAL_POSE = 0x99
+CMD_START_SUPERVISOR_RUN        = 0x9A
+CMD_STOP_SUPERVISOR_RUN         = 0x9B
+CMD_SET_SUPERVISOR_GOAL_CELL    = 0x9D
+CMD_GET_SUPERVISOR_GOAL_CELL    = 0x9E
+```
+
+El estado configurado debe vivir en `FirmwareSimBridge`:
+
+```text
+pose inicial A: x, y, heading, valid
+celda objetivo B: x, y, valid
+```
+
+Reglas:
+
+- `CMD_GET_SUPERVISOR_INITIAL_POSE` devuelve la pose inicial configurada del simulador.
+- `CMD_SET_SUPERVISOR_INITIAL_POSE` actualiza la pose inicial usada por el supervisor.
+- `CMD_GET_SUPERVISOR_GOAL_CELL` devuelve la celda B configurada y su validez.
+- `CMD_SET_SUPERVISOR_GOAL_CELL` actualiza B.
+- `CMD_START_SUPERVISOR_RUN` arranca `FIND_CELLS` o `GO_A_TO_B` usando la pose/goal configurados, no un diálogo local ni otra fuente paralela.
+- `CMD_STOP_SUPERVISOR_RUN` detiene el control supervisor y la simulación iniciada por HMI.
+
+Las coordenadas expuestas por UNERBUS son coordenadas lógicas STM32. La conversión hacia filas visuales del simulador debe quedar localizada en el render/UI.
+
 ## Tick de SupervisorV1
 
 En modo supervisor, el bridge debe llamar:
