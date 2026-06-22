@@ -100,6 +100,21 @@ Al iniciar `SupervisorV1`, el bridge debe:
 6. pasar a `ControlMode::SupervisorV1` solo si el arranque fue exitoso;
 7. dejar `TelemetryOnly` y PWM cero si falla algún paso.
 
+## GO_A_TO_B con aprendizaje entre runs
+
+`GO_A_TO_B` debe usar el mismo supervisor portable y no debe implementar navegación propia en el simulador.
+
+Al iniciar `GO_A_TO_B`, el bridge debe:
+
+1. asegurar que `firmware_core` esté inicializado;
+2. detener primitivas directas activas;
+3. resetear runtime/pose del supervisor preservando el mapa aprendido mediante `App_NavSupervisor_ResetRunPreservingMapWithInitialPose(...)`;
+4. configurar la celda objetivo `B`;
+5. configurar la misión `APP_NAV_SUPERVISOR_MISSION_GO_A_TO_B`;
+6. llamar a `App_NavSupervisor_Start()`.
+
+La limpieza del mapa aprendido debe ser explícita mediante `FirmwareSimBridge::clearSupervisorLearnedMap()` o por reset completo de la simulación. No debe ocurrir automáticamente al iniciar una nueva run `GO_A_TO_B`.
+
 ## Tick de SupervisorV1
 
 En modo supervisor, el bridge debe llamar:
@@ -231,3 +246,18 @@ La integración bridge + firmware portable se considera correcta cuando:
 6. la telemetría muestra estado/acción/result del supervisor;
 7. los mapas de prueba reproducen casos de exploración, dead-end y backtracking abierto;
 8. un nuevo estado/acción de supervisor no queda como `unknown` ni bloquea PWM por omisión.
+
+## Telemetría extendida A/B
+
+La telemetría pública de `FirmwareSimBridge::Debug` debe exponer los campos extendidos del supervisor:
+
+```text
+supervisor_mission
+supervisor_go_to_b_phase
+supervisor_go_to_b_outbound_steps
+supervisor_go_to_b_optimistic_cost
+supervisor_go_to_b_required_improvement
+supervisor_go_to_b_improvement_detected
+```
+
+El puente UNERBUS simulado debe emitir el mismo payload compacto extendido que el STM32 real para `CMD_GET_SUPERVISOR_DEBUG_STATUS` y `CMD_SUPERVISOR_STATUS_UPDATE`.

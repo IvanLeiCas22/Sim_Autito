@@ -75,6 +75,7 @@ private:
     void startSupervisorV1Control();
     void startGoToBControl();
     void stopFirmwareControl();
+    void clearSupervisorLearnedMap();
     void tuneFirmwareConfig();
     void configureRealHmiLink();
     void toggleRealHmiLink(bool enabled);

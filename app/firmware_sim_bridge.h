@@ -22,7 +22,7 @@ public:
     static constexpr uint8_t kFirmwareMazeHeadingEast = 1;
     static constexpr uint8_t kFirmwareMazeHeadingSouth = 2;
     static constexpr uint8_t kFirmwareMazeHeadingWest = 3;
-    static constexpr int kFirmwareSupervisorDebugStatusSize = 9;
+    static constexpr int kFirmwareSupervisorDebugStatusSize = 15;
     static constexpr int kFirmwareMazeColumnSyncPayloadSize = 1 + kFirmwareMazeHeight + 3;
 
     using FirmwareMazeCells = std::array<std::array<uint8_t, kFirmwareMazeHeight>, kFirmwareMazeWidth>;
@@ -77,6 +77,12 @@ public:
         QString supervisor_state = QStringLiteral("n/a");
         QString supervisor_action = QStringLiteral("n/a");
         uint8_t supervisor_result = 0;
+        uint8_t supervisor_mission = 0;
+        uint8_t supervisor_go_to_b_phase = 0;
+        uint8_t supervisor_go_to_b_outbound_steps = 0;
+        uint8_t supervisor_go_to_b_optimistic_cost = 0xffU;
+        uint8_t supervisor_go_to_b_required_improvement = 0;
+        bool supervisor_go_to_b_improvement_detected = false;
         uint16_t sim_config_left_base = 0;
         uint16_t sim_config_right_base = 0;
         uint8_t maze_x = 0;
@@ -159,6 +165,7 @@ public:
     void startPivotRight90();
     void startPivot180();
     bool resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uint8_t heading);
+    bool clearSupervisorLearnedMap();
     bool startSupervisorV1();
     bool startSupervisorV1(uint8_t x, uint8_t y, uint8_t heading);
     bool startSupervisorGoToB(uint8_t x,

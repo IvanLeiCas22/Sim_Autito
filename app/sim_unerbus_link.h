@@ -27,7 +27,7 @@ public:
     void sendAlive();
     bool sendSupervisorStatus(const FirmwareSimBridge &bridge, bool force = false);
     void tick(int elapsed_ms,
-              const FirmwareSimBridge &bridge,
+              FirmwareSimBridge &bridge,
               const FirmwareSimBridge::SensorSnapshot &snapshot,
               const FirmwareSimBridge::Command &command);
 
@@ -45,11 +45,11 @@ private:
     static uint16_t absPwmToUInt16(int pwm);
 
     void sendPacket(uint8_t command, const QByteArray &payload);
-    void processPendingDatagrams(const FirmwareSimBridge &bridge,
+    void processPendingDatagrams(FirmwareSimBridge &bridge,
                                  const FirmwareSimBridge::SensorSnapshot &snapshot,
                                  const FirmwareSimBridge::Command &command);
     void handleCommand(const ParsedPacket &packet,
-                       const FirmwareSimBridge &bridge,
+                       FirmwareSimBridge &bridge,
                        const FirmwareSimBridge::SensorSnapshot &snapshot,
                        const FirmwareSimBridge::Command &command);
 

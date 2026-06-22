@@ -23,11 +23,14 @@ constexpr uint8_t kCmdGetYawAngle = 0x75U;
 constexpr uint8_t kCmdSyncMazeColumn = 0x93U;
 constexpr uint8_t kCmdGetSupervisorDebugStatus = 0x9CU;
 constexpr uint8_t kCmdSupervisorStatusUpdate = 0x9FU;
+constexpr uint8_t kCmdClearSupervisorLearnedMap = 0xA9U;
 
 constexpr uint8_t kAppStateMenu = 0U;
 constexpr uint8_t kAppStateRunning = 1U;
 constexpr uint8_t kMenuModeIdle = 0U;
 constexpr uint8_t kMenuModeFindCells = 1U;
+constexpr uint8_t kMenuModeGoToB = 2U;
+constexpr uint8_t kMissionGoToB = 1U;
 
 constexpr uint8_t kSensorDetWallFront = 0x01U;
 constexpr uint8_t kSensorDetWallLeft = 0x02U;
@@ -262,7 +265,7 @@ bool SimUnerbusLink::sendSupervisorStatus(const FirmwareSimBridge &bridge, bool 
 }
 
 void SimUnerbusLink::tick(int elapsed_ms,
-                          const FirmwareSimBridge &bridge,
+                          FirmwareSimBridge &bridge,
                           const FirmwareSimBridge::SensorSnapshot &snapshot,
                           const FirmwareSimBridge::Command &command)
 {
@@ -295,7 +298,7 @@ void SimUnerbusLink::tick(int elapsed_ms,
     lastSupervisorActive_ = supervisorActive;
 }
 
-void SimUnerbusLink::processPendingDatagrams(const FirmwareSimBridge &bridge,
+void SimUnerbusLink::processPendingDatagrams(FirmwareSimBridge &bridge,
                                              const FirmwareSimBridge::SensorSnapshot &snapshot,
                                              const FirmwareSimBridge::Command &command)
 {
@@ -327,7 +330,7 @@ void SimUnerbusLink::processPendingDatagrams(const FirmwareSimBridge &bridge,
 }
 
 void SimUnerbusLink::handleCommand(const ParsedPacket &packet,
-                                   const FirmwareSimBridge &bridge,
+                                   FirmwareSimBridge &bridge,
                                    const FirmwareSimBridge::SensorSnapshot &snapshot,
                                    const FirmwareSimBridge::Command &command)
 {
@@ -339,6 +342,15 @@ void SimUnerbusLink::handleCommand(const ParsedPacket &packet,
     case kCmdGetSupervisorDebugStatus:
         sendPacket(kCmdGetSupervisorDebugStatus, buildSupervisorStatusPayload(bridge));
         break;
+
+    case kCmdClearSupervisorLearnedMap:
+    {
+        bridge.clearSupervisorLearnedMap();
+        QByteArray payload;
+        payload.append(static_cast<char>(kCmdAck));
+        sendPacket(kCmdClearSupervisorLearnedMap, payload);
+        break;
+    }
 
     case kCmdSyncMazeColumn:
         if (!packet.payload.isEmpty()) {
@@ -443,8 +455,15 @@ QByteArray SimUnerbusLink::buildRobotStatusPayload(const FirmwareSimBridge &brid
     QByteArray payload;
     payload.reserve(2);
     const bool running = bridge.isFirmwareControlActive();
+    uint8_t menuMode = kMenuModeIdle;
+
+    if (running) {
+        const FirmwareSimBridge::Debug debug = bridge.debug();
+        menuMode = (debug.supervisor_mission == kMissionGoToB) ? kMenuModeGoToB : kMenuModeFindCells;
+    }
+
     payload.append(static_cast<char>(running ? kAppStateRunning : kAppStateMenu));
-    payload.append(static_cast<char>(running ? kMenuModeFindCells : kMenuModeIdle));
+    payload.append(static_cast<char>(menuMode));
     return payload;
 }
 

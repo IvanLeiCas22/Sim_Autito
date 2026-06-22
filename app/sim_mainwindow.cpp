@@ -59,6 +59,41 @@ QString boolText(bool value)
     return value ? QStringLiteral("true") : QStringLiteral("false");
 }
 
+QString supervisorMissionText(uint8_t mission)
+{
+    switch (mission) {
+    case 0:
+        return QStringLiteral("FIND_CELLS");
+    case 1:
+        return QStringLiteral("GO_A_TO_B");
+    default:
+        return QStringLiteral("unknown(%1)").arg(static_cast<unsigned int>(mission));
+    }
+}
+
+QString supervisorGoToBPhaseText(uint8_t phase)
+{
+    switch (phase) {
+    case 0:
+        return QStringLiteral("idle");
+    case 1:
+        return QStringLiteral("outbound_to_b");
+    case 2:
+        return QStringLiteral("return_to_a");
+    case 3:
+        return QStringLiteral("complete_at_b");
+    case 4:
+        return QStringLiteral("complete_at_a");
+    default:
+        return QStringLiteral("unknown(%1)").arg(static_cast<unsigned int>(phase));
+    }
+}
+
+QString supervisorCostText(uint8_t cost)
+{
+    return (cost == 0xffU) ? QStringLiteral("n/a") : QString::number(static_cast<unsigned int>(cost));
+}
+
 QString tapeKindText(TapeDebugKind kind)
 {
     switch (kind) {
@@ -199,6 +234,7 @@ void MainWindow::setupActions()
     auto *startSupervisorV1Action = new QAction(QStringLiteral("Start supervisor V1"), this);
     auto *startGoToBAction = new QAction(QStringLiteral("Start GO_A_TO_B..."), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
+    auto *clearSupervisorLearnedMapAction = new QAction(QStringLiteral("Clear supervisor learned map"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
     auto *configureRealHmiLinkAction = new QAction(QStringLiteral("Configure Real HMI UDP..."), this);
     auto *sendRealHmiAliveAction = new QAction(QStringLiteral("Send Real HMI alive now"), this);
@@ -228,6 +264,7 @@ void MainWindow::setupActions()
     connect(startSupervisorV1Action, &QAction::triggered, this, [this]() { startSupervisorV1Control(); });
     connect(startGoToBAction, &QAction::triggered, this, [this]() { startGoToBControl(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
+    connect(clearSupervisorLearnedMapAction, &QAction::triggered, this, [this]() { clearSupervisorLearnedMap(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
     connect(configureRealHmiLinkAction, &QAction::triggered, this, [this]() { configureRealHmiLink(); });
     connect(enableRealHmiLinkAction_, &QAction::toggled, this, [this](bool checked) {
@@ -281,6 +318,8 @@ void MainWindow::setupActions()
     firmwareMenu->addAction(startSupervisorV1Action);
     firmwareMenu->addAction(startGoToBAction);
     firmwareMenu->addAction(stopFirmwareControlAction);
+    firmwareMenu->addSeparator();
+    firmwareMenu->addAction(clearSupervisorLearnedMapAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
 
@@ -676,6 +715,17 @@ void MainWindow::stopFirmwareControl()
     refreshTelemetry();
 }
 
+void MainWindow::clearSupervisorLearnedMap()
+{
+    firmwareBridge_.clearSupervisorLearnedMap();
+    resetFirmwareMazeOverlayCache();
+
+    updateSensors();
+    lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    refreshScene();
+    refreshTelemetry();
+}
+
 void MainWindow::tuneFirmwareConfig()
 {
     FirmwareSimBridge::FirmwareConfig currentConfig;
@@ -1003,6 +1053,8 @@ void MainWindow::realHmiTimerStep()
     updateSensors();
     const FirmwareSimBridge::SensorSnapshot snapshot = buildBridgeSnapshot();
     realHmiLink_.tick(100, firmwareBridge_, snapshot, lastCommand_);
+    refreshScene();
+    refreshTelemetry();
 }
 
 void MainWindow::simulationStep()
@@ -1580,6 +1632,15 @@ void MainWindow::refreshTelemetry()
             .arg(debug.supervisor_state)
             .arg(debug.supervisor_action)
             .arg(static_cast<unsigned int>(debug.supervisor_result));
+        text += QStringLiteral("  supervisor_mission: %1 (%2)\n")
+            .arg(supervisorMissionText(debug.supervisor_mission))
+            .arg(static_cast<unsigned int>(debug.supervisor_mission));
+        text += QStringLiteral("  go_to_b: phase=%1 steps=%2 opt_cost=%3 required_improvement=%4 improvement=%5\n")
+            .arg(supervisorGoToBPhaseText(debug.supervisor_go_to_b_phase))
+            .arg(static_cast<unsigned int>(debug.supervisor_go_to_b_outbound_steps))
+            .arg(supervisorCostText(debug.supervisor_go_to_b_optimistic_cost))
+            .arg(static_cast<unsigned int>(debug.supervisor_go_to_b_required_improvement))
+            .arg(boolText(debug.supervisor_go_to_b_improvement_detected));
     } else {
         text += QStringLiteral("  supervisor: n/a\n");
     }

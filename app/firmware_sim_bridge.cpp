@@ -661,10 +661,22 @@ void FirmwareSimBridge::updateSupervisorDebug()
     debug_.supervisor_state = supervisorStateText(supervisorDebug.state);
     debug_.supervisor_action = supervisorActionText(supervisorDebug.current_action);
     debug_.supervisor_result = supervisorDebug.last_result;
+    debug_.supervisor_mission = static_cast<uint8_t>(supervisorDebug.mission);
+    debug_.supervisor_go_to_b_phase = static_cast<uint8_t>(supervisorDebug.go_to_b_phase);
+    debug_.supervisor_go_to_b_outbound_steps = supervisorDebug.go_to_b_outbound_steps;
+    debug_.supervisor_go_to_b_optimistic_cost = supervisorDebug.go_to_b_optimistic_cost;
+    debug_.supervisor_go_to_b_required_improvement = supervisorDebug.go_to_b_required_improvement;
+    debug_.supervisor_go_to_b_improvement_detected = (supervisorDebug.go_to_b_improvement_detected != 0U);
 #else
     debug_.supervisor_state = QStringLiteral("n/a");
     debug_.supervisor_action = QStringLiteral("n/a");
     debug_.supervisor_result = 0;
+    debug_.supervisor_mission = 0U;
+    debug_.supervisor_go_to_b_phase = 0U;
+    debug_.supervisor_go_to_b_outbound_steps = 0U;
+    debug_.supervisor_go_to_b_optimistic_cost = 0xffU;
+    debug_.supervisor_go_to_b_required_improvement = 0U;
+    debug_.supervisor_go_to_b_improvement_detected = false;
 #endif
 }
 
@@ -1100,6 +1112,25 @@ bool FirmwareSimBridge::resetSupervisorWithInitialPose(uint8_t x, uint8_t y, uin
 #endif
 }
 
+bool FirmwareSimBridge::clearSupervisorLearnedMap()
+{
+    ensureFirmwareCoreInitialized();
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    App_NavSupervisor_ClearLearnedMap();
+    updateSupervisorDebug();
+    updateMazeDebug();
+    updateFirmwareMazeMapDebug();
+    debug_.state = QStringLiteral("FW: learned map cleared");
+    debug_.reason = QStringLiteral("Supervisor learned map cleared");
+    return true;
+#else
+    debug_.state = QStringLiteral("STUB");
+    debug_.reason = QStringLiteral("Learned map clear unsupported without app_nav_supervisor");
+    return false;
+#endif
+}
+
 bool FirmwareSimBridge::startSupervisorV1()
 {
     return startSupervisorV1Internal(false, 0U, 0U, 0U);
@@ -1147,7 +1178,7 @@ bool FirmwareSimBridge::startSupervisorGoToB(uint8_t x,
         return false;
     }
 
-    if (!App_NavSupervisor_ResetWithInitialPose(x, y, static_cast<HeadingTypeDef>(heading))) {
+    if (!App_NavSupervisor_ResetRunPreservingMapWithInitialPose(x, y, static_cast<HeadingTypeDef>(heading))) {
         enabled_ = false;
         control_mode_ = ControlMode::TelemetryOnly;
         debug_.enabled = enabled_;
@@ -1574,6 +1605,12 @@ bool FirmwareSimBridge::writeSupervisorDebugStatusPayload(FirmwareSupervisorDebu
     (*out)[6] = supervisorDebug.maze_heading;
     (*out)[7] = supervisorDebug.maze_cell;
     (*out)[8] = supervisorDebug.special_found_count;
+    (*out)[9] = static_cast<uint8_t>(supervisorDebug.mission);
+    (*out)[10] = static_cast<uint8_t>(supervisorDebug.go_to_b_phase);
+    (*out)[11] = supervisorDebug.go_to_b_outbound_steps;
+    (*out)[12] = supervisorDebug.go_to_b_optimistic_cost;
+    (*out)[13] = supervisorDebug.go_to_b_required_improvement;
+    (*out)[14] = supervisorDebug.go_to_b_improvement_detected;
     return true;
 #else
     out->fill(0U);
