@@ -26,6 +26,11 @@ app_nav_supervisor.h
 app_find_cells_policy.c
 app_find_cells_policy.h
 
+app_go_to_b_policy.c
+app_go_to_b_policy.h
+app_route_planner.c
+app_route_planner.h
+
 app_maze.c
 app_maze.h
 app_maze_types.h
@@ -43,11 +48,14 @@ app_nav
 
 app_nav_supervisor
   Supervisor de misión.
-  Ejecuta FIND_CELLS, arranca/detiene primitivas, actualiza mapa y reporta debug.
+  Ejecuta FIND_CELLS y GO_A_TO_B, arranca/detiene primitivas, actualiza mapa y reporta debug.
 
 app_find_cells_policy
   Política de exploración.
   Decide vecino inmediato, ruta a frontera o BACKTRACK_REQUIRED usando BFS/flood conceptual.
+
+app_go_to_b_policy / app_route_planner
+  Política de ruta hacia B y planner BFS/optimista sobre el mapa aprendido.
 
 app_maze
   Mapa lógico portable.
@@ -87,10 +95,12 @@ Después de sincronizar:
 firmware_core/pid_controller.c
 firmware_core/app_maze.c
 firmware_core/app_find_cells_policy.c
+firmware_core/app_go_to_b_policy.c
+firmware_core/app_route_planner.c
 firmware_core/app_nav_supervisor.c
 ```
 
-Esto permite que el simulador siga compilando aunque la copia portable esté incompleta, pero una navegación real de `FIND_CELLS` requiere el set completo.
+Esto permite que el simulador siga compilando aunque la copia portable esté incompleta, pero una navegación real de `FIND_CELLS`/`GO_A_TO_B` requiere el set completo.
 
 ## Restricciones de portabilidad
 
@@ -112,7 +122,7 @@ Si un archivo necesita HAL o Qt, todavía no está suficientemente extraído par
 
 `FirmwareSimBridge` puede incluir headers de `firmware_core` dentro de `extern "C"`, construir `AppNavInput`, llamar funciones portables y copiar `AppNavOutput` al simulador.
 
-El bridge no debe modificar reglas internas del firmware. Si se necesita cambiar navegación, hacerlo en `firmware_core` y luego sincronizar desde STM32.
+El bridge no debe modificar reglas internas del firmware. Si se necesita cambiar navegación, hacerlo en el proyecto STM32 real y luego sincronizar `firmware_core` desde STM32.
 
 ## Agregar una nueva primitiva o estado de supervisor
 

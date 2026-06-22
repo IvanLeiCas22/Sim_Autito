@@ -128,12 +128,12 @@ Los modos de primitivas sirven para depuración física/sensorial. La navegació
 
 ## SupervisorV1
 
-Al iniciar `SupervisorV1`, el bridge debe:
+`SupervisorV1` cubre las misiones portables `FIND_CELLS` y `GO_A_TO_B`. Al iniciar una run de supervisor, el bridge debe:
 
 1. asegurar que `firmware_core` esté inicializado;
 2. detener primitivas directas activas;
 3. resetear el supervisor o resetearlo con pose inicial explícita;
-4. configurar la misión `APP_NAV_SUPERVISOR_MISSION_FIND_CELLS`;
+4. configurar la misión solicitada;
 5. llamar a `App_NavSupervisor_Start()`;
 6. pasar a `ControlMode::SupervisorV1` solo si el arranque fue exitoso;
 7. dejar `TelemetryOnly` y PWM cero si falla algún paso.
@@ -185,6 +185,8 @@ Reglas:
 - `CMD_STOP_SUPERVISOR_RUN` deja pendiente la detención del supervisor/timer de simulación.
 
 Las coordenadas expuestas por UNERBUS son coordenadas lógicas STM32. La conversión hacia filas visuales del simulador debe quedar localizada en el render/UI. La conversión inversa desde `A` lógica hacia pose física del `SimRobot` debe quedar localizada en `MainWindow`, porque depende de `SimWorld`.
+
+El simulador no dibuja indicadores visuales A/B en su mapa. Esa responsabilidad queda en la HMI Qt real. En el simulador, A/B son estado de control y sincronización, no overlay visual.
 
 ## Tick de SupervisorV1
 

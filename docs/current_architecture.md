@@ -2,7 +2,7 @@
 
 Estado: simulador Qt/C++ usado como banco físico/sensorial para ejecutar y depurar el núcleo portable del firmware STM32 real.
 
-Última actualización de este documento: integración del supervisor portable `FIND_CELLS`, `FirmwareSimBridge` activo y soporte de `CENTER_BY_FRONT_TAPE_FOR_PIVOT` para backtracking abierto.
+Última actualización de este documento: integración del supervisor portable `FIND_CELLS`/`GO_A_TO_B`, sincronización A/B con la HMI real y enlace UDP estable para control desde la HMI.
 
 ## Objetivo
 
@@ -25,8 +25,9 @@ La navegación activa debe venir del firmware portable copiado desde el proyecto
 ```text
 app/
   main.cpp
-  sim_mainwindow.cpp/.h          UI Qt, carga de mapas, render y telemetría
+  sim_mainwindow.cpp/.h          UI Qt, carga de mapas, render, telemetría y aplicación de pose física A
   firmware_sim_bridge.cpp/.h     Adaptador entre sensores simulados y firmware_core
+  sim_unerbus_link.cpp/.h        Enlace UNERBUS/UDP para integración con la HMI real
 
 sim/
   sim_world.cpp/.h               Geometría del mapa, paredes, cintas, targets, raycast
@@ -34,8 +35,10 @@ sim/
 
 firmware_core/
   app_nav.*                      Percepción, controladores y primitivas portables
-  app_nav_supervisor.*           Supervisor de misión FIND_CELLS
+  app_nav_supervisor.*           Supervisor de misión FIND_CELLS / GO_A_TO_B
   app_find_cells_policy.*        Política de exploración/backtracking por flood/BFS
+  app_go_to_b_policy.*           Política de ruta hacia B usando mapa aprendido
+  app_route_planner.*            Planner BFS/optimista portable
   app_maze.*                     Mapa lógico portable
   pid_controller.*               PID/Q16 portable
   README.md                      Reglas de sincronización y ownership
@@ -95,7 +98,7 @@ Responsabilidades principales:
 - entregar `dt_ms`, yaw y yaw-rate;
 - inicializar/configurar `app_nav` y `app_nav_supervisor`;
 - ejecutar modos de prueba de primitivas cuando se seleccionan desde la UI;
-- ejecutar `SupervisorV1` para la misión `FIND_CELLS`;
+- ejecutar `SupervisorV1` para las misiones `FIND_CELLS` y `GO_A_TO_B`;
 - copiar `AppNavOutput.left_motor_pwm/right_motor_pwm` al comando del robot simulado;
 - exponer snapshots de debug y mapa para telemetría.
 
@@ -123,7 +126,7 @@ Pivot180
 SupervisorV1
 ```
 
-`SupervisorV1` es el modo relevante para validar la navegación portable real. Al arrancar, configura el supervisor en misión `APP_NAV_SUPERVISOR_MISSION_FIND_CELLS` y opcionalmente resetea la pose inicial del mapa lógico.
+`SupervisorV1` es el modo relevante para validar la navegación portable real. Al arrancar, configura el supervisor en misión `APP_NAV_SUPERVISOR_MISSION_FIND_CELLS` o `APP_NAV_SUPERVISOR_MISSION_GO_A_TO_B`, según la solicitud de la UI local o de la HMI real.
 
 ## Ownership de navegación portable
 
@@ -141,6 +144,9 @@ app_nav_supervisor
 app_find_cells_policy
   Decisión de exploración: vecinos inmediatos no visitados,
   ruta a frontera y backtracking requerido.
+
+app_go_to_b_policy / app_route_planner
+  Decisión de ruta hacia B y comparación optimista para aprendizaje entre runs.
 
 app_maze
   Pose lógica, paredes conocidas/presentes, celdas visitadas y especiales.
@@ -164,6 +170,46 @@ APP_NAV_SUPERVISOR_ACTION_CENTER_FRONT_TAPE_FOR_PIVOT = 7
 ```
 
 Este estado/acción se usa para backtracking abierto: cuando el robot no está en dead-end pero debe girar 180° desde una celda abierta, primero se centra con cinta frontal y luego pivota.
+
+## Integración con la HMI real
+
+La HMI Qt real puede controlar el simulador por UNERBUS/UDP. El simulador debe comportarse como endpoint estable, no como emisor desde puerto efímero.
+
+Puertos por defecto:
+
+```text
+HMI real local/listen: 30010
+Simulador local/listen: 30011
+```
+
+Flujo esperado:
+
+```text
+Simulador -> HMI real: telemetría/alive desde 30011 hacia 30010
+HMI real -> Simulador: comandos UNERBUS hacia 30011
+```
+
+El simulador debe soportar la configuración A/B de la HMI real:
+
+```text
+CMD_SET_SUPERVISOR_INITIAL_POSE
+CMD_GET_SUPERVISOR_INITIAL_POSE
+CMD_SET_SUPERVISOR_GOAL_CELL
+CMD_GET_SUPERVISOR_GOAL_CELL
+CMD_START_SUPERVISOR_RUN
+CMD_STOP_SUPERVISOR_RUN
+```
+
+La pose inicial `A` tiene dos representaciones que deben mantenerse coherentes:
+
+```text
+A lógica STM32        estado de supervisor / UNERBUS
+pose física SimRobot  posición real del robot virtual para sensores y render
+```
+
+Al cargar o resetear un mapa JSON, `A` se deriva de `startXMm`, `startYMm` y `startYawDeg`. Cuando la HMI real envía `SET A`, el simulador debe actualizar la `A` lógica y mover físicamente el `SimRobot` a la celda/orientación correspondiente antes de iniciar una run.
+
+Los indicadores visuales `A/B` no forman parte del simulador. La visualización de inicio/meta queda en la HMI real; el simulador solo debe exponer y aplicar el estado lógico/físico correcto.
 
 ## Gate de salida PWM del supervisor
 
@@ -197,7 +243,8 @@ Casos relevantes:
 - smooth turns;
 - dead-ends;
 - backtracking abierto por cinta frontal;
-- fronteras de exploración.
+- fronteras de exploración;
+- runs `GO_A_TO_B` usando mapa aprendido y meta B configurada desde la HMI real.
 
 ## Regla de arquitectura principal
 
