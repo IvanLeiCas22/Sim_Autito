@@ -80,6 +80,8 @@ private:
     void configureRealHmiLink();
     void toggleRealHmiLink(bool enabled);
     void realHmiTimerStep();
+    void startSupervisorRunFromRealHmi(uint8_t run_mode);
+    void stopSupervisorRunFromRealHmi();
     void simulationStep();
     void manualJog(double distance_mm, double delta_yaw_deg);
     void rotateManualJog(double delta_yaw_deg);
@@ -87,6 +89,14 @@ private:
     void updateSensors();
     FirmwareSimBridge::SensorSnapshot buildBridgeSnapshot() const;
     bool computeFirmwareInitialMazePose(uint8_t *x, uint8_t *y, uint8_t *heading) const;
+    bool computeWorldPoseFromFirmwareMazePose(uint8_t x,
+                                              uint8_t y,
+                                              uint8_t heading,
+                                              double *world_x_mm,
+                                              double *world_y_mm,
+                                              double *yaw_deg) const;
+    bool applySupervisorInitialPoseToRobot(const FirmwareSimBridge::SupervisorInitialPose &pose);
+    bool applyConfiguredSupervisorInitialPoseToRobot();
 
     void refreshScene();
     void clearNonFirmwareMazeOverlayItems();

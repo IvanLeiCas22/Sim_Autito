@@ -27,6 +27,21 @@ AppNavOutput
 PWM para SimRobot + telemetría Qt
 ```
 
+Para integración con la HMI real, el ownership queda separado:
+
+```text
+SimUnerbusLink
+    recibe comandos UNERBUS de la HMI real y deja solicitudes pendientes
+
+FirmwareSimBridge
+    guarda la pose inicial A, la meta B y ejecuta el supervisor portable
+
+MainWindow
+    convierte A lógica STM32 a pose física del SimRobot y arranca/detiene el timer
+```
+
+`SimUnerbusLink` no debe mover el robot virtual ni arrancar directamente el supervisor. Eso queda en `MainWindow`, porque solo esa capa tiene acceso coherente a `SimRobot`, `SimWorld` y al timer de simulación.
+
 ## Entrada al firmware portable
 
 `FirmwareSimBridge::tick(...)` debe construir un `AppNavInput` coherente a partir de `SensorSnapshot`.
@@ -139,14 +154,14 @@ celda objetivo B: x, y, valid
 
 Reglas:
 
-- `CMD_GET_SUPERVISOR_INITIAL_POSE` devuelve la pose inicial configurada del simulador.
-- `CMD_SET_SUPERVISOR_INITIAL_POSE` actualiza la pose inicial usada por el supervisor.
+- `CMD_GET_SUPERVISOR_INITIAL_POSE` devuelve la pose inicial configurada del simulador. Tras cargar o resetear un mapa, esta pose se deriva del `.json`; tras `SET`, queda definida por la HMI real.
+- `CMD_SET_SUPERVISOR_INITIAL_POSE` actualiza la pose inicial usada por el supervisor y deja pendiente que `MainWindow` mueva físicamente el `SimRobot` a esa celda/orientación.
 - `CMD_GET_SUPERVISOR_GOAL_CELL` devuelve la celda B configurada y su validez.
 - `CMD_SET_SUPERVISOR_GOAL_CELL` actualiza B.
-- `CMD_START_SUPERVISOR_RUN` arranca `FIND_CELLS` o `GO_A_TO_B` usando la pose/goal configurados, no un diálogo local ni otra fuente paralela.
-- `CMD_STOP_SUPERVISOR_RUN` detiene el control supervisor y la simulación iniciada por HMI.
+- `CMD_START_SUPERVISOR_RUN` deja pendiente el arranque de `FIND_CELLS` o `GO_A_TO_B`; `MainWindow` aplica primero la pose física A configurada y luego arranca el supervisor portable y el timer.
+- `CMD_STOP_SUPERVISOR_RUN` deja pendiente la detención del supervisor/timer de simulación.
 
-Las coordenadas expuestas por UNERBUS son coordenadas lógicas STM32. La conversión hacia filas visuales del simulador debe quedar localizada en el render/UI.
+Las coordenadas expuestas por UNERBUS son coordenadas lógicas STM32. La conversión hacia filas visuales del simulador debe quedar localizada en el render/UI. La conversión inversa desde `A` lógica hacia pose física del `SimRobot` debe quedar localizada en `MainWindow`, porque depende de `SimWorld`.
 
 ## Tick de SupervisorV1
 

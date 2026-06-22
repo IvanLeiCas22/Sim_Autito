@@ -25,6 +25,8 @@ public:
 
     bool consumeStartSimulationRequest();
     bool consumeStopSimulationRequest();
+    bool consumeSupervisorInitialPoseSetRequest(FirmwareSimBridge::SupervisorInitialPose *pose_out);
+    bool consumeStartSupervisorRunRequest(uint8_t *run_mode_out);
     void resetTiming();
     void sendAlive();
     bool sendSupervisorStatus(const FirmwareSimBridge &bridge, bool force = false);
@@ -75,6 +77,10 @@ private:
     bool lastSupervisorActive_ = false;
     bool startSimulationRequested_ = false;
     bool stopSimulationRequested_ = false;
+    bool supervisorInitialPoseSetRequested_ = false;
+    FirmwareSimBridge::SupervisorInitialPose requestedSupervisorInitialPose_;
+    bool startSupervisorRunRequested_ = false;
+    uint8_t requestedSupervisorRunMode_ = FirmwareSimBridge::kSupervisorRunModeIdle;
     QString lastEvent_ = QStringLiteral("idle");
 };
 

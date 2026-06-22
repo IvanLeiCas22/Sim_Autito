@@ -160,6 +160,28 @@ bool SimUnerbusLink::consumeStopSimulationRequest()
     return requested;
 }
 
+bool SimUnerbusLink::consumeSupervisorInitialPoseSetRequest(FirmwareSimBridge::SupervisorInitialPose *pose_out)
+{
+    if (pose_out == nullptr || !supervisorInitialPoseSetRequested_) {
+        return false;
+    }
+
+    *pose_out = requestedSupervisorInitialPose_;
+    supervisorInitialPoseSetRequested_ = false;
+    return true;
+}
+
+bool SimUnerbusLink::consumeStartSupervisorRunRequest(uint8_t *run_mode_out)
+{
+    if (run_mode_out == nullptr || !startSupervisorRunRequested_) {
+        return false;
+    }
+
+    *run_mode_out = requestedSupervisorRunMode_;
+    startSupervisorRunRequested_ = false;
+    return true;
+}
+
 void SimUnerbusLink::resetTiming()
 {
     aliveElapsedMs_ = kAlivePeriodMs;
@@ -361,9 +383,14 @@ void SimUnerbusLink::handleCommand(const ParsedPacket &packet,
 
     case kCmdSetSupervisorInitialPose:
         if (packet.payload.size() >= 3) {
-            const bool ok = bridge.setSupervisorInitialPose(toByte(packet.payload.at(0)),
-                                                            toByte(packet.payload.at(1)),
-                                                            toByte(packet.payload.at(2)));
+            const uint8_t x = toByte(packet.payload.at(0));
+            const uint8_t y = toByte(packet.payload.at(1));
+            const uint8_t heading = toByte(packet.payload.at(2));
+            const bool ok = bridge.setSupervisorInitialPose(x, y, heading);
+            if (ok) {
+                requestedSupervisorInitialPose_ = FirmwareSimBridge::SupervisorInitialPose{x, y, heading, true};
+                supervisorInitialPoseSetRequested_ = true;
+            }
             lastEvent_ = ok
                 ? QStringLiteral("set supervisor initial pose")
                 : QStringLiteral("rejected supervisor initial pose");
@@ -394,22 +421,23 @@ void SimUnerbusLink::handleCommand(const ParsedPacket &packet,
 
     case kCmdStartSupervisorRun:
         if (!packet.payload.isEmpty()) {
-            const bool started = bridge.startSupervisorRun(toByte(packet.payload.at(0)));
-            startSimulationRequested_ = started;
-            stopSimulationRequested_ = !started;
-            lastEvent_ = started
-                ? QStringLiteral("started supervisor run")
-                : QStringLiteral("supervisor run start failed");
+            requestedSupervisorRunMode_ = toByte(packet.payload.at(0));
+            startSupervisorRunRequested_ = true;
+            startSimulationRequested_ = false;
+            stopSimulationRequested_ = false;
+            lastEvent_ = QStringLiteral("requested supervisor run start");
         } else {
+            startSupervisorRunRequested_ = false;
             stopSimulationRequested_ = true;
             lastEvent_ = QStringLiteral("bad supervisor run payload");
         }
         break;
 
     case kCmdStopSupervisorRun:
-        bridge.stopControl();
+        startSupervisorRunRequested_ = false;
+        startSimulationRequested_ = false;
         stopSimulationRequested_ = true;
-        lastEvent_ = QStringLiteral("stopped supervisor run");
+        lastEvent_ = QStringLiteral("requested supervisor run stop");
         break;
 
     case kCmdGetSupervisorDebugStatus:

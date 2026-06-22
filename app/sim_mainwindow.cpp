@@ -1055,6 +1055,49 @@ void MainWindow::realHmiTimerStep()
     realHmiLink_.tick(100, firmwareBridge_, snapshot, lastCommand_);
 
     if (realHmiLink_.consumeStopSimulationRequest()) {
+        stopSupervisorRunFromRealHmi();
+        return;
+    }
+
+    FirmwareSimBridge::SupervisorInitialPose requestedInitialPose;
+    if (realHmiLink_.consumeSupervisorInitialPoseSetRequest(&requestedInitialPose)) {
+        (void)applySupervisorInitialPoseToRobot(requestedInitialPose);
+    }
+
+    uint8_t requestedRunMode = FirmwareSimBridge::kSupervisorRunModeIdle;
+    if (realHmiLink_.consumeStartSupervisorRunRequest(&requestedRunMode)) {
+        startSupervisorRunFromRealHmi(requestedRunMode);
+        return;
+    }
+
+    refreshScene();
+    refreshTelemetry();
+}
+
+void MainWindow::startSupervisorRunFromRealHmi(uint8_t run_mode)
+{
+    if (!applyConfiguredSupervisorInitialPoseToRobot()) {
+        simulationRunning_ = false;
+        if (simulationTimer_ != nullptr) {
+            simulationTimer_->stop();
+        }
+        lastCommand_ = FirmwareSimBridge::Command{};
+        refreshScene();
+        refreshTelemetry();
+        return;
+    }
+
+    resetFirmwareMazeOverlayCache();
+    const bool started = firmwareBridge_.startSupervisorRun(run_mode);
+
+    if (started) {
+        simulationRunning_ = true;
+        if (simulationTimer_ != nullptr) {
+            simulationTimer_->start();
+        }
+        updateSensors();
+        lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    } else {
         simulationRunning_ = false;
         if (simulationTimer_ != nullptr) {
             simulationTimer_->stop();
@@ -1062,15 +1105,13 @@ void MainWindow::realHmiTimerStep()
         lastCommand_ = FirmwareSimBridge::Command{};
     }
 
-    if (realHmiLink_.consumeStartSimulationRequest()) {
-        simulationRunning_ = true;
-        if (simulationTimer_ != nullptr) {
-            simulationTimer_->start();
-        }
-    }
-
     refreshScene();
     refreshTelemetry();
+}
+
+void MainWindow::stopSupervisorRunFromRealHmi()
+{
+    stopFirmwareControl();
 }
 
 void MainWindow::simulationStep()
@@ -1240,6 +1281,82 @@ bool MainWindow::computeFirmwareInitialMazePose(uint8_t *x, uint8_t *y, uint8_t 
     *y = static_cast<uint8_t>(logicalY);
     *heading = logicalHeading;
     return true;
+}
+
+bool MainWindow::computeWorldPoseFromFirmwareMazePose(uint8_t x,
+                                                      uint8_t y,
+                                                      uint8_t heading,
+                                                      double *world_x_mm,
+                                                      double *world_y_mm,
+                                                      double *yaw_deg) const
+{
+    if (world_x_mm == nullptr || world_y_mm == nullptr || yaw_deg == nullptr || world_.cellSizeMm() <= 0.0) {
+        return false;
+    }
+
+    if (x >= FirmwareSimBridge::kFirmwareMazeWidth
+        || y >= FirmwareSimBridge::kFirmwareMazeHeight
+        || heading > FirmwareSimBridge::kFirmwareMazeHeadingWest) {
+        return false;
+    }
+
+    const int worldCol = static_cast<int>(x);
+    const int worldRow = world_.rows() - 1 - static_cast<int>(y);
+    if (worldCol < 0 || worldCol >= world_.cols() || worldRow < 0 || worldRow >= world_.rows()) {
+        return false;
+    }
+
+    *world_x_mm = (static_cast<double>(worldCol) + 0.5) * world_.cellSizeMm();
+    *world_y_mm = (static_cast<double>(worldRow) + 0.5) * world_.cellSizeMm();
+
+    switch (heading) {
+    case FirmwareSimBridge::kFirmwareMazeHeadingEast:
+        *yaw_deg = 0.0;
+        break;
+    case FirmwareSimBridge::kFirmwareMazeHeadingSouth:
+        *yaw_deg = 90.0;
+        break;
+    case FirmwareSimBridge::kFirmwareMazeHeadingWest:
+        *yaw_deg = 180.0;
+        break;
+    case FirmwareSimBridge::kFirmwareMazeHeadingNorth:
+    default:
+        *yaw_deg = 270.0;
+        break;
+    }
+
+    return true;
+}
+
+bool MainWindow::applySupervisorInitialPoseToRobot(const FirmwareSimBridge::SupervisorInitialPose &pose)
+{
+    double worldX = 0.0;
+    double worldY = 0.0;
+    double yawDeg = 0.0;
+    if (!pose.valid || !computeWorldPoseFromFirmwareMazePose(pose.x, pose.y, pose.heading, &worldX, &worldY, &yawDeg)) {
+        return false;
+    }
+
+    simulationRunning_ = false;
+    if (simulationTimer_ != nullptr) {
+        simulationTimer_->stop();
+    }
+    firmwareBridge_.stopControl();
+
+    robot_.setPose(worldX, worldY, yawDeg);
+    lastCommand_ = FirmwareSimBridge::Command{};
+    lastManualJogDescription_ = QStringLiteral("HMI initial pose (%1, %2)")
+        .arg(pose.x)
+        .arg(pose.y);
+
+    updateSensors();
+    lastCommand_ = firmwareBridge_.tick(buildBridgeSnapshot());
+    return true;
+}
+
+bool MainWindow::applyConfiguredSupervisorInitialPoseToRobot()
+{
+    return applySupervisorInitialPoseToRobot(firmwareBridge_.supervisorInitialPose());
 }
 
 void MainWindow::clearNonFirmwareMazeOverlayItems()
