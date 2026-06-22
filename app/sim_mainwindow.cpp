@@ -994,16 +994,23 @@ void MainWindow::tuneFirmwareConfig()
 void MainWindow::configureRealHmiLink()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("Real HMI UDP endpoint"));
+    dialog.setWindowTitle(QStringLiteral("Real HMI UDP link"));
 
     auto *layout = new QFormLayout(&dialog);
     auto *hostEdit = new QLineEdit(realHmiLink_.remoteHost(), &dialog);
-    auto *portSpin = new QSpinBox(&dialog);
-    portSpin->setRange(1, 65535);
-    portSpin->setValue(realHmiLink_.remotePort() == 0U ? 30010 : realHmiLink_.remotePort());
+    auto *hmiPortSpin = new QSpinBox(&dialog);
+    hmiPortSpin->setRange(1, 65535);
+    hmiPortSpin->setValue(realHmiLink_.remotePort() == 0U ? 30010 : realHmiLink_.remotePort());
+
+    auto *simListenPortSpin = new QSpinBox(&dialog);
+    simListenPortSpin->setRange(1, 65535);
+    simListenPortSpin->setValue(realHmiLink_.localPort() == 0U
+        ? SimUnerbusLink::kDefaultLocalPort
+        : realHmiLink_.localPort());
 
     layout->addRow(QStringLiteral("HMI IP:"), hostEdit);
-    layout->addRow(QStringLiteral("HMI UDP local port:"), portSpin);
+    layout->addRow(QStringLiteral("HMI UDP local port:"), hmiPortSpin);
+    layout->addRow(QStringLiteral("Sim listen port:"), simListenPortSpin);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     layout->addRow(buttons);
@@ -1014,7 +1021,17 @@ void MainWindow::configureRealHmiLink()
         return;
     }
 
-    if (!realHmiLink_.configureRemote(hostEdit->text(), static_cast<quint16>(portSpin->value()))) {
+    if (!realHmiLink_.configureLocalPort(static_cast<quint16>(simListenPortSpin->value()))) {
+        QMessageBox::warning(this,
+                             QStringLiteral("Real HMI UDP"),
+                             QStringLiteral("Invalid or unavailable simulator listen port."));
+        if (enableRealHmiLinkAction_ != nullptr) {
+            enableRealHmiLinkAction_->setChecked(false);
+        }
+        return;
+    }
+
+    if (!realHmiLink_.configureRemote(hostEdit->text(), static_cast<quint16>(hmiPortSpin->value()))) {
         QMessageBox::warning(this,
                              QStringLiteral("Real HMI UDP"),
                              QStringLiteral("Invalid HMI endpoint. Use an IP address and a non-zero UDP port."));

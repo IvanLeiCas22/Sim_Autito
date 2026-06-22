@@ -82,8 +82,40 @@ uint8_t buildDetectionFlags(const FirmwareSimBridge::Debug &debug)
 SimUnerbusLink::SimUnerbusLink()
 {
     remoteConfigured_ = configureRemote(remoteHost_, remotePort_);
-    socket_.bind(QHostAddress::AnyIPv4, 0U, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    (void)configureLocalPort(kDefaultLocalPort);
     resetTiming();
+}
+
+bool SimUnerbusLink::configureLocalPort(quint16 port)
+{
+    if (port == 0U) {
+        lastEvent_ = QStringLiteral("invalid local port");
+        return false;
+    }
+
+    if (socket_.state() == QUdpSocket::BoundState && socket_.localPort() == port) {
+        lastEvent_ = QStringLiteral("local port already configured");
+        return true;
+    }
+
+    const quint16 previousPort = socket_.localPort();
+    socket_.close();
+
+    if (socket_.bind(QHostAddress::AnyIPv4, port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+        lastEvent_ = QStringLiteral("local listen port configured");
+        resetTiming();
+        return true;
+    }
+
+    lastEvent_ = QStringLiteral("failed to bind local port %1").arg(port);
+
+    if (previousPort != 0U) {
+        (void)socket_.bind(QHostAddress::AnyIPv4,
+                           previousPort,
+                           QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    }
+
+    return false;
 }
 
 bool SimUnerbusLink::configureRemote(const QString &host, quint16 port)
@@ -138,7 +170,7 @@ quint16 SimUnerbusLink::localPort() const
 
 QString SimUnerbusLink::statusText() const
 {
-    return QStringLiteral("enabled=%1 remote=%2:%3 local_port=%4 last=%5")
+    return QStringLiteral("enabled=%1 hmi_remote=%2:%3 sim_listen_port=%4 last=%5")
         .arg(enabled_ ? QStringLiteral("true") : QStringLiteral("false"))
         .arg(remoteConfigured_ ? remoteHost_ : QStringLiteral("invalid"))
         .arg(remoteConfigured_ ? QString::number(remotePort_) : QStringLiteral("-"))

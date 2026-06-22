@@ -15,6 +15,9 @@ class SimUnerbusLink
 public:
     SimUnerbusLink();
 
+    static constexpr quint16 kDefaultLocalPort = 30011U;
+
+    bool configureLocalPort(quint16 port);
     bool configureRemote(const QString &host, quint16 port);
     void setEnabled(bool enabled);
     bool isEnabled() const;

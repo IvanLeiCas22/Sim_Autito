@@ -42,6 +42,29 @@ MainWindow
 
 `SimUnerbusLink` no debe mover el robot virtual ni arrancar directamente el supervisor. Eso queda en `MainWindow`, porque solo esa capa tiene acceso coherente a `SimRobot`, `SimWorld` y al timer de simulación.
 
+## Enlace UDP con la HMI real
+
+El enlace UNERBUS simulado usa dos puertos distintos:
+
+```text
+HMI real puerto local por defecto: 30010
+Simulador puerto local/listen por defecto: 30011
+```
+
+El simulador debe escuchar comandos de la HMI real en un puerto local estable. No debe depender de un puerto UDP efímero, porque la HMI real guarda el endpoint remoto y seguiría enviando comandos al puerto viejo si el simulador se reinicia.
+
+El flujo esperado es:
+
+```text
+Simulador -> HMI real: telemetría/alive desde puerto 30011 hacia puerto 30010
+HMI real -> Simulador: comandos UNERBUS hacia puerto 30011
+```
+
+En el menú `Real HMI UDP`, `HMI UDP local port` es el puerto donde escucha la HMI real. `Sim listen port` es el puerto donde escucha el simulador y debe coincidir con el puerto remoto aprendido/mostrado por la HMI real.
+
+Si la HMI real queda apuntando a un puerto viejo tras pruebas con versiones anteriores, desconectar/reconectar UDP o reiniciar ambos programas una vez permite que aprenda el puerto estable del simulador.
+
+
 ## Entrada al firmware portable
 
 `FirmwareSimBridge::tick(...)` debe construir un `AppNavInput` coherente a partir de `SensorSnapshot`.
