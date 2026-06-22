@@ -22,7 +22,12 @@ public:
     static constexpr uint8_t kFirmwareMazeHeadingEast = 1;
     static constexpr uint8_t kFirmwareMazeHeadingSouth = 2;
     static constexpr uint8_t kFirmwareMazeHeadingWest = 3;
+    static constexpr int kFirmwareSupervisorDebugStatusSize = 9;
+    static constexpr int kFirmwareMazeColumnSyncPayloadSize = 1 + kFirmwareMazeHeight + 3;
+
     using FirmwareMazeCells = std::array<std::array<uint8_t, kFirmwareMazeHeight>, kFirmwareMazeWidth>;
+    using FirmwareSupervisorDebugStatusPayload = std::array<uint8_t, kFirmwareSupervisorDebugStatusSize>;
+    using FirmwareMazeColumnSyncPayload = std::array<uint8_t, kFirmwareMazeColumnSyncPayloadSize>;
 
     enum class ControlMode
     {
@@ -169,6 +174,8 @@ public:
     bool getFirmwareConfig(FirmwareConfig *out) const;
     bool setFirmwareConfig(const FirmwareConfig &config);
     bool resetFirmwareConfigToSimulationDefaults();
+    bool writeSupervisorDebugStatusPayload(FirmwareSupervisorDebugStatusPayload *out) const;
+    bool writeFirmwareMazeColumnSyncPayload(uint8_t requested_col, FirmwareMazeColumnSyncPayload *out) const;
 
 private:
     void ensureFirmwareCoreInitialized();

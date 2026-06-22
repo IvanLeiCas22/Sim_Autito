@@ -17,6 +17,7 @@
 #include <QKeySequence>
 #include <QList>
 #include <QLineF>
+#include <QLineEdit>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QFont>
@@ -115,6 +116,12 @@ MainWindow::MainWindow(QWidget *parent)
         simulationStep();
     });
 
+    realHmiTimer_ = new QTimer(this);
+    realHmiTimer_->setInterval(100);
+    connect(realHmiTimer_, &QTimer::timeout, this, [this]() {
+        realHmiTimerStep();
+    });
+
     resetSimulation();
 
     // The first fit must run after Qt has completed the initial layout.
@@ -193,6 +200,10 @@ void MainWindow::setupActions()
     auto *startGoToBAction = new QAction(QStringLiteral("Start GO_A_TO_B..."), this);
     auto *stopFirmwareControlAction = new QAction(QStringLiteral("Stop firmware control"), this);
     auto *tuneFirmwareConfigAction = new QAction(QStringLiteral("Tune firmware PID/config"), this);
+    auto *configureRealHmiLinkAction = new QAction(QStringLiteral("Configure Real HMI UDP..."), this);
+    auto *sendRealHmiAliveAction = new QAction(QStringLiteral("Send Real HMI alive now"), this);
+    enableRealHmiLinkAction_ = new QAction(QStringLiteral("Enable Real HMI UDP telemetry"), this);
+    enableRealHmiLinkAction_->setCheckable(true);
 
     loadAction->setShortcut(QKeySequence::Open);
     resetAction->setShortcut(QKeySequence(QStringLiteral("R")));
@@ -218,6 +229,14 @@ void MainWindow::setupActions()
     connect(startGoToBAction, &QAction::triggered, this, [this]() { startGoToBControl(); });
     connect(stopFirmwareControlAction, &QAction::triggered, this, [this]() { stopFirmwareControl(); });
     connect(tuneFirmwareConfigAction, &QAction::triggered, this, [this]() { tuneFirmwareConfig(); });
+    connect(configureRealHmiLinkAction, &QAction::triggered, this, [this]() { configureRealHmiLink(); });
+    connect(enableRealHmiLinkAction_, &QAction::toggled, this, [this](bool checked) {
+        toggleRealHmiLink(checked);
+    });
+    connect(sendRealHmiAliveAction, &QAction::triggered, this, [this]() {
+        realHmiLink_.sendAlive();
+        refreshTelemetry();
+    });
 
     toolbar->addAction(loadAction);
     toolbar->addAction(resetAction);
@@ -264,6 +283,11 @@ void MainWindow::setupActions()
     firmwareMenu->addAction(stopFirmwareControlAction);
     firmwareMenu->addSeparator();
     firmwareMenu->addAction(tuneFirmwareConfigAction);
+
+    auto *realHmiMenu = menuBar()->addMenu(QStringLiteral("Real &HMI"));
+    realHmiMenu->addAction(enableRealHmiLinkAction_);
+    realHmiMenu->addAction(configureRealHmiLinkAction);
+    realHmiMenu->addAction(sendRealHmiAliveAction);
 
     auto *manualMenu = menuBar()->addMenu(QStringLiteral("&Manual"));
     auto *rotateJogAroundRearAxleAction = new QAction(QStringLiteral("Rotate jog around rear axle"), this);
@@ -328,6 +352,9 @@ void MainWindow::setupActions()
     addAction(startSupervisorV1Action);
     addAction(stopFirmwareControlAction);
     addAction(tuneFirmwareConfigAction);
+    addAction(configureRealHmiLinkAction);
+    addAction(enableRealHmiLinkAction_);
+    addAction(sendRealHmiAliveAction);
 }
 
 void MainWindow::loadMap()
@@ -914,6 +941,70 @@ void MainWindow::tuneFirmwareConfig()
     dialog.exec();
 }
 
+void MainWindow::configureRealHmiLink()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Real HMI UDP endpoint"));
+
+    auto *layout = new QFormLayout(&dialog);
+    auto *hostEdit = new QLineEdit(realHmiLink_.remoteHost(), &dialog);
+    auto *portSpin = new QSpinBox(&dialog);
+    portSpin->setRange(1, 65535);
+    portSpin->setValue(realHmiLink_.remotePort() == 0U ? 30010 : realHmiLink_.remotePort());
+
+    layout->addRow(QStringLiteral("HMI IP:"), hostEdit);
+    layout->addRow(QStringLiteral("HMI UDP local port:"), portSpin);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    if (!realHmiLink_.configureRemote(hostEdit->text(), static_cast<quint16>(portSpin->value()))) {
+        QMessageBox::warning(this,
+                             QStringLiteral("Real HMI UDP"),
+                             QStringLiteral("Invalid HMI endpoint. Use an IP address and a non-zero UDP port."));
+        if (enableRealHmiLinkAction_ != nullptr) {
+            enableRealHmiLinkAction_->setChecked(false);
+        }
+        return;
+    }
+
+    if (realHmiLink_.isEnabled()) {
+        realHmiLink_.resetTiming();
+        realHmiTimerStep();
+    }
+
+    refreshTelemetry();
+}
+
+void MainWindow::toggleRealHmiLink(bool enabled)
+{
+    realHmiLink_.setEnabled(enabled);
+
+    if (enabled) {
+        if (realHmiTimer_ != nullptr) {
+            realHmiTimer_->start();
+        }
+        realHmiTimerStep();
+    } else if (realHmiTimer_ != nullptr) {
+        realHmiTimer_->stop();
+    }
+
+    refreshTelemetry();
+}
+
+void MainWindow::realHmiTimerStep()
+{
+    updateSensors();
+    const FirmwareSimBridge::SensorSnapshot snapshot = buildBridgeSnapshot();
+    realHmiLink_.tick(100, firmwareBridge_, snapshot, lastCommand_);
+}
+
 void MainWindow::simulationStep()
 {
     updateSensors();
@@ -1455,6 +1546,9 @@ void MainWindow::refreshTelemetry()
     text += QStringLiteral("  target/special: dark gray square\n");
     text += QStringLiteral("  walls: solid black thick lines\n");
     text += QStringLiteral("  ir_rays: orange\n\n");
+
+    text += QStringLiteral("Real HMI UDP\n");
+    text += QStringLiteral("  %1\n\n").arg(realHmiLink_.statusText());
 
     text += QStringLiteral("Robot pose\n");
     text += QStringLiteral("  x_mm: %1\n").arg(robot_.xMm(), 0, 'f', 2);

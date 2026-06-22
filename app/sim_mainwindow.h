@@ -2,6 +2,7 @@
 #define SIM_MAINWINDOW_H
 
 #include "firmware_sim_bridge.h"
+#include "sim_unerbus_link.h"
 #include "sim_robot.h"
 #include "sim_world.h"
 
@@ -18,6 +19,8 @@
 #include <QResizeEvent>
 #include <QPlainTextEdit>
 #include <QTimer>
+
+class QAction;
 
 class MainWindow : public QMainWindow
 {
@@ -73,6 +76,9 @@ private:
     void startGoToBControl();
     void stopFirmwareControl();
     void tuneFirmwareConfig();
+    void configureRealHmiLink();
+    void toggleRealHmiLink(bool enabled);
+    void realHmiTimerStep();
     void simulationStep();
     void manualJog(double distance_mm, double delta_yaw_deg);
     void rotateManualJog(double delta_yaw_deg);
@@ -98,16 +104,19 @@ private:
     SimWorld world_;
     SimRobot robot_;
     FirmwareSimBridge firmwareBridge_;
+    SimUnerbusLink realHmiLink_;
 
     QGraphicsScene *scene_ = nullptr;
     QGraphicsView *view_ = nullptr;
     QTimer *simulationTimer_ = nullptr;
+    QTimer *realHmiTimer_ = nullptr;
     QPlainTextEdit *telemetryText_ = nullptr;
     QLabel *statusLabel_ = nullptr;
 
     bool simulationRunning_ = false;
     bool rotateJogAroundRearAxle_ = true;
     bool showFirmwareMazeOverlay_ = true;
+    QAction *enableRealHmiLinkAction_ = nullptr;
     QByteArray firmwareMazeOverlaySignature_;
     QList<QGraphicsItem *> firmwareMazeOverlayItems_;
     FirmwareSimBridge::Command lastCommand_;

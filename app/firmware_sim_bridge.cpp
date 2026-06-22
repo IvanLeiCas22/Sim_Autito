@@ -1554,6 +1554,62 @@ FirmwareSimBridge::Command FirmwareSimBridge::tick(const SensorSnapshot &snapsho
     return command;
 }
 
+
+bool FirmwareSimBridge::writeSupervisorDebugStatusPayload(FirmwareSupervisorDebugStatusPayload *out) const
+{
+    if (out == nullptr) {
+        return false;
+    }
+
+#if SIM_AUTITO_HAS_NAV_SUPERVISOR
+    AppNavSupervisorDebug supervisorDebug = {};
+    App_NavSupervisor_GetDebug(&supervisorDebug);
+
+    (*out)[0] = static_cast<uint8_t>(supervisorDebug.state);
+    (*out)[1] = static_cast<uint8_t>(supervisorDebug.current_action);
+    (*out)[2] = supervisorDebug.active;
+    (*out)[3] = supervisorDebug.last_result;
+    (*out)[4] = supervisorDebug.maze_x;
+    (*out)[5] = supervisorDebug.maze_y;
+    (*out)[6] = supervisorDebug.maze_heading;
+    (*out)[7] = supervisorDebug.maze_cell;
+    (*out)[8] = supervisorDebug.special_found_count;
+    return true;
+#else
+    out->fill(0U);
+    return false;
+#endif
+}
+
+bool FirmwareSimBridge::writeFirmwareMazeColumnSyncPayload(uint8_t requested_col, FirmwareMazeColumnSyncPayload *out) const
+{
+    if (out == nullptr) {
+        return false;
+    }
+
+#if SIM_AUTITO_HAS_FIRMWARE_CORE
+    if (requested_col >= MAZE_WIDTH) {
+        out->fill(0U);
+        return false;
+    }
+
+    uint8_t buffer[APP_MAZE_COLUMN_SYNC_PAYLOAD_SIZE] = {};
+    const uint8_t payloadSize = App_Maze_WriteColumnSyncPayload(requested_col, buffer);
+    if (payloadSize != APP_MAZE_COLUMN_SYNC_PAYLOAD_SIZE
+        || payloadSize > static_cast<uint8_t>(out->size())) {
+        out->fill(0U);
+        return false;
+    }
+
+    out->fill(0U);
+    std::copy(buffer, buffer + payloadSize, out->begin());
+    return true;
+#else
+    out->fill(0U);
+    return false;
+#endif
+}
+
 FirmwareSimBridge::Debug FirmwareSimBridge::debug() const
 {
     return debug_;

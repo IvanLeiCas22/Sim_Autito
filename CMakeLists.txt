@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(Sim_Autito LANGUAGES C CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network)
 
 qt_standard_project_setup()
 
@@ -9,6 +9,8 @@ set(SIM_AUTITO_SOURCES
     app/main.cpp
     app/sim_mainwindow.cpp
     app/sim_mainwindow.h
+    app/sim_unerbus_link.cpp
+    app/sim_unerbus_link.h
     app/firmware_sim_bridge.cpp
     app/firmware_sim_bridge.h
     sim/sim_world.cpp
@@ -85,6 +87,7 @@ target_link_libraries(Sim_Autito
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt::Network
 )
 
 add_custom_command(TARGET Sim_Autito POST_BUILD
